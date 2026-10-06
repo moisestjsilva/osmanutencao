@@ -11,7 +11,8 @@
     "start": "node --no-warnings server/server.js",
     "dev": "node --no-warnings --watch server/server.js",
     "reset-db": "node --no-warnings server/reset.js",
-    "sync-git": "node scripts/git-auto-sync.js"
+    "sync-git": "node scripts/git-auto-sync.js",
+    "deploy": "node scripts/deploy-final.js"
   },
   "dependencies": {
     "express": "^4.21.2",
