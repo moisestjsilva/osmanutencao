@@ -59,6 +59,7 @@ async function main() {
       fi
 
       cd "${SITE_DIR}"
+      git config --global --add safe.directory "*" || true
       if [ -d ".git" ]; then
         git remote set-url origin ${REPO_URL} || true
         git fetch origin
