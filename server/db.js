@@ -52,7 +52,7 @@ function migrate(db) {
 
   CREATE TABLE IF NOT EXISTS work_orders (
     id TEXT PRIMARY KEY,
-    number INTEGER UNIQUE,
+    number TEXT UNIQUE,
     machine_id TEXT NOT NULL REFERENCES machines(id),
     type TEXT NOT NULL CHECK (type IN ('corretiva','preventiva')),
     priority TEXT NOT NULL DEFAULT 'media',
@@ -61,9 +61,11 @@ function migrate(db) {
     responsible_id TEXT REFERENCES users(id),
     status TEXT NOT NULL DEFAULT 'Aberta',
     title TEXT, description TEXT NOT NULL,
+    specialty TEXT,
     recipients_mode TEXT NOT NULL DEFAULT 'todos',
     recipients_json TEXT NOT NULL DEFAULT '[]',
     service_done TEXT, cause TEXT, solution TEXT,
+    materials_used TEXT, tools_used TEXT, notes TEXT,
     machine_recovered INTEGER, returned_at TEXT,
     checklist_json TEXT,
     plan_id TEXT, cycle_key TEXT UNIQUE, due_date TEXT,
