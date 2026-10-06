@@ -2,7 +2,7 @@ import { Client } from 'ssh2';
 import path from 'node:path';
 
 const HOST = '186.225.65.17';
-const PORT = 3033;
+const PORTS = [22, 3033];
 const PASSWORD = 'ImDs5nSJ8BmeFOTjS4L2';
 const USERS = ['os_rufato', 'osrufato'];
 const REPO_URL = 'https://github.com/moisestjsilva/osmanutencao.git';
