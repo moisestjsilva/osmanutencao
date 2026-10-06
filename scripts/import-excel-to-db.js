@@ -286,6 +286,7 @@ console.log(`[3/5] Inseridos ${usersMap.size} Usuários (Manutentores, Solicitan
 // 4. MÁQUINAS COM TAGS E QR CODES
 const machinesList = [];
 const machineLookup = new Map();
+const codeSet = new Set();
 let macSeq = 1;
 
 for (const m of machinesRaw) {
@@ -294,11 +295,13 @@ for (const m of machinesRaw) {
   const eqName = clean(m.Equipamento) || 'Equipamento Indefinido';
   const sector = getOrCreateSector(m.Setor);
 
-  // TAG é o código do equipamento
-  const code = hasRealTag ? rawTag : `EQ-${norm(sector.name).slice(0, 3).toUpperCase()}-${String(macSeq).padStart(3, '0')}`;
-  const id = 'm-' + (hasRealTag ? 'tag-' + norm(rawTag) : 'eq-' + macSeq);
-  macSeq++;
+  let code = hasRealTag ? rawTag : `EQ-${norm(sector.name).replace(/[^a-z0-9]/g, '').slice(0, 3).toUpperCase()}-${String(macSeq).padStart(3, '0')}`;
+  if (codeSet.has(code.toUpperCase())) {
+    code = `${code}-${norm(sector.name).replace(/[^a-z0-9]/g, '').slice(0, 3).toUpperCase()}-${macSeq}`;
+  }
+  codeSet.add(code.toUpperCase());
 
+  const id = 'm-' + (macSeq++);
   const crit = (m['Paradas Críticas (Máq. Parada)'] > 20) ? 'alta' : (m['Total de O.S.'] > 10 ? 'media' : 'baixa');
   const machineObj = { id, code, name: eqName, sector_id: sector.id, criticality: crit, active: 1 };
 
@@ -325,10 +328,13 @@ for (const w of wosRaw) {
   }
 
   if (!found) {
-    const code = hasRealTag ? rawTag : `EQ-${norm(sector.name).slice(0, 3).toUpperCase()}-${String(macSeq).padStart(3, '0')}`;
-    const id = 'm-' + (hasRealTag ? 'tag-' + norm(rawTag) : 'eq-' + macSeq);
-    macSeq++;
+    let code = hasRealTag ? rawTag : `EQ-${norm(sector.name).replace(/[^a-z0-9]/g, '').slice(0, 3).toUpperCase()}-${String(macSeq).padStart(3, '0')}`;
+    if (codeSet.has(code.toUpperCase())) {
+      code = `${code}-${norm(sector.name).replace(/[^a-z0-9]/g, '').slice(0, 3).toUpperCase()}-${macSeq}`;
+    }
+    codeSet.add(code.toUpperCase());
 
+    const id = 'm-' + (macSeq++);
     const newMachine = { id, code, name: eqName, sector_id: sector.id, criticality: 'media', active: 1 };
     machinesList.push(newMachine);
     if (hasRealTag) machineLookup.set('tag:' + norm(rawTag), newMachine);
