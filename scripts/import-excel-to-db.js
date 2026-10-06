@@ -35,13 +35,29 @@ if (fs.existsSync(DB_FILE)) {
   console.log('Backup do banco criado: nova-os.db.backup');
 }
 
-// Remove arquivo existente para recriar 100% limpo com novo esquema
-for (const f of [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm']) {
-  if (fs.existsSync(f)) fs.rmSync(f, { force: true });
-}
-
 const db = new DatabaseSync(DB_FILE);
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF;');
+
+// Limpa tabelas antigas para recriar 100% com os dados reais
+db.exec(`
+  DROP TABLE IF EXISTS audit_log;
+  DROP TABLE IF EXISTS conflicts;
+  DROP TABLE IF EXISTS notifications;
+  DROP TABLE IF EXISTS preventive_plans;
+  DROP TABLE IF EXISTS machine_stops;
+  DROP TABLE IF EXISTS attachments;
+  DROP TABLE IF EXISTS wo_events;
+  DROP TABLE IF EXISTS work_intervals;
+  DROP TABLE IF EXISTS wo_participants;
+  DROP TABLE IF EXISTS work_orders;
+  DROP TABLE IF EXISTS machines;
+  DROP TABLE IF EXISTS users;
+  DROP TABLE IF EXISTS teams;
+  DROP TABLE IF EXISTS sectors;
+  DROP TABLE IF EXISTS settings;
+`);
+
+db.exec('PRAGMA foreign_keys = ON;');
 
 // Recriação de tabelas com número como TEXT e colunas extras úteis
 db.exec(`
