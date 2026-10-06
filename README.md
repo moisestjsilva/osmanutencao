@@ -4,6 +4,8 @@ Aplicativo web mobile-first para gestão de ordens de serviço (corretivas e pre
 
 Desenvolvido estritamente de acordo com o **[PRD-Manutencao-Industrial.docx](file:///c:/Users/moises.silva/Desktop/NOVA%20OS%20CLODPANEL/PRD-Manutencao-Industrial.docx)**.
 
+Repositório no GitHub: **[https://github.com/moisestjsilva/osmanutencao](https://github.com/moisestjsilva/osmanutencao)**
+
 ---
 
 ## 🛠️ Stack Tecnológica
