@@ -107,12 +107,8 @@ async function main() {
       npm install --omit=dev
       mkdir -p data/uploads
 
-      if [ ! -f "data/nova-os.db" ]; then
-        echo "Inicializando banco de dados SQLite com dados da demonstração..."
-        node --no-warnings server/reset.js
-      else
-        echo "Banco de dados já existente preservado."
-      fi
+      echo "Importando dados reais da planilha Rufato para o banco de produção..."
+      node --no-warnings scripts/import-excel-to-db.js
       ls -la data/
     `;
     await runRemote(conn, buildScript);
