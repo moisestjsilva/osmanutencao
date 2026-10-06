@@ -96,7 +96,7 @@ function woCard(w, i = 0) {
       ${w._pending ? `<span class="badge pending">${icon('cloud', 12)} pendente</span>` : ''}
       <span style="margin-left:auto">${prioBadge(w.priority)}</span>
     </div>
-    <h3>${esc(w.machine?.name)} <span class="muted small" style="font-weight:500">• ${esc(w.machine?.sector || '')}</span></h3>
+    <h3>${esc(w.machine?.name)} <span class="muted small" style="font-weight:500">${w.machine?.code ? `• TAG ${esc(w.machine.code)} ` : ''}• ${esc(w.machine?.sector || '')}</span></h3>
     <div class="desc">${esc(w.description)}</div>
     <div class="meta">
       ${parts.length ? `<span class="avatar-stack">${parts.slice(0, 4).map((p) => avatar(p.name, 'sm')).join('')}</span>` : `<span>${icon('user', 14)} sem responsável</span>`}
