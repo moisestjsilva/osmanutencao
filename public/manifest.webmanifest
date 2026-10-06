@@ -1,0 +1,15 @@
+{
+  "name": "Nova OS — Manutenção Industrial",
+  "short_name": "Nova OS",
+  "description": "Ordens de serviço de manutenção industrial",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d111a",
+  "theme_color": "#0d111a",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
