@@ -143,10 +143,11 @@ export function detailView(root, { id }) {
           <h1 style="font-size:24px">${wo.number ? `OS ${wo.number}` : 'OS (aguardando nº)'}</h1>
           ${statusBadge(wo.status)} ${prioBadge(wo.priority)}
           ${wo.type === 'preventiva' ? '<span class="badge prev">Preventiva</span>' : '<span class="badge">Corretiva</span>'}
+          ${wo.specialty ? `<span class="badge" style="background:var(--accent-glow);color:var(--accent);font-weight:600">${esc(wo.specialty)}</span>` : ''}
           ${wo.overdue ? '<span class="badge late">Atrasada</span>' : ''}
         </div>
         <h2 style="font-size:18px;margin-top:10px">${esc(wo.machine?.name)}</h2>
-        <div class="muted small">${esc(wo.machine?.code || '')} • ${esc(wo.machine?.sector || '')}</div>
+        <div class="muted small">${wo.machine?.code ? `TAG: <strong>${esc(wo.machine.code)}</strong> • ` : ''}${esc(wo.machine?.sector || '')}</div>
         <p style="margin:12px 0 0;white-space:pre-wrap">${esc(wo.description)}</p>
         <div class="kv">
           <div><span>Solicitante</span><strong>${esc(wo.requester?.name || '—')}</strong></div>
@@ -158,13 +159,16 @@ export function detailView(root, { id }) {
         </div>
       </section>
 
-      ${wo.status === 'Concluída' && wo.serviceDone ? `
+      ${(wo.status === 'Concluída' && wo.serviceDone) || wo.materialsUsed || wo.toolsUsed || wo.notes ? `
       <section class="card">
-        <div class="section-title" style="margin-top:0">Conclusão</div>
+        <div class="section-title" style="margin-top:0">Conclusão e Detalhes da Execução</div>
         <div class="stack small">
-          <div><div class="label">Serviço realizado</div>${esc(wo.serviceDone)}</div>
-          ${wo.cause ? `<div><div class="label">Causa</div>${esc(wo.cause)}</div>` : ''}
-          ${wo.solution ? `<div><div class="label">Solução</div>${esc(wo.solution)}</div>` : ''}
+          ${wo.serviceDone ? `<div><div class="label">Serviço realizado</div>${esc(wo.serviceDone)}</div>` : ''}
+          ${wo.cause ? `<div><div class="label">Possível Causa</div>${esc(wo.cause)}</div>` : ''}
+          ${wo.solution && wo.solution !== wo.serviceDone ? `<div><div class="label">Solução</div>${esc(wo.solution)}</div>` : ''}
+          ${wo.materialsUsed ? `<div><div class="label">Peças / Materiais Utilizados</div>${esc(wo.materialsUsed)}</div>` : ''}
+          ${wo.toolsUsed ? `<div><div class="label">Ferramentas Utilizadas</div>${esc(wo.toolsUsed)}</div>` : ''}
+          ${wo.notes ? `<div><div class="label">Observações Gerais</div>${esc(wo.notes)}</div>` : ''}
         </div>
       </section>` : ''}
       ${wo.status === 'Cancelada' ? `<div class="warn-box" style="margin-top:12px">Cancelada: ${esc(wo.cancelledReason || '')}</div>` : ''}
