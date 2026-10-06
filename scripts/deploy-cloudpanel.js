@@ -7,11 +7,11 @@ const PASSWORD = 'ImDs5nSJ8BmeFOTjS4L2';
 const USERS = ['os_rufato', 'osrufato'];
 const REPO_URL = 'https://github.com/moisestjsilva/osmanutencao.git';
 
-async function tryConnect(username) {
+async function tryConnect(username, port) {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      console.log(`[SSH] Conectado com sucesso como usuário "${username}"!`);
+      console.log(`[SSH] Conectado com sucesso como usuário "${username}" na porta ${port}!`);
       resolve(conn);
     });
     conn.on('error', (err) => {
@@ -19,10 +19,10 @@ async function tryConnect(username) {
     });
     conn.connect({
       host: HOST,
-      port: PORT,
+      port: port,
       username: username,
       password: PASSWORD,
-      readyTimeout: 20000,
+      readyTimeout: 10000,
     });
   });
 }
@@ -57,16 +57,21 @@ function runRemote(conn, command) {
 async function main() {
   let conn = null;
   let activeUser = null;
+  let activePort = null;
 
-  for (const user of USERS) {
-    try {
-      console.log(`[SSH] Tentando conectar como "${user}" em ${HOST}:${PORT}...`);
-      conn = await tryConnect(user);
-      activeUser = user;
-      break;
-    } catch (err) {
-      console.log(`[SSH] Falha ao conectar como "${user}": ${err.message}`);
+  for (const port of PORTS) {
+    for (const user of USERS) {
+      try {
+        console.log(`[SSH] Tentando conectar como "${user}" em ${HOST}:${port}...`);
+        conn = await tryConnect(user, port);
+        activeUser = user;
+        activePort = port;
+        break;
+      } catch (err) {
+        console.log(`[SSH] Falha ao conectar como "${user}" na porta ${port}: ${err.message}`);
+      }
     }
+    if (conn) break;
   }
 
   if (!conn) {
