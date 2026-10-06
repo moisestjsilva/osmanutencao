@@ -65,11 +65,16 @@ function serializeWo(w, full = false) {
     machineRecovered: w.machine_recovered == null ? null : !!w.machine_recovered, returnedAt: w.returned_at,
     reopenedCount: w.reopened_count, reworkOf: w.rework_of, version: w.version,
     checklist: w.checklist_json ? JSON.parse(w.checklist_json) : null,
+    specialty: w.specialty || null,
+    materialsUsed: w.materials_used || null,
+    toolsUsed: w.tools_used || null,
+    notes: w.notes || null,
     photos: db.prepare('SELECT COUNT(*) n FROM attachments WHERE wo_id=?').get(w.id).n,
   };
   if (full) {
     Object.assign(out, {
       serviceDone: w.service_done, cause: w.cause, solution: w.solution, cancelledReason: w.cancelled_reason,
+      materialsUsed: w.materials_used || null, toolsUsed: w.tools_used || null, notes: w.notes || null,
       intervals: ivs.map((i) => ({ ...i, userName: nameOf(i.user_id) })),
       events: db.prepare(`SELECT e.*, u.name user_name FROM wo_events e LEFT JOIN users u ON u.id=e.user_id WHERE e.wo_id=? ORDER BY e.local_time, e.received_at`).all(w.id)
         .map((e) => ({ id: e.id, action: e.action, reason: e.reason, data: e.data_json ? JSON.parse(e.data_json) : null, userId: e.user_id, userName: e.user_name || 'Sistema',
