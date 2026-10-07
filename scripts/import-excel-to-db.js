@@ -78,6 +78,7 @@ db.exec(`
     salt TEXT,
     role TEXT NOT NULL CHECK (role IN ('superadmin','admin','manutentor','solicitante','gerente')),
     team_id TEXT REFERENCES teams(id), specialty TEXT, active INTEGER NOT NULL DEFAULT 1,
+    avatar_url TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS sessions (
@@ -89,7 +90,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS machines (
     id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
     sector_id TEXT NOT NULL REFERENCES sectors(id),
-    criticality TEXT NOT NULL DEFAULT 'media', active INTEGER NOT NULL DEFAULT 1
+    criticality TEXT NOT NULL DEFAULT 'media',
+    hourly_cost REAL NOT NULL DEFAULT 0.0,
+    operating_hours_per_day REAL NOT NULL DEFAULT 16.0,
+    image_url TEXT,
+    active INTEGER NOT NULL DEFAULT 1
   );
 
   CREATE TABLE IF NOT EXISTS work_orders (
