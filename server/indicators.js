@@ -41,7 +41,10 @@ export function computeIndicators(db, q = {}) {
   const parts = db.prepare('SELECT * FROM wo_participants').all();
   const partByWo = {};
   for (const p of parts) (partByWo[p.wo_id] ||= []).push(p);
-  const woPeopleOk = (w) => !hasPeopleFilter || (partByWo[w.id] || []).some((p) => peopleFilter(p.user_id)) || peopleFilter(w.responsible_id);
+  const woPeopleOk = (w) => !hasPeopleFilter || 
+    (partByWo[w.id] || []).some((p) => peopleFilter(p.user_id)) || 
+    peopleFilter(w.responsible_id) ||
+    (ivByWo[w.id] || []).some((iv) => peopleFilter(iv.user_id));
 
   const inPeriod = allWos.filter((w) => w.created_at >= F && w.created_at <= T && woPeopleOk(w));
   const todayStr = new Date().toISOString().slice(0, 10);
