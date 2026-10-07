@@ -827,7 +827,7 @@ export function plansView(root) {
       }).join('')}
       <p class="muted xs" style="margin-top:14px">O servidor gera automaticamente a OS de cada ciclo dentro da antecedência configurada e avisa atrasos. Datas seguem calendário fixo (não dependem da data de execução) — regra a validar com a equipe.</p>`;
 
-    $('#btn-new-plan', root)?.addEventListener('click', newPlanSheet);
+    $('#btn-new-plan', root)?.addEventListener('click', () => newPlanSheet(() => load()));
     $$('[data-gen]', root).forEach((b) => (b.onclick = async () => {
       try {
         const r = await api(`/api/plans/${b.dataset.gen}/generate`, { method: 'POST' });
@@ -840,77 +840,78 @@ export function plansView(root) {
     }));
   }
 
-  function newPlanSheet() {
-    const boot = state.boot;
-    const techs = boot.users.filter((u) => u.role === 'manutentor');
-    sheet(`<h2>Novo plano preventivo</h2>
-      <label class="field" style="margin-top:12px"><span>Máquina *</span><select class="input" id="p-m">${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} — ${esc(m.name)}</option>`).join('')}</select></label>
-      <label class="field"><span>Título *</span><input class="input" id="p-t" placeholder="Ex.: Lubrificação geral" /></label>
-      <div class="field"><span>Frequência</span><div class="chips" id="p-freq">${[[7, 'Semanal'], [15, 'Quinzenal'], [30, 'Mensal'], [90, 'Trimestral'], [180, 'Semestral'], [365, 'Anual']].map(([d, l]) => `<button class="chip ${d === 30 ? 'active' : ''}" data-d="${d}">${l}</button>`).join('')}</div></div>
-      <div class="row"><label class="field grow"><span>Primeiro vencimento *</span><input class="input" type="date" id="p-a" value="${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}" /></label>
-        <label class="field" style="width:120px;margin-top:0"><span>Antecedência</span><input class="input" type="number" id="p-l" min="0" max="30" value="2" /></label></div>
-      <label class="field"><span>Responsável</span><select class="input" id="p-r"><option value="">Todos os manutentores</option>${techs.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select></label>
-      <label class="field">
-        <div class="row" style="justify-content:space-between;align-items:center">
-          <span>Checklist da Preventiva (Editável)</span>
-          <span class="muted xs" id="p-chk-hint" style="color:var(--accent)"></span>
-        </div>
-        <textarea class="input" id="p-c" rows="4" placeholder="Verificar nível de óleo&#10;Reapertar parafusos"></textarea>
-        <span class="muted xs" style="margin-top:2px;display:block">
-          Preenchido automaticamente da ficha padrão da máquina. Você pode editar, adicionar ou excluir itens para este plano.
-        </span>
-      </label>
-      <div class="error-box hidden" id="p-err" style="margin-top:10px"></div>
-      <div class="sheet-actions"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="p-ok">Criar plano</button></div>`, {
-      onMount(el, sh) {
-        let freq = 30;
-        el.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => { freq = +b.dataset.d; el.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('active', x === b)); }));
-
-        const machSelect = el.querySelector('#p-m');
-        const chkArea = el.querySelector('#p-c');
-        const chkHint = el.querySelector('#p-chk-hint');
-
-        function loadChecklistFromMachine(mId, force = false) {
-          const m = boot.machines.find((x) => x.id === mId);
-          if (!m) return;
-          let items = [];
-          try {
-            items = m.default_checklist_json ? JSON.parse(m.default_checklist_json) : [];
-            if (!Array.isArray(items)) items = [];
-          } catch {}
-          const text = items.map((i) => (typeof i === 'string' ? i : i.text || '')).filter(Boolean).join('\n');
-          if (force || !chkArea.value.trim()) {
-            chkArea.value = text;
-          }
-          if (chkHint) {
-            chkHint.textContent = items.length ? `✓ ${items.length} itens da ficha padrão` : 'Sem checklist padrão na máquina';
-          }
-        }
-
-        if (machSelect) {
-          loadChecklistFromMachine(machSelect.value, true);
-          machSelect.onchange = () => loadChecklistFromMachine(machSelect.value, true);
-        }
-
-        el.querySelector('#p-ok').onclick = async () => {
-          try {
-            await api('/api/plans', { method: 'POST', body: {
-              machineId: el.querySelector('#p-m').value, title: el.querySelector('#p-t').value, frequencyDays: freq,
-              anchorDate: el.querySelector('#p-a').value, leadDays: +el.querySelector('#p-l').value, responsibleId: el.querySelector('#p-r').value,
-              checklist: el.querySelector('#p-c').value.split('\n'),
-            } });
-            sh.close(); toast('Plano criado'); sync(); load();
-          } catch (e) {
-            const b = el.querySelector('#p-err'); b.textContent = e instanceof NetError ? 'Sem conexão — planos exigem internet' : e.message; b.classList.remove('hidden');
-          }
-        };
-      },
-    });
-  }
-
   root.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
   load();
   return () => { alive = false; };
+}
+
+export function newPlanSheet(onSuccess) {
+  const boot = state.boot;
+  const techs = boot.users.filter((u) => u.role === 'manutentor');
+  sheet(`<h2>Novo plano preventivo</h2>
+    <label class="field" style="margin-top:12px"><span>Máquina *</span><select class="input" id="p-m">${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} — ${esc(m.name)}</option>`).join('')}</select></label>
+    <label class="field"><span>Título *</span><input class="input" id="p-t" placeholder="Ex.: Lubrificação geral" /></label>
+    <div class="field"><span>Frequência</span><div class="chips" id="p-freq">${[[7, 'Semanal'], [15, 'Quinzenal'], [30, 'Mensal'], [90, 'Trimestral'], [180, 'Semestral'], [365, 'Anual']].map(([d, l]) => `<button class="chip ${d === 30 ? 'active' : ''}" data-d="${d}">${l}</button>`).join('')}</div></div>
+    <div class="row"><label class="field grow"><span>Primeiro vencimento *</span><input class="input" type="date" id="p-a" value="${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}" /></label>
+      <label class="field" style="width:120px;margin-top:0"><span>Antecedência</span><input class="input" type="number" id="p-l" min="0" max="30" value="2" /></label></div>
+    <label class="field"><span>Responsável</span><select class="input" id="p-r"><option value="">Todos os manutentores</option>${techs.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select></label>
+    <label class="field">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <span>Checklist da Preventiva (Editável)</span>
+        <span class="muted xs" id="p-chk-hint" style="color:var(--accent)"></span>
+      </div>
+      <textarea class="input" id="p-c" rows="4" placeholder="Verificar nível de óleo&#10;Reapertar parafusos"></textarea>
+      <span class="muted xs" style="margin-top:2px;display:block">
+        Preenchido automaticamente da ficha padrão da máquina. Você pode editar, adicionar ou excluir itens para este plano.
+      </span>
+    </label>
+    <div class="error-box hidden" id="p-err" style="margin-top:10px"></div>
+    <div class="sheet-actions"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="p-ok">Criar plano</button></div>`, {
+    onMount(el, sh) {
+      let freq = 30;
+      el.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => { freq = +b.dataset.d; el.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('active', x === b)); }));
+
+      const machSelect = el.querySelector('#p-m');
+      const chkArea = el.querySelector('#p-c');
+      const chkHint = el.querySelector('#p-chk-hint');
+
+      function loadChecklistFromMachine(mId, force = false) {
+        const m = boot.machines.find((x) => x.id === mId);
+        if (!m) return;
+        let items = [];
+        try {
+          items = m.default_checklist_json ? JSON.parse(m.default_checklist_json) : [];
+          if (!Array.isArray(items)) items = [];
+        } catch {}
+        const text = items.map((i) => (typeof i === 'string' ? i : i.text || '')).filter(Boolean).join('\n');
+        if (force || !chkArea.value.trim()) {
+          chkArea.value = text;
+        }
+        if (chkHint) {
+          chkHint.textContent = items.length ? `✓ ${items.length} itens da ficha padrão` : 'Sem checklist padrão na máquina';
+        }
+      }
+
+      if (machSelect) {
+        loadChecklistFromMachine(machSelect.value, true);
+        machSelect.onchange = () => loadChecklistFromMachine(machSelect.value, true);
+      }
+
+      el.querySelector('#p-ok').onclick = async () => {
+        try {
+          await api('/api/plans', { method: 'POST', body: {
+            machineId: el.querySelector('#p-m').value, title: el.querySelector('#p-t').value, frequencyDays: freq,
+            anchorDate: el.querySelector('#p-a').value, leadDays: +el.querySelector('#p-l').value, responsibleId: el.querySelector('#p-r').value,
+            checklist: el.querySelector('#p-c').value.split('\n'),
+          } });
+          sh.close(); toast('Plano preventivo criado com sucesso'); sync();
+          if (onSuccess) onSuccess();
+        } catch (e) {
+          const b = el.querySelector('#p-err'); b.textContent = e instanceof NetError ? 'Sem conexão — planos exigem internet' : e.message; b.classList.remove('hidden');
+        }
+      };
+    },
+  });
 }
 
 // ======================================================================
