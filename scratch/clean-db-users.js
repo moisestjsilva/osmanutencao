@@ -2,13 +2,29 @@ import { openDb } from '../server/db.js';
 
 const db = openDb();
 
+function unbindAndDelete(userId, mergeToId = null) {
+  if (mergeToId) {
+    db.prepare('UPDATE work_orders SET requester_id = ? WHERE requester_id = ?').run(mergeToId, userId);
+    db.prepare('UPDATE work_orders SET responsible_id = ? WHERE responsible_id = ?').run(mergeToId, userId);
+    db.prepare('UPDATE wo_events SET user_id = ? WHERE user_id = ?').run(mergeToId, userId);
+  } else {
+    db.prepare('UPDATE work_orders SET requester_id = NULL WHERE requester_id = ?').run(userId);
+    db.prepare('UPDATE work_orders SET responsible_id = NULL WHERE responsible_id = ?').run(userId);
+    db.prepare('UPDATE wo_events SET user_id = NULL WHERE user_id = ?').run(userId);
+  }
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM wo_participants WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM work_intervals WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM audit_log WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+}
+
 // 1. Merge Pablo/Manutenção -> Pablo
 const pabloReal = db.prepare("SELECT id FROM users WHERE username = 'pablo'").get();
 const pabloFake = db.prepare("SELECT id FROM users WHERE username = 'pablomanutencao'").get();
 if (pabloReal && pabloFake) {
-  db.prepare('UPDATE work_orders SET requester_id = ? WHERE requester_id = ?').run(pabloReal.id, pabloFake.id);
-  db.prepare('UPDATE work_orders SET responsible_id = ? WHERE responsible_id = ?').run(pabloReal.id, pabloFake.id);
-  db.prepare('DELETE FROM users WHERE id = ?').run(pabloFake.id);
+  unbindAndDelete(pabloFake.id, pabloReal.id);
   console.log('Mesclado Pablo/Manutenção -> Pablo');
 }
 
@@ -17,9 +33,7 @@ const viniReal = db.prepare("SELECT id FROM users WHERE username = 'vinicius'").
 for (const fakeU of ['viniciusmanutencao', 'viniciusmanutecao']) {
   const f = db.prepare("SELECT id FROM users WHERE username = ?").get(fakeU);
   if (viniReal && f) {
-    db.prepare('UPDATE work_orders SET requester_id = ? WHERE requester_id = ?').run(viniReal.id, f.id);
-    db.prepare('UPDATE work_orders SET responsible_id = ? WHERE responsible_id = ?').run(viniReal.id, f.id);
-    db.prepare('DELETE FROM users WHERE id = ?').run(f.id);
+    unbindAndDelete(f.id, viniReal.id);
     console.log('Mesclado', fakeU, '-> Vinicius');
   }
 }
@@ -29,8 +43,7 @@ const dummyNames = ['5002', 'Embalagem', 'Furacão', 'Linha', 'Linha de pintura'
 for (const name of dummyNames) {
   const u = db.prepare('SELECT id FROM users WHERE name = ?').get(name);
   if (u) {
-    db.prepare('UPDATE work_orders SET requester_id = NULL WHERE requester_id = ?').run(u.id);
-    db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+    unbindAndDelete(u.id, null);
     console.log('Excluído usuário fictício/departamento:', name);
   }
 }
