@@ -31,27 +31,56 @@ export function migrateAuth(db) {
     );
   `);
 
-  // 2. Adiciona colunas de autenticação em users se não existirem
-  const tableInfo = db.prepare("PRAGMA table_info('users')").all();
-  const colNames = new Set(tableInfo.map((c) => c.name));
+  // 2. Verifica se a tabela users suporta superadmin e admin
+  const userTableDef = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
+  if (!userTableDef.includes('superadmin')) {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.exec(`
+      CREATE TABLE users_migrated (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT,
+        username TEXT,
+        role TEXT NOT NULL CHECK (role IN ('superadmin','admin','manutentor','solicitante','gerente')),
+        team_id TEXT REFERENCES teams(id),
+        specialty TEXT,
+        password_hash TEXT,
+        salt TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT
+      );
+    `);
 
-  if (!colNames.has('email')) {
-    db.exec("ALTER TABLE users ADD COLUMN email TEXT;");
-  }
-  if (!colNames.has('username')) {
-    db.exec("ALTER TABLE users ADD COLUMN username TEXT;");
-  }
-  if (!colNames.has('password_hash')) {
-    db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT;");
-  }
-  if (!colNames.has('salt')) {
-    db.exec("ALTER TABLE users ADD COLUMN salt TEXT;");
-  }
-  if (!colNames.has('created_at')) {
-    db.exec("ALTER TABLE users ADD COLUMN created_at TEXT;");
+    // Copia dados existentes preservando colunas que existirem
+    const tableInfo = db.prepare("PRAGMA table_info('users')").all();
+    const cols = tableInfo.map((c) => c.name);
+    const hasEmail = cols.includes('email');
+    const hasUsername = cols.includes('username');
+    const hasHash = cols.includes('password_hash');
+    const hasSalt = cols.includes('salt');
+    const hasCreatedAt = cols.includes('created_at');
+
+    db.exec(`
+      INSERT INTO users_migrated (id, name, email, username, role, team_id, specialty, password_hash, salt, active, created_at)
+      SELECT id, name,
+             ${hasEmail ? 'email' : 'NULL'},
+             ${hasUsername ? 'username' : 'NULL'},
+             role, team_id, specialty,
+             ${hasHash ? 'password_hash' : 'NULL'},
+             ${hasSalt ? 'salt' : 'NULL'},
+             active,
+             ${hasCreatedAt ? 'created_at' : 'NULL'}
+      FROM users;
+    `);
+
+    db.exec(`
+      DROP TABLE users;
+      ALTER TABLE users_migrated RENAME TO users;
+      PRAGMA foreign_keys = ON;
+    `);
   }
 
-  // Cria índices únicos se possível
+  // Cria índices únicos
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;
