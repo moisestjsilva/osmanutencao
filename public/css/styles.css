@@ -475,23 +475,62 @@ select.input {
 .stopped-card h3 { font-size: 15.5px; margin: 6px 0 2px; }
 .stopped-card .timer { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--danger-text); margin-top: 4px; }
 
-/* ---------- Cartões de OS (Lista Clean) ---------- */
-.wo-card {
-  display: block; position: relative; padding: 14px 16px 14px 18px; border-radius: var(--radius);
-  cursor: pointer; background: var(--surface); border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm); transition: transform .15s var(--ease), border-color .15s, box-shadow .15s;
-  animation: cardIn .3s var(--ease) both;
+/* ---------- Cartões de OS (Lista Clean & Grid Desktop) ---------- */
+#list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.wo-card + .wo-card { margin-top: 10px; }
-.wo-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
+@media (min-width: 768px) {
+  #list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+@media (min-width: 1200px) {
+  #list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+@media (min-width: 1600px) {
+  #list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+  }
+}
+
+.wo-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  padding: 14px 16px 14px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s var(--ease), border-color .15s, box-shadow .15s;
+  animation: cardIn .3s var(--ease) both;
+  min-height: 154px;
+}
+.wo-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
 .wo-card:active { transform: scale(.995); }
-.wo-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: var(--radius) 0 0 var(--radius); background: var(--prio, var(--surface-3)); }
+.wo-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4.5px; border-radius: var(--radius) 0 0 var(--radius); background: var(--prio, var(--surface-3)); }
 .wo-card.is-stopped { border-color: var(--danger); background: var(--surface); }
+.wo-card .card-main { display: flex; gap: 12px; align-items: flex-start; margin-top: 8px; }
+.wo-card .card-content { flex: 1; min-width: 0; }
 .wo-card .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wo-card .num { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text); }
-.wo-card h3 { font-size: 16px; margin: 6px 0 2px; font-weight: 600; letter-spacing: -0.01em; }
-.wo-card .desc { color: var(--text-2); font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.wo-card .meta { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--text-3); font-size: 12px; }
+.wo-card h3 { font-size: 15.5px; margin: 0 0 4px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+.wo-card .desc { color: var(--text-2); font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wo-card .meta { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 .empty { text-align: center; padding: 48px 20px; color: var(--text-3); }
