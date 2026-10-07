@@ -358,9 +358,174 @@ function updateHeader() {
     }
   }
 
-  // Banner offline
-  const offBanner = $('#offline-banner');
-  if (offBanner) offBanner.classList.toggle('hidden', state.online);
+// ======================================================================
+// ÁUDIO E ALERTAS SONOROS (WEB AUDIO API - 100% OFFLINE)
+// ======================================================================
+let audioCtx = null;
+function playAlertChime(kind = 'normal') {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!audioCtx) audioCtx = new AudioCtx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+
+    if (kind === 'urgent') {
+      // Tom direto duplo de alerta (atribuído a você ou máquina parada)
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(880, now); // A5
+      osc1.frequency.exponentialRampToValueAtTime(1174.66, now + 0.15); // D6
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+      osc1.start(now);
+      osc1.stop(now + 0.45);
+
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(1174.66, now + 0.18);
+      osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.35); // A6
+      gain2.gain.setValueAtTime(0.35, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.6);
+    } else {
+      // Chime suave e claro para chamada geral da fábrica
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now); // D5
+      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.18); // A5
+      gain1.gain.setValueAtTime(0.25, now);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+      osc1.start(now);
+      osc1.stop(now + 0.5);
+    }
+  } catch (e) {
+    // Silencia se o navegador bloquear autoplay de áudio antes de interação
+  }
+}
+
+// ======================================================================
+// INSTALAÇÃO DO APP NO CELULAR / PWA
+// ======================================================================
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  updateInstallButton();
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  toast('Nova OS instalado com sucesso na sua tela inicial!', 'ok');
+  updateInstallButton();
+});
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function updateInstallButton() {
+  const btn = $('#btn-install');
+  if (!btn) return;
+  if (isStandalone()) {
+    btn.style.display = 'none';
+  } else {
+    btn.style.display = '';
+  }
+}
+
+export function openInstallModal() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isStandalone()) {
+    return toast('O Nova OS já está instalado como aplicativo!', 'ok');
+  }
+
+  sheet(`
+    <div style="text-align:center;padding:8px 0 4px">
+      <div class="brand-logo" style="width:56px;height:56px;border-radius:16px;margin:0 auto 12px">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>
+      </div>
+      <h2 style="font-size:20px;margin-bottom:4px">Instalar Aplicativo no Celular</h2>
+      <p class="muted small">Acesse o sistema direto da tela de início, mesmo sem internet no chão de fábrica.</p>
+    </div>
+
+    ${isIOS ? `
+      <div class="card" style="margin:16px 0;background:var(--surface-2);border-color:var(--border-strong)">
+        <div style="font-weight:700;font-size:14px;margin-bottom:10px;color:var(--accent)">
+          Como instalar no iPhone / iPad (Safari):
+        </div>
+        <div class="ios-guide-step">
+          <div class="ios-step-num">1</div>
+          <div>
+            <strong>Toque no botão de Compartilhar</strong>
+            <p class="muted xs" style="margin:2px 0 0">Localizado na barra de navegação do Safari (ícone do quadrado com a seta para cima).</p>
+          </div>
+        </div>
+        <div class="ios-guide-step">
+          <div class="ios-step-num">2</div>
+          <div>
+            <strong>Toque em "Adicionar à Tela de Início"</strong>
+            <p class="muted xs" style="margin:2px 0 0">Role a lista de opções para baixo e toque no ícone com o sinal (+).</p>
+          </div>
+        </div>
+        <div class="ios-guide-step">
+          <div class="ios-step-num">3</div>
+          <div>
+            <strong>Toque em "Adicionar"</strong>
+            <p class="muted xs" style="margin:2px 0 0">No canto superior direito. O aplicativo aparecerá instantaneamente na sua tela inicial!</p>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn primary block" data-close>Entendido, vou adicionar!</button>
+      </div>
+    ` : `
+      <div class="card tight" style="margin:16px 0;background:var(--surface-2)">
+        <div class="row" style="gap:10px;align-items:center;margin-bottom:8px">
+          <span style="font-size:20px">🚀</span>
+          <span class="small"><strong>Acesso rápido com 1 toque:</strong> abre em tela cheia como app nativo.</span>
+        </div>
+        <div class="row" style="gap:10px;align-items:center;margin-bottom:8px">
+          <span style="font-size:20px">📶</span>
+          <span class="small"><strong>Offline no galpão:</strong> consulte ordens e aponte tempos mesmo sem sinal de Wi-Fi.</span>
+        </div>
+        <div class="row" style="gap:10px;align-items:center">
+          <span style="font-size:20px">🔔</span>
+          <span class="small"><strong>Alertas sonoros:</strong> seja notificado de chamados direcionados a você.</span>
+        </div>
+      </div>
+
+      <div class="sheet-actions">
+        <button class="btn" data-close>Mais tarde</button>
+        <button class="btn primary" id="btn-do-install">
+          ${icon('plus', 18)} Instalar Agora
+        </button>
+      </div>
+    `}
+  `, {
+    onMount(el, modal) {
+      $('#btn-do-install', el)?.addEventListener('click', async () => {
+        if (deferredInstallPrompt) {
+          modal.close();
+          deferredInstallPrompt.prompt();
+          const { outcome } = await deferredInstallPrompt.userChoice;
+          if (outcome === 'accepted') {
+            toast('Instalando Nova OS...', 'ok');
+          }
+          deferredInstallPrompt = null;
+        } else {
+          modal.close();
+          toast('No seu navegador Android/Edge, toque no menu de 3 pontos (⋮) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".', 'warn', 7000);
+        }
+      });
+    }
+  });
 }
 
 // Atualiza relógios em tempo real a cada segundo
@@ -396,22 +561,41 @@ async function start() {
 
   // Ações do cabeçalho
   $('#sync-pill')?.addEventListener('click', () => { location.hash = '#/sync'; });
+  $('#btn-install')?.addEventListener('click', openInstallModal);
   $('#btn-theme')?.addEventListener('click', toggleTheme);
   $('#btn-notifs')?.addEventListener('click', () => { location.hash = '#/avisos'; });
   $('#btn-user')?.addEventListener('click', showUserProfile);
 
-  // Reações do Store
+  // Reações do Store e Alertas Inteligentes
   on((ev) => {
     updateHeader();
+    updateInstallButton();
+
     if (ev === 'user') {
       renderNav();
       updateHeader();
       router();
     }
+
+    // Item 3: Sistema inteligente de alertas sonoros e notificações
     if (typeof ev === 'object' && ev?.type === 'new-notifs') {
       for (const n of ev.items) {
-        const isStop = /PARADA/.test(n.title);
-        toast(`${n.title}: ${n.body}`, isStop ? 'alarm' : 'warn', 5000);
+        const isStop = /PARADA/i.test(n.title);
+        const isDirect = /Atribuída a Você/i.test(n.title) || n.kind === 'atribuicao';
+
+        // Toca o alarme correspondente
+        playAlertChime(isDirect || isStop ? 'urgent' : 'normal');
+
+        const toastKind = isStop ? 'alarm' : (isDirect ? 'warn' : 'ok');
+        const t = toast(`${n.title}: ${n.body}`, toastKind, 8000);
+        if (n.wo_id) {
+          t.style.cursor = 'pointer';
+          t.title = 'Clique para abrir esta Ordem de Serviço';
+          t.onclick = () => {
+            location.hash = `#/os/${n.wo_id}`;
+          };
+        }
+
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(n.title, { body: n.body, icon: '/icons/icon.svg' });
         }
@@ -423,18 +607,20 @@ async function start() {
   await init();
 
   updateHeader();
+  updateInstallButton();
   renderNav();
   router();
   startClocks();
   registerSW();
 
-  // Sincronização periódica a cada 30s se houver conexão e usuário logado
+  // Sincronização periódica a cada 15s para entrega rápida de alertas
   setInterval(() => {
     if (state.user && state.online && !state.syncing) sync();
-  }, 30000);
+  }, 15000);
 
   // Primeira sincronização se logado
   if (state.user && state.online) sync();
 }
 
 window.addEventListener('DOMContentLoaded', start);
+
