@@ -445,7 +445,7 @@ function updateInstallButton() {
   }
 }
 
-export function openInstallModal() {
+function openInstallModal() {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   if (isStandalone()) {
     return toast('O Nova OS já está instalado como aplicativo!', 'ok');
