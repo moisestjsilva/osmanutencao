@@ -192,6 +192,12 @@ function migrate(db) {
   if (!userCols.includes('avatar_url')) {
     db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
   }
+
+  // Migração para notifications
+  const notifCols = db.prepare(`PRAGMA table_info(notifications)`).all().map((c) => c.name);
+  if (!notifCols.includes('status')) {
+    db.exec(`ALTER TABLE notifications ADD COLUMN status TEXT DEFAULT 'enviada'`);
+  }
 }
 
 // ---------- Dados fictícios de demonstração ----------
