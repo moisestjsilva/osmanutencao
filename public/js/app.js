@@ -358,6 +358,11 @@ function updateHeader() {
     }
   }
 
+  // Banner offline
+  const offBanner = $('#offline-banner');
+  if (offBanner) offBanner.classList.toggle('hidden', state.online);
+}
+
 // ======================================================================
 // ÁUDIO E ALERTAS SONOROS (WEB AUDIO API - 100% OFFLINE)
 // ======================================================================
