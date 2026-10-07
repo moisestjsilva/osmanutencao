@@ -492,6 +492,10 @@ db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_recipi
 
 db.exec('COMMIT;');
 
+// Garante que o Super Admin (moisestj86@gmail.com), Admins e senhas dos manutentores sejam configurados
+seedAuthUsers(db);
+console.log('Credenciais de login (Super Admin, Admins e Manutentores) configuradas com sucesso.');
+
 console.log(`[5/5] Sucesso! ${woCount} Ordens de Serviço importadas para o banco!`);
 console.log('Banco de dados real atualizado com sucesso em data/nova-os.db');
 db.close();
