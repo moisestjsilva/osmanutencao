@@ -1934,16 +1934,6 @@ export function cadastrosView(root, params = {}) {
 export function usersView(root) {
   return cadastrosView(root, { tab: 'usuarios' });
 }
-          } catch (err) {
-            toast(err.message || 'Erro ao salvar usuário', 'alarm');
-          }
-        };
-      }
-    });
-  }
-
-  load();
-}
 
 // ======================================================================
 // MODAL DE ALTERAÇÃO DE SENHA
