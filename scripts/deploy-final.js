@@ -107,8 +107,12 @@ async function main() {
       npm install --omit=dev
       mkdir -p data/uploads
 
-      echo "Importando dados reais da planilha Rufato para o banco de produção..."
-      node --no-warnings scripts/import-excel-to-db.js
+      if [ ! -f "data/nova-os.db" ]; then
+        echo "Banco de dados não existe. Importando dados reais da planilha Rufato..."
+        node --no-warnings scripts/import-excel-to-db.js
+      else
+        echo "Banco de dados existente detectado. Migrando esquemas automaticamente na inicialização..."
+      fi
       ls -la data/
     `;
     await runRemote(conn, buildScript);
