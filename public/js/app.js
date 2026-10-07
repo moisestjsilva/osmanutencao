@@ -366,6 +366,7 @@ async function start() {
     if (ev === 'user') {
       renderNav();
       updateHeader();
+      router();
     }
     if (typeof ev === 'object' && ev?.type === 'new-notifs') {
       for (const n of ev.items) {
