@@ -418,7 +418,7 @@ app.get('/api/machines', (req, res) => {
 });
 
 app.post('/api/machines', requireAdmin, (req, res) => {
-  const { code, name, sectorId, criticality = 'media', hourlyCost = 0, operatingHoursPerDay = 16, imageUrl = null } = req.body || {};
+  const { code, name, sectorId, criticality = 'media', hourlyCost = 0, operatingHoursPerDay = 16, imageUrl = null, defaultChecklist = [] } = req.body || {};
   if (!code || !name || !sectorId) {
     return res.status(400).json({ error: 'Informe a TAG/código, o nome da máquina e o setor' });
   }
@@ -432,10 +432,14 @@ app.post('/api/machines', requireAdmin, (req, res) => {
   const hCost = Math.max(0, Number(hourlyCost) || 0);
   const opHours = Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 16));
 
+  const rawList = Array.isArray(defaultChecklist) ? defaultChecklist : (typeof defaultChecklist === 'string' ? defaultChecklist.split('\n') : []);
+  const cleanList = rawList.map((s) => String(s).trim()).filter(Boolean);
+  const checklistJson = JSON.stringify(cleanList);
+
   db.prepare(`
-    INSERT INTO machines (id, code, name, sector_id, criticality, hourly_cost, operating_hours_per_day, image_url, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-  `).run(id, cleanCode, cleanName, sectorId, criticality, hCost, opHours, imageUrl || null);
+    INSERT INTO machines (id, code, name, sector_id, criticality, hourly_cost, operating_hours_per_day, image_url, default_checklist_json, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(id, cleanCode, cleanName, sectorId, criticality, hCost, opHours, imageUrl || null, checklistJson);
 
   const created = db.prepare('SELECT m.*, s.name as sector_name, s.code as sector_code FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(id);
   res.status(201).json({ ok: true, machine: created });
@@ -444,7 +448,7 @@ app.post('/api/machines', requireAdmin, (req, res) => {
 app.put('/api/machines/:id', requireAdmin, (req, res) => {
   const target = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
   if (!target) return res.status(404).json({ error: 'Máquina não encontrada' });
-  const { code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl, active } = req.body || {};
+  const { code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl, active, defaultChecklist } = req.body || {};
   const cleanCode = code ? String(code).trim().toUpperCase() : target.code;
   const cleanName = name ? String(name).trim() : target.name;
   const secId = sectorId || target.sector_id;
@@ -454,6 +458,13 @@ app.put('/api/machines/:id', requireAdmin, (req, res) => {
   const img = imageUrl !== undefined ? imageUrl : target.image_url;
   const act = active !== undefined ? (active ? 1 : 0) : target.active;
 
+  let checklistJson = target.default_checklist_json || '[]';
+  if (defaultChecklist !== undefined) {
+    const rawList = Array.isArray(defaultChecklist) ? defaultChecklist : (typeof defaultChecklist === 'string' ? defaultChecklist.split('\n') : []);
+    const cleanList = rawList.map((s) => String(s).trim()).filter(Boolean);
+    checklistJson = JSON.stringify(cleanList);
+  }
+
   if (cleanCode !== target.code) {
     const exists = db.prepare('SELECT id FROM machines WHERE UPPER(code) = ? AND id != ?').get(cleanCode, target.id);
     if (exists) return res.status(400).json({ error: 'Já existe outra máquina com esta TAG' });
@@ -461,9 +472,9 @@ app.put('/api/machines/:id', requireAdmin, (req, res) => {
 
   db.prepare(`
     UPDATE machines
-    SET code = ?, name = ?, sector_id = ?, criticality = ?, hourly_cost = ?, operating_hours_per_day = ?, image_url = ?, active = ?
+    SET code = ?, name = ?, sector_id = ?, criticality = ?, hourly_cost = ?, operating_hours_per_day = ?, image_url = ?, default_checklist_json = ?, active = ?
     WHERE id = ?
-  `).run(cleanCode, cleanName, secId, crit, hCost, opHours, img, act, target.id);
+  `).run(cleanCode, cleanName, secId, crit, hCost, opHours, img, checklistJson, act, target.id);
 
   const updated = db.prepare('SELECT m.*, s.name as sector_name, s.code as sector_code FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(target.id);
   res.json({ ok: true, machine: updated });
