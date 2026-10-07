@@ -174,6 +174,24 @@ function migrate(db) {
   CREATE INDEX IF NOT EXISTS idx_intervals_wo ON work_intervals(wo_id, user_id);
   CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read_at);
   `);
+
+  // Migração de colunas adicionais para máquinas (custo hora parada, horas funcionamento, foto)
+  const machCols = db.prepare(`PRAGMA table_info(machines)`).all().map((c) => c.name);
+  if (!machCols.includes('hourly_cost')) {
+    db.exec(`ALTER TABLE machines ADD COLUMN hourly_cost REAL NOT NULL DEFAULT 0.0`);
+  }
+  if (!machCols.includes('operating_hours_per_day')) {
+    db.exec(`ALTER TABLE machines ADD COLUMN operating_hours_per_day REAL NOT NULL DEFAULT 16.0`);
+  }
+  if (!machCols.includes('image_url')) {
+    db.exec(`ALTER TABLE machines ADD COLUMN image_url TEXT`);
+  }
+
+  // Migração de colunas adicionais para usuários (foto/avatar)
+  const userCols = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
+  if (!userCols.includes('avatar_url')) {
+    db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
+  }
 }
 
 // ---------- Dados fictícios de demonstração ----------
