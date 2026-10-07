@@ -106,14 +106,21 @@ async function test() {
   const broadcastResult = broadcastRes.results?.[0];
   console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastResult?.status === 'ok' ? `SUCESSO (OS #${broadcastResult.number})` : 'ERRO: ' + JSON.stringify(broadcastResult));
 
-  // 7. Check Notifications in Bootstrap
-  const bootRes = await fetch(base + '/api/bootstrap', { headers });
-  const bootData = await bootRes.json();
-  const notifs = bootData.notifications || [];
-  const directNotifs = notifs.filter(n => n.kind === 'atribuicao');
-  const broadNotifs = notifs.filter(n => n.kind === 'nova_os_fabrica');
-  console.log('✅ 7. Notificação Direcionada Gerada no Banco:', directNotifs[0]?.title);
-  console.log('✅ 8. Notificação Broadcast Gerada no Banco:', broadNotifs[0]?.title);
+  // 7. Check Notifications on Technician Account
+  const techLoginRes = await fetch(base + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: tech.username || tech.email, password: '123456' })
+  });
+  const techLoginData = await techLoginRes.json();
+  const techHeaders = { 'Authorization': 'Bearer ' + techLoginData.token };
+  const techBootRes = await fetch(base + '/api/bootstrap', { headers: techHeaders });
+  const techBootData = await techBootRes.json();
+  const techNotifs = techBootData.notifications || [];
+  const directNotif = techNotifs.find(n => n.kind === 'atribuicao');
+  const broadNotif = techNotifs.find(n => n.kind === 'nova_os_fabrica');
+  console.log('✅ 7. Notificação Direcionada Recebida pelo Técnico:', directNotif?.title);
+  console.log('✅ 8. Notificação Broadcast Recebida pelo Técnico:', broadNotif?.title);
 
   // 8. Delete created test machine to leave DB clean
   await fetch(base + '/api/machines/' + createdMac.id, { method: 'DELETE', headers });
