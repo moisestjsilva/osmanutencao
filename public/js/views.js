@@ -1,9 +1,10 @@
 // Telas do app. Cada tela recebe o elemento raiz e devolve uma função de limpeza opcional.
 import {
   state, on, api, enqueue, sync, workOrders, fetchDetail, pendingOps, failedOps, retryOp, discardOp, markRead, loadBoot, kv, uuid, NetError, userName,
+  login, logout, changePassword, fetchUsers, createUser, updateUser
 } from './store.js';
 import {
-  esc, $, $$, icon, avatar, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, statusBadge, prioBadge,
+  esc, $, $$, icon, avatar, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, statusBadge, prioBadge, roleBadge,
   PRIORITY, PRIO_COLOR, ROLE, compressImage, localInputValue,
 } from './ui.js';
 import { scanQR, extractCode, cameraSupported } from './scanner.js';
@@ -11,8 +12,11 @@ import { scanQR, extractCode, cameraSupported } from './scanner.js';
 const CLOSED = ['Concluída', 'Cancelada'];
 const isClosed = (w) => CLOSED.includes(w.status);
 const me = () => state.user;
-const isTech = () => ['manutentor', 'gerente'].includes(me()?.role);
-const isManager = () => me()?.role === 'gerente';
+const isTech = () => ['manutentor', 'gerente', 'admin', 'superadmin'].includes(me()?.role);
+const isAdmin = () => ['admin', 'superadmin', 'gerente'].includes(me()?.role);
+const isSuperAdmin = () => me()?.role === 'superadmin';
+const isOnlyTech = () => me()?.role === 'manutentor';
+const isManager = () => isAdmin();
 const PRANK = { urgente: 0, alta: 1, media: 2, baixa: 3 };
 const isStoppedNow = (w) => w.machineStopped && !isClosed(w) && w.machineRecovered !== true;
 const go = (h) => (location.hash = h);
@@ -22,25 +26,37 @@ const savedMsg = () => (state.online ? 'Registrado' : 'Salvo no aparelho — ser
 // LISTA DE OS
 // ======================================================================
 export function listView(root) {
-  let filter = sessionStorage.getItem('nova-os:filter') || 'abertas';
+  const onlyTech = isOnlyTech();
+  let filter = sessionStorage.getItem('nova-os:filter') || (onlyTech ? 'minhas' : 'abertas');
   let q = '';
-  root.innerHTML = `
-    <div class="page-head"><div><h1>Ordens de serviço</h1><p id="list-sub"></p></div>
-      <button class="icon-btn" id="btn-refresh" aria-label="Atualizar">${icon('refresh', 18)}</button></div>
-    <div id="stopped-wrap"></div>
-    <div class="input-group" style="margin-bottom:10px">
-      <input class="input" id="search" type="search" placeholder="Buscar por nº, máquina ou descrição" aria-label="Buscar OS" />
-    </div>
-    <div class="chips" id="filters" role="tablist"></div>
-    <div id="list" style="margin-top:8px"></div>`;
 
-  const FILTERS = [
+  const FILTERS = onlyTech ? [
+    ['minhas', 'Minhas Atribuídas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
+    ['disponiveis', 'Disponíveis na Fábrica', (w) => !isClosed(w) && !w.responsible?.id],
+    ['paradas', 'Máquinas Paradas', isStoppedNow],
+    ['concluidas', 'Concluídas por Mim', (w) => isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
+  ] : [
     ['abertas', 'Abertas', (w) => !isClosed(w)],
     ['minhas', 'Minhas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id) || w.requester?.id === me()?.id)],
     ['paradas', 'Paradas', isStoppedNow],
     ['preventivas', 'Preventivas', (w) => w.type === 'preventiva' && !isClosed(w)],
     ['concluidas', 'Encerradas', isClosed],
   ];
+
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <h1>${onlyTech ? 'Minhas Ordens de Serviço' : 'Ordens de Serviço'}</h1>
+        <p id="list-sub"></p>
+      </div>
+      <button class="icon-btn" id="btn-refresh" aria-label="Atualizar">${icon('refresh', 18)}</button>
+    </div>
+    <div id="stopped-wrap"></div>
+    <div class="input-group" style="margin-bottom:10px">
+      <input class="input" id="search" type="search" placeholder="Buscar por nº, máquina ou descrição" aria-label="Buscar OS" />
+    </div>
+    <div class="chips" id="filters" role="tablist"></div>
+    <div id="list" style="margin-top:8px"></div>`;
 
   function render() {
     const wos = workOrders();
