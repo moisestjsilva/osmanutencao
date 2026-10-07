@@ -975,6 +975,72 @@ export function kpiView(root) {
     if (alive) render(d);
   }
 
+  let expandedMachines = false;
+
+  function renderMachineRankList(list, showAll = false) {
+    if (!list || !list.length) {
+      return '<p class="muted small" style="padding:12px;margin:0;text-align:center">Nenhuma ocorrência corretiva registrada no período.</p>';
+    }
+    const maxOcc = Math.max(1, ...list.map((m) => m.corrective));
+    const displayList = showAll ? list : list.slice(0, 10);
+    const totalCount = list.length;
+
+    let html = `
+      <div class="rank-list" style="display:flex;flex-direction:column;gap:8px">
+        ${displayList.map((m, idx) => {
+          const rank = idx + 1;
+          const pct = Math.max(5, Math.round((m.corrective / maxOcc) * 100));
+          const rankColor = rank === 1 ? 'linear-gradient(135deg, #ffd700, #ffa000)' : rank === 2 ? 'linear-gradient(135deg, #e0e0e0, #9e9e9e)' : rank === 3 ? 'linear-gradient(135deg, #cd7f32, #8c4a16)' : 'var(--surface-3)';
+          const rankTextColor = rank <= 3 ? '#000000' : 'var(--text-2)';
+
+          return `
+            <div class="rank-item" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--surface-2);border-radius:10px;border:1px solid var(--border-color, rgba(255,255,255,0.06))">
+              <div class="row wrap" style="align-items:center;justify-content:space-between;gap:8px">
+                <div class="row" style="align-items:center;gap:10px;min-width:0;flex:1">
+                  <span class="rank-badge" style="min-width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;font-size:12px;background:${rankColor};color:${rankTextColor}">
+                    #${rank}
+                  </span>
+                  <span class="mono" style="font-weight:700;font-size:13px;padding:3px 8px;background:var(--surface-3);border-radius:6px;color:var(--accent)">
+                    ${esc(m.code)}
+                  </span>
+                  <div class="ellipsis" style="min-width:0">
+                    <strong style="font-size:14px;display:block">${esc(m.name)}</strong>
+                    <span class="muted xs">${esc(m.sector || '')}</span>
+                  </div>
+                </div>
+                <div class="row wrap" style="gap:6px;align-items:center">
+                  <span class="badge" style="background:var(--accent-glow);color:var(--accent);font-weight:600;font-size:12px">
+                    ${m.corrective} OS
+                  </span>
+                  ${m.stoppedMin > 0 ? `
+                    <span class="badge stopped" style="font-size:11px">
+                      ⚠️ ${fmtMin(m.stoppedMin)} parada
+                    </span>
+                  ` : ''}
+                </div>
+              </div>
+              <div class="progress-bar-bg" style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+                <div class="progress-bar-fill" style="width:${pct}%;height:100%;background:${rank === 1 ? 'linear-gradient(90deg, #ffa000, var(--accent))' : m.stoppedMin > 0 ? 'linear-gradient(90deg, #f44336, #ff9800)' : 'var(--accent)'};border-radius:3px;transition:width 0.3s ease"></div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    if (totalCount > 10) {
+      html += `
+        <div style="margin-top:12px;text-align:center">
+          <button class="btn ghost sm full-width" id="btn-toggle-machines-rank">
+            ${showAll ? icon('chevUp', 16) + ' Mostrar apenas as 10 principais' : icon('chevDown', 16) + ` Expandir e ver todas as ${totalCount} máquinas`}
+          </button>
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
   function render(d) {
     const kpi = (k, v, unit, s, color, na) => `<div class="kpi ${na ? 'na' : ''}" style="--kc:${color || 'var(--text)'}"><div class="k">${k}</div><div class="v">${v}${unit ? `<small>${unit}</small>` : ''}</div><div class="s">${s || ''}</div></div>`;
     const split = (min) => { if (min == null) return ['—', '']; if (min < 60) return [Math.round(min), 'min']; return [(min / 60).toFixed(1).replace('.', ','), 'h']; };
@@ -992,7 +1058,6 @@ export function kpiView(root) {
 
       const [rv, ru] = split(d.responseTime.avgMin);
       const [mv, mu] = split(d.mttr.avgMin);
-      const maxOcc = Math.max(1, ...d.byMachine.map((m) => m.corrective));
 
       $('#kpi-body', root).innerHTML = `
         <div class="section-title"><span>Meus Atendimentos no Período</span></div>
@@ -1012,13 +1077,8 @@ export function kpiView(root) {
         </div>
 
         <div class="section-title"><span>Máquinas Onde Mais Atuei</span></div>
-        <section class="card">
-          ${d.byMachine.length ? d.byMachine.map((m) => `
-            <div class="bar-row">
-              <div class="ellipsis"><strong>${esc(m.code)}</strong> <span class="muted small">${esc(m.name)}</span></div>
-              <div class="mono small">${m.corrective} atendimentos • ${fmtMin(m.stoppedMin)} parada</div>
-              <div class="bar ${m.stoppedMin > 0 ? 'red' : ''}"><i style="width:${(m.corrective / maxOcc) * 100}%"></i></div>
-            </div>`).join('') : '<p class="muted small" style="margin:0;padding:4px 0">Nenhum atendimento registrado no período selecionado.</p>'}
+        <section class="card" id="card-by-machine">
+          ${renderMachineRankList(d.byMachine, expandedMachines)}
         </section>
 
         <div class="section-title"><span>Minha Ficha de Produtividade</span></div>
@@ -1040,12 +1100,13 @@ export function kpiView(root) {
           </div>
         </section>
       `;
+
+      bindRankToggle();
       return;
     }
 
     // Visão gerencial completa para Admin / Super Admin
     $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • ${d.dataQuality.wosInPeriod} OS no período`;
-    const maxOcc = Math.max(1, ...d.byMachine.map((m) => m.corrective));
     const [rv, ru] = split(d.responseTime.avgMin);
     const [mv, mu] = split(d.mttr.avgMin);
     const [sv, su] = split(d.stoppedTime.totalMin);
@@ -1065,16 +1126,16 @@ export function kpiView(root) {
         ${kpi('Duração corretivas', cv, cu, `abertura → conclusão (${d.correctiveDuration.n})`, 'var(--text)')}
         ${kpi('Tempo parado', sv, su, `${d.stoppedTime.intervals} parada(s), sem dupla contagem`, 'var(--danger)')}
         ${kpi('Retrabalho', d.rework.pct == null ? '—' : d.rework.pct, d.rework.pct == null ? '' : '%', `${d.rework.reopened + d.rework.linked} de ${d.rework.completed} concluídas`, 'var(--warn)')}
-        ${kpi('MTBF', 'Não calculado', '', d.mtbf.reason, null, true)}
+        ${kpi('MTBF', 'Não calculated', '', d.mtbf.reason, null, true)}
         ${kpi('Disponibilidade', 'Não calculada', '', d.availability.reason, null, true)}
       </div>
 
-      <div class="section-title"><span>Ocorrências corretivas por máquina</span></div>
-      <section class="card">
-        ${d.byMachine.length ? d.byMachine.map((m) => `
-          <div class="bar-row"><div class="ellipsis"><strong>${esc(m.code)}</strong> <span class="muted small">${esc(m.name)}</span></div>
-            <div class="mono small">${m.corrective} OS • ${fmtMin(m.stoppedMin)} parada</div>
-            <div class="bar ${m.stoppedMin > 0 ? 'red' : ''}"><i style="width:${(m.corrective / maxOcc) * 100}%"></i></div></div>`).join('') : '<p class="muted small">Sem corretivas no período.</p>'}
+      <div class="section-title">
+        <span>Ocorrências corretivas por máquina</span>
+        ${d.byMachine.length ? `<span class="muted xs">${d.byMachine.length} máquinas com registros</span>` : ''}
+      </div>
+      <section class="card" id="card-by-machine">
+        ${renderMachineRankList(d.byMachine, expandedMachines)}
       </section>
 
       <div class="section-title"><span>Trabalho por manutentor</span></div>
@@ -1096,6 +1157,22 @@ export function kpiView(root) {
           <div><span>Corretivas sem causa</span><strong>${d.dataQuality.missingCause}</strong></div>
         </div>
       </section>`;
+
+    bindRankToggle();
+  }
+
+  function bindRankToggle() {
+    const btn = $('#btn-toggle-machines-rank', root);
+    if (btn) {
+      btn.onclick = () => {
+        expandedMachines = !expandedMachines;
+        const container = $('#card-by-machine', root);
+        if (container) {
+          container.innerHTML = renderMachineRankList(d.byMachine, expandedMachines);
+          bindRankToggle();
+        }
+      };
+    }
   }
   load();
   return () => { alive = false; };
@@ -1452,9 +1529,14 @@ export function cadastrosView(root, params = {}) {
         </div>
         <div>
           ${activeTab === 'maquinas' ? `
-            <button class="btn primary sm" id="btn-new-cad">
-              ${icon('plus', 16)} Nova Máquina
-            </button>
+            <div class="row" style="gap:8px">
+              <button class="btn sm" id="btn-view-qrs">
+                ${icon('qr', 16)} Etiquetas QR
+              </button>
+              <button class="btn primary sm" id="btn-new-cad">
+                ${icon('plus', 16)} Nova Máquina
+              </button>
+            </div>
           ` : activeTab === 'setores' ? `
             <button class="btn primary sm" id="btn-new-cad">
               ${icon('plus', 16)} Novo Setor
@@ -1544,6 +1626,9 @@ export function cadastrosView(root, params = {}) {
                   ${m.open_orders > 0 ? `<span style="color:var(--danger);font-weight:600">● ${m.open_orders} OS em aberto</span>` : '<span>Nenhuma OS aberta</span>'}
                 </div>
                 <div class="row" style="gap:6px">
+                  <button class="btn sm" data-qr-modal="${m.id}" title="Ver e imprimir QR Code da máquina">
+                    ${icon('qr', 14)} QR Code
+                  </button>
                   <button class="btn sm" data-edit-machine="${m.id}">
                     ${icon('edit', 14)} Editar
                   </button>
@@ -2206,6 +2291,63 @@ export function changePasswordModal() {
         } catch (err) {
           toast(err.message || 'Erro ao alterar senha', 'alarm');
         }
+      };
+    }
+  });
+}
+
+// ======================================================================
+// MODAL DE ETIQUETA E GERADOR DE QR CODE
+// ======================================================================
+export function showMachineQRModal(m) {
+  const qrUrl = `/api/qr/${encodeURIComponent(m.code)}.svg`;
+  sheet(`
+    <div style="text-align:center;padding:10px 0">
+      <h2 style="margin-bottom:4px">Etiqueta QR Code • ${esc(m.code)}</h2>
+      <p class="muted small">${esc(m.name)} • Setor ${esc(m.sector_name || 'Geral')}</p>
+
+      <div class="qr-preview-box" style="margin:16px auto;padding:16px;background:#ffffff;border-radius:12px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.15)">
+        <img src="${qrUrl}" alt="QR ${esc(m.code)}" style="width:200px;height:200px;display:block;margin:0 auto" />
+        <div style="margin-top:10px;font-family:monospace;font-weight:700;font-size:18px;color:#000000">TAG: ${esc(m.code)}</div>
+        <div style="font-size:12px;color:#555555;margin-top:2px">${esc(m.name)}</div>
+      </div>
+
+      <p class="muted xs" style="max-width:340px;margin:0 auto 16px">
+        Ao ler esta etiqueta QR com a câmera do celular ou leitor nativo, o chamado de manutenção é aberto preenchendo automaticamente a máquina.
+      </p>
+
+      <div class="row" style="gap:8px;justify-content:center">
+        <button class="btn primary sm" id="btn-print-single-qr">${icon('print', 16)} Imprimir Etiqueta</button>
+        <button class="btn sm" data-close>Fechar</button>
+      </div>
+    </div>
+  `, {
+    onMount(el) {
+      $('#btn-print-single-qr', el).onclick = () => {
+        const w = window.open('', '_blank');
+        w.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Etiqueta QR - ${esc(m.code)}</title>
+              <style>
+                body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                .tag { border: 2px solid #000; padding: 20px; border-radius: 12px; width: 240px; background: #fff; }
+                img { width: 180px; height: 180px; display: block; margin: 0 auto; }
+                .code { font-family: monospace; font-size: 20px; font-weight: bold; margin-top: 10px; color: #000; }
+                .name { font-size: 13px; color: #333; margin-top: 4px; }
+              </style>
+            </head>
+            <body onload="window.print();window.close()">
+              <div class="tag">
+                <img src="${qrUrl}" />
+                <div class="code">TAG: ${esc(m.code)}</div>
+                <div class="name">${esc(m.name)}</div>
+              </div>
+            </body>
+          </html>
+        `);
+        w.document.close();
       };
     }
   });
