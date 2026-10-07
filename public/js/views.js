@@ -1,7 +1,7 @@
 // Telas do app. Cada tela recebe o elemento raiz e devolve uma função de limpeza opcional.
 import {
   state, on, api, enqueue, sync, workOrders, fetchDetail, pendingOps, failedOps, retryOp, discardOp, markRead, loadBoot, kv, uuid, NetError, userName,
-  login, logout, changePassword, fetchUsers, createUser, updateUser
+  login, logout, changePassword, fetchUsers, createUser, updateUser, deleteUser
 } from './store.js';
 import {
   esc, $, $$, icon, avatar, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, statusBadge, prioBadge, roleBadge,
