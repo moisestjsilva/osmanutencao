@@ -54,7 +54,11 @@ function router() {
 
   // Bloqueio de rotas administrativas para telas simplificadas (manutentor e solicitante)
   if (!isStaff) {
-    if (['/indicadores', '/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros'].includes(path)) {
+    if (role === 'solicitante' && path === '/indicadores') {
+      location.hash = '#/';
+      return;
+    }
+    if (['/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros'].includes(path)) {
       toast('Recurso restrito à gestão de manutenção', 'warn');
       location.hash = '#/';
       return;
