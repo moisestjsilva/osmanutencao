@@ -126,10 +126,17 @@ export function resolveRecipients(db, mode, list) {
 }
 
 export function notify(db, userIds, { woId = null, kind, title, body }) {
-  const st = db.prepare(`INSERT INTO notifications (id,wo_id,user_id,channel,kind,title,body,status,created_at)
-                         VALUES (?,?,?,?,?,?,?,?,?)`);
+  const notifCols = db.prepare(`PRAGMA table_info(notifications)`).all().map((c) => c.name);
+  const hasStatus = notifCols.includes('status');
+  const sql = hasStatus
+    ? `INSERT INTO notifications (id,wo_id,user_id,channel,kind,title,body,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)`
+    : `INSERT INTO notifications (id,wo_id,user_id,channel,kind,title,body,created_at) VALUES (?,?,?,?,?,?,?,?)`;
+  const st = db.prepare(sql);
   const at = nowIso();
-  for (const uid of new Set(userIds)) st.run(randomUUID(), woId, uid, 'app', kind, title, body || '', 'enviada', at);
+  for (const uid of new Set(userIds)) {
+    if (hasStatus) st.run(randomUUID(), woId, uid, 'app', kind, title, body || '', 'enviada', at);
+    else st.run(randomUUID(), woId, uid, 'app', kind, title, body || '', at);
+  }
 }
 
 function woLabel(db, wo) {
