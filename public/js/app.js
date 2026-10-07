@@ -272,11 +272,11 @@ function showUserProfile() {
 // ======================================================================
 // GESTÃO DE TEMA CLARO / ESCURO
 // ======================================================================
-export function getTheme() {
+function getTheme() {
   return document.documentElement.getAttribute('data-theme') || 'light';
 }
 
-export function setTheme(theme) {
+function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('nova-os:theme', theme);
   updateThemeUI();
@@ -286,7 +286,7 @@ export function setTheme(theme) {
   }
 }
 
-export function toggleTheme() {
+function toggleTheme() {
   const next = getTheme() === 'dark' ? 'light' : 'dark';
   setTheme(next);
   toast(`Tema ${next === 'dark' ? 'escuro' : 'claro'} ativado`);
