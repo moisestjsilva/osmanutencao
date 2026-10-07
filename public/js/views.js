@@ -49,7 +49,9 @@ export function listView(root) {
   } else if (isSol) {
     FILTERS = [
       ['abertas', 'Em Andamento', (w) => !isClosed(w)],
-      ['concluidas', 'Concluídos', isClosed],
+      ['minhas', 'Meus Chamados', (w) => !isClosed(w) && w.requester?.id === me()?.id],
+      ...(me()?.sector_id ? [['setor', 'Do Meu Setor', (w) => !isClosed(w) && w.machine?.sector_id === me()?.sector_id]] : []),
+      ['concluidas', 'Encerrados', isClosed],
       ['todas', 'Todos os Chamados', () => true],
     ];
   } else {
@@ -1459,7 +1461,7 @@ export function cadastrosView(root, params = {}) {
             </button>
           ` : `
             <button class="btn primary sm" id="btn-new-cad">
-              ${icon('userPlus', 16)} ${isSuperAdmin() ? 'Novo Usuário' : 'Novo Manutentor'}
+              ${icon('userPlus', 16)} Novo Usuário / Solicitante
             </button>
           `}
         </div>
@@ -1631,8 +1633,9 @@ export function cadastrosView(root, params = {}) {
               </div>
               <div class="muted small" style="margin-top:2px">
                 <span class="mono">${esc(u.username || u.email || 'sem login')}</span>
+                ${u.sector_name ? ` • Setor: <strong>${esc(u.sector_name)}</strong>` : ''}
                 ${u.specialty ? ` • ${esc(u.specialty)}` : ''}
-                ${u.team_name ? ` • ${esc(u.team_name)}` : ''}
+                ${u.team_name ? ` • Equipe: ${esc(u.team_name)}` : ''}
               </div>
             </div>
             <div class="row" style="gap:4px">
@@ -2011,15 +2014,15 @@ export function cadastrosView(root, params = {}) {
     });
   }
 
-  // ---------- MODAL DE USUÁRIO / MANUTENTOR (COM FOTO) ----------
+  // ---------- MODAL DE USUÁRIO / SOLICITANTE / MANUTENTOR (COM FOTO) ----------
   function openUserModal(target = null) {
     const isEdit = !!target;
-    const canChooseRole = isSuperAdmin();
+    const canChooseRole = isAdmin();
     let currentAvatar = target?.avatar_url || null;
 
     sheet(`
-      <h2>${isEdit ? 'Editar Usuário' : (canChooseRole ? 'Cadastrar Novo Usuário' : 'Cadastrar Novo Manutentor')}</h2>
-      <p class="muted small">${isEdit ? 'Atualize os dados, foto ou defina uma nova senha' : 'Preencha os dados e anexe a foto do colaborador'}</p>
+      <h2>${isEdit ? 'Editar Usuário' : (canChooseRole ? 'Cadastrar Novo Usuário / Solicitante' : 'Cadastrar Novo Manutentor')}</h2>
+      <p class="muted small">${isEdit ? 'Atualize os dados, foto ou defina uma nova senha' : 'Preencha os dados e defina a senha de acesso do colaborador'}</p>
 
       <form id="form-user" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
         <div class="img-upload-box">
@@ -2028,7 +2031,7 @@ export function cadastrosView(root, params = {}) {
           </div>
           <div class="grow">
             <span style="font-weight:600;font-size:13.5px;display:block">Foto do Colaborador</span>
-            <span class="muted xs" style="display:block;margin-bottom:8px">Foto para crachá e perfil. Se não enviar, usa o avatar padrão.</span>
+            <span class="muted xs" style="display:block;margin-bottom:8px">Foto para perfil. Se não enviar, usa o avatar padrão.</span>
             <div class="row" style="gap:8px">
               <label class="btn sm primary" style="cursor:pointer">
                 ${icon('camera', 16)} Tirar / Enviar Foto
@@ -2041,32 +2044,42 @@ export function cadastrosView(root, params = {}) {
 
         <label class="field">
           <span>Nome Completo *</span>
-          <input class="input" id="u-name" required value="${esc(target?.name || '')}" placeholder="Ex: Carlos Mendes" />
+          <input class="input" id="u-name" required value="${esc(target?.name || '')}" placeholder="Ex: Reinilson Silva" />
         </label>
 
         <label class="field">
           <span>Login / Nome de Usuário *</span>
-          <input class="input" id="u-username" required ${isEdit ? 'disabled' : ''} value="${esc(target?.username || '')}" placeholder="Ex: carlos" />
+          <input class="input" id="u-username" required ${isEdit ? 'disabled' : ''} value="${esc(target?.username || '')}" placeholder="Ex: reinilson" />
         </label>
 
         <label class="field">
           <span>E-mail</span>
-          <input class="input" id="u-email" type="email" value="${esc(target?.email || '')}" placeholder="Ex: carlos@rufato.com.br" />
+          <input class="input" id="u-email" type="email" value="${esc(target?.email || '')}" placeholder="Ex: reinilson@rufato.com.br" />
         </label>
 
-        ${canChooseRole && !isEdit ? `
+        ${canChooseRole ? `
         <label class="field">
-          <span>Nível de Acesso</span>
+          <span>Nível de Acesso *</span>
           <select class="input select" id="u-role">
-            <option value="manutentor" selected>Manutentor (Acesso simplificado às suas OS)</option>
-            <option value="admin">Admin (Gestão de Manutenção, Máquinas e Setores)</option>
-            <option value="superadmin">Super Admin (Acesso irrestrito a todo o sistema)</option>
-            <option value="solicitante">Solicitante (Apenas abertura de chamados)</option>
+            <option value="solicitante" ${target?.role === 'solicitante' || (!target && true) ? 'selected' : ''}>Solicitante (Apenas abertura e acompanhamento de chamados)</option>
+            <option value="manutentor" ${target?.role === 'manutentor' ? 'selected' : ''}>Manutentor (Atendimento de OS no chão de fábrica)</option>
+            <option value="gerente" ${target?.role === 'gerente' ? 'selected' : ''}>Gerente de Manutenção (Gestão completa de OS e equipes)</option>
+            ${isSuperAdmin() ? `
+            <option value="admin" ${target?.role === 'admin' ? 'selected' : ''}>Admin (Gestão de Manutenção, Máquinas e Setores)</option>
+            <option value="superadmin" ${target?.role === 'superadmin' ? 'selected' : ''}>Super Admin (Acesso irrestrito)</option>` : ''}
           </select>
         </label>` : ''}
 
         <label class="field">
-          <span>Equipe</span>
+          <span>Setor de Origem (Para Solicitantes / Atuação)</span>
+          <select class="input select" id="u-sector">
+            <option value="">Nenhum setor específico (Acompanha chamados próprios)</option>
+            ${(state.boot?.sectors || []).map((s) => `<option value="${s.id}" ${target?.sector_id === s.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})</option>`).join('')}
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Equipe Técnica (opcional)</span>
           <select class="input select" id="u-team">
             <option value="">Nenhuma equipe</option>
             ${(state.boot?.teams || []).map((t) => `<option value="${t.id}" ${target?.team_id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
@@ -2074,18 +2087,18 @@ export function cadastrosView(root, params = {}) {
         </label>
 
         <label class="field">
-          <span>Especialidade</span>
-          <input class="input" id="u-spec" value="${esc(target?.specialty || '')}" placeholder="Ex: Mecânico, Eletricista" />
+          <span>Especialidade / Função</span>
+          <input class="input" id="u-spec" value="${esc(target?.specialty || '')}" placeholder="Ex: Operador, Solicitante, Mecânico" />
         </label>
 
         <label class="field">
-          <span>${isEdit ? 'Nova Senha (deixe em branco para manter)' : 'Senha de Acesso *'}</span>
+          <span>${isEdit ? 'Nova Senha (deixe em blank para manter)' : 'Senha de Acesso *'}</span>
           <input class="input" id="u-pass" type="password" ${isEdit ? '' : 'required'} minlength="4" placeholder="${isEdit ? 'Opcional' : 'Mínimo 4 caracteres'}" />
         </label>
 
         <div class="sheet-actions" style="margin-top:14px">
           <button type="button" class="btn" data-close>Cancelar</button>
-          <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar'}</button>
+          <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar Colaborador'}</button>
         </div>
       </form>
     `, {
@@ -2122,20 +2135,21 @@ export function cadastrosView(root, params = {}) {
           const name = $('#u-name', el).value.trim();
           const username = $('#u-username', el).value.trim();
           const email = $('#u-email', el).value.trim();
-          const teamId = $('#u-team', el).value || null;
+          const role = $('#u-role', el)?.value || (target?.role || 'solicitante');
+          const sectorId = $('#u-sector', el)?.value || null;
+          const teamId = $('#u-team', el)?.value || null;
           const specialty = $('#u-spec', el).value.trim() || null;
           const password = $('#u-pass', el).value.trim();
-          const role = $('#u-role', el)?.value || (target?.role || 'manutentor');
 
           try {
             if (isEdit) {
               await updateUser(target.id, {
-                name, email, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
+                name, email, role, sectorId, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
               });
               toast('Usuário atualizado com sucesso!');
             } else {
               await createUser({
-                name, username, email, role, teamId, specialty, password, avatarUrl: currentAvatar
+                name, username, email, role, sectorId, teamId, specialty, password, avatarUrl: currentAvatar
               });
               toast('Novo colaborador cadastrado com sucesso!');
             }

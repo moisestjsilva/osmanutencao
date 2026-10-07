@@ -235,24 +235,27 @@ app.post('/api/upload', requireUser, (req, res) => {
 // ---------- Gestão de Usuários (Admin e Super Admin) ----------
 app.get('/api/users', requireAdmin, (req, res) => {
   const rows = db.prepare(`
-    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.active, u.avatar_url, u.created_at,
-           t.name as team_name
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.specialty, u.active, u.avatar_url, u.created_at,
+           t.name as team_name, s.name as sector_name, s.code as sector_code
     FROM users u
     LEFT JOIN teams t ON t.id = u.team_id
-    ORDER BY CASE u.role WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 WHEN 'manutentor' THEN 3 ELSE 4 END, u.name
+    LEFT JOIN sectors s ON s.id = u.sector_id
+    ORDER BY CASE u.role WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 WHEN 'gerente' THEN 3 WHEN 'manutentor' THEN 4 ELSE 5 END, u.name
   `).all();
   res.json({ users: rows });
 });
 
 app.post('/api/users', requireAdmin, (req, res) => {
-  const { name, email, username, password, role = 'manutentor', teamId, specialty, avatarUrl, avatar_url } = req.body || {};
+  const { name, email, username, password, role = 'solicitante', teamId, sectorId, sector_id, specialty, avatarUrl, avatar_url } = req.body || {};
   if (!name || !username || !password) {
     return res.status(400).json({ error: 'Preencha o nome, nome de usuário e senha' });
   }
 
-  // O Admin comum só pode cadastrar manutentores
-  if (req.user.role === 'admin' && (role === 'admin' || role === 'superadmin')) {
-    return res.status(403).json({ error: 'Administradores só têm permissão para cadastrar manutentores' });
+  const finalSector = sectorId || sector_id || null;
+
+  // Gerente / Admin comum só pode cadastrar manutentores e solicitantes
+  if ((req.user.role === 'admin' || req.user.role === 'gerente') && (role === 'admin' || role === 'superadmin')) {
+    return res.status(403).json({ error: 'Gerentes e Administradores só têm permissão para cadastrar manutentores e solicitantes' });
   }
 
   const cleanUser = String(username).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
@@ -263,19 +266,19 @@ app.post('/api/users', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'Nome de usuário ou e-mail já cadastrado' });
   }
 
-  const id = 'u-' + (role === 'manutentor' ? 'tech-' : '') + cleanUser + '-' + Date.now().toString(36).slice(-4);
+  const id = 'u-' + (role === 'manutentor' ? 'tech-' : role === 'solicitante' ? 'sol-' : '') + cleanUser + '-' + Date.now().toString(36).slice(-4);
   const { hash, salt } = hashPassword(password);
   const now = new Date().toISOString();
   const finalAvatar = avatarUrl || avatar_url || null;
 
   db.prepare(`
-    INSERT INTO users (id, name, email, username, role, team_id, specialty, password_hash, salt, avatar_url, active, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, specialty || null, hash, salt, finalAvatar, now);
+    INSERT INTO users (id, name, email, username, role, team_id, sector_id, specialty, password_hash, salt, avatar_url, active, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, finalSector, specialty || null, hash, salt, finalAvatar, now);
 
   res.status(201).json({
     ok: true,
-    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, specialty, avatar_url: finalAvatar }
+    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, sector_id: finalSector, specialty, avatar_url: finalAvatar }
   });
 });
 
@@ -283,17 +286,23 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-  // Regra: Admin comum não pode alterar Super Admin nem outros Admins
-  if (req.user.role === 'admin' && (target.role === 'superadmin' || target.role === 'admin')) {
+  // Regra: Admin/Gerente comum não pode alterar Super Admin nem outros Admins
+  if ((req.user.role === 'admin' || req.user.role === 'gerente') && (target.role === 'superadmin' || target.role === 'admin')) {
     if (target.id !== req.user.id) {
-      return res.status(403).json({ error: 'Você só pode gerenciar manutentores' });
+      return res.status(403).json({ error: 'Você só pode gerenciar manutentores e solicitantes' });
     }
   }
 
-  const { name, email, username, password, teamId, specialty, active, avatarUrl, avatar_url } = req.body || {};
+  const { name, email, username, password, role, teamId, sectorId, sector_id, specialty, active, avatarUrl, avatar_url } = req.body || {};
   if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name.trim(), target.id);
   if (email) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.trim().toLowerCase(), target.id);
+  if (role && (req.user.role === 'superadmin' || !['admin', 'superadmin'].includes(role))) {
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, target.id);
+  }
   if (teamId !== undefined) db.prepare('UPDATE users SET team_id = ? WHERE id = ?').run(teamId || null, target.id);
+  if (sectorId !== undefined || sector_id !== undefined) {
+    db.prepare('UPDATE users SET sector_id = ? WHERE id = ?').run(sectorId ?? sector_id ?? null, target.id);
+  }
   if (specialty !== undefined) db.prepare('UPDATE users SET specialty = ? WHERE id = ?').run(specialty || null, target.id);
   if (active !== undefined) db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, target.id);
   if (avatarUrl !== undefined || avatar_url !== undefined) {
@@ -304,7 +313,12 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
     db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, target.id);
   }
 
-  const updated = db.prepare('SELECT id, name, email, username, role, team_id, specialty, avatar_url, active FROM users WHERE id = ?').get(target.id);
+  const updated = db.prepare(`
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.specialty, u.avatar_url, u.active, s.name as sector_name
+    FROM users u
+    LEFT JOIN sectors s ON s.id = u.sector_id
+    WHERE u.id = ?
+  `).get(target.id);
   res.json({ ok: true, user: updated });
 });
 
@@ -499,7 +513,13 @@ app.get('/api/bootstrap', (req, res) => {
     currentUser: req.user || null,
     sectors: db.prepare('SELECT * FROM sectors ORDER BY name').all(),
     teams: db.prepare('SELECT * FROM teams ORDER BY name').all(),
-    users: db.prepare('SELECT id,name,username,email,role,team_id,specialty,avatar_url FROM users WHERE active=1 ORDER BY role, name').all(),
+    users: db.prepare(`
+      SELECT u.id, u.name, u.username, u.email, u.role, u.team_id, u.sector_id, u.specialty, u.avatar_url, s.name as sector_name
+      FROM users u
+      LEFT JOIN sectors s ON s.id = u.sector_id
+      WHERE u.active = 1
+      ORDER BY u.role, u.name
+    `).all(),
     machines: db.prepare('SELECT m.*, s.name as sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.active=1 ORDER BY m.code').all(),
     settings: { defaultRecipientsMode: getSetting(db, 'default_recipients_mode', 'todos') },
   });
@@ -518,9 +538,14 @@ app.get('/api/workorders', (req, res) => {
   const params = [since, since];
 
   if (isSol) {
-    // Solicitante: vê exclusivamente as ordens que ele próprio abriu
-    query += ` AND requester_id = ?`;
-    params.push(req.user.id);
+    // Solicitante: vê as ordens que ele abriu ou as ordens do seu setor de atuação
+    if (req.user?.sector_id) {
+      query += ` AND (requester_id = ? OR machine_id IN (SELECT id FROM machines WHERE sector_id = ?))`;
+      params.push(req.user.id, req.user.sector_id);
+    } else {
+      query += ` AND requester_id = ?`;
+      params.push(req.user.id);
+    }
   } else if (isTech && scope === 'disponiveis') {
     // Abertas sem responsável atribuído para o manutentor assumir
     query += ` AND status = 'Aberta' AND responsible_id IS NULL`;

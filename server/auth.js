@@ -87,6 +87,11 @@ export function migrateAuth(db) {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `);
+
+  const userCols = db.prepare("PRAGMA table_info('users')").all().map((c) => c.name);
+  if (!userCols.includes('sector_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN sector_id TEXT REFERENCES sectors(id);');
+  }
 }
 
 export function seedAuthUsers(db) {
