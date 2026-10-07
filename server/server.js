@@ -1,7 +1,3 @@
-// Servidor HTTP — API + arquivos estáticos do app.
-// IMPORTANTE (versão de teste): a identidade vem do cabeçalho X-User-Id escolhido no app.
-// Em produção, substituir o middleware `identify` por autenticação real (sessão/JWT);
-// as checagens de permissão já são feitas aqui no servidor.
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,12 +7,22 @@ import { openDb, resetDb, UPLOAD_DIR } from './db.js';
 import { applyOp, getSetting, setSetting, CLOSED } from './domain.js';
 import { generateCycle, runScheduler } from './preventive.js';
 import { computeIndicators } from './indicators.js';
+import {
+  hashPassword,
+  verifyPassword,
+  createSession,
+  getSessionUser,
+  deleteSession,
+  seedAuthUsers,
+} from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
 
 let db = openDb();
+seedAuthUsers(db);
+
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
@@ -29,14 +35,57 @@ app.use(express.static(path.join(ROOT, 'public'), { extensions: ['html'], setHea
 app.get('/vendor/jsQR.js', (req, res) => res.sendFile(path.join(ROOT, 'node_modules', 'jsqr', 'dist', 'jsQR.js')));
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
 
-// ---------- Identidade (simulada) ----------
+// ---------- Identidade e Autenticação Real ----------
 function identify(req, res, next) {
+  const authHeader = req.get('Authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : (req.get('X-Auth-Token') || '').trim();
+
+  if (token) {
+    const user = getSessionUser(db, token);
+    if (user) {
+      req.user = user;
+      req.token = token;
+      return next();
+    }
+  }
+
+  // Fallback opcional por X-User-Id para suporte à fila offline/legado
   const id = req.get('X-User-Id');
-  req.user = id ? db.prepare('SELECT * FROM users WHERE id=? AND active=1').get(id) : null;
+  if (id) {
+    const row = db.prepare('SELECT id, name, email, username, role, team_id, specialty, active FROM users WHERE id=? AND active=1').get(id);
+    if (row) {
+      req.user = {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        username: row.username,
+        role: row.role,
+        teamId: row.team_id,
+        specialty: row.specialty,
+        active: !!row.active
+      };
+      return next();
+    }
+  }
+
+  req.user = null;
+  req.token = null;
   next();
 }
-const requireUser = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'Selecione um usuário' }));
-const requireManager = (req, res, next) => (req.user?.role === 'gerente' ? next() : res.status(403).json({ error: 'Somente o gerente de manutenção' }));
+
+const requireUser = (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'Faça login para continuar' }));
+const requireAdmin = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Faça login para continuar' });
+  if (req.user.role === 'superadmin' || req.user.role === 'admin' || req.user.role === 'gerente') return next();
+  return res.status(403).json({ error: 'Acesso restrito para administradores' });
+};
+const requireSuperAdmin = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Faça login para continuar' });
+  if (req.user.role === 'superadmin') return next();
+  return res.status(403).json({ error: 'Acesso restrito para o Super Administrador' });
+};
+const requireManager = requireAdmin;
+
 app.use('/api', identify);
 
 // ---------- Serialização ----------
