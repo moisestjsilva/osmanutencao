@@ -101,7 +101,11 @@ export function computeIndicators(db, q = {}) {
 
   // Ocorrências por máquina
   const occ = {};
-  for (const w of inPeriod.filter((x) => x.type === 'corretiva')) occ[w.machine_id] = (occ[w.machine_id] || 0) + 1;
+  const relevantCorretivas = allWos.filter((w) => w.type === 'corretiva' && woPeopleOk(w) && (
+    (w.created_at >= F && w.created_at <= T) || 
+    (w.status === 'Concluída' && w.closed_at >= F && w.closed_at <= T)
+  ));
+  for (const w of relevantCorretivas) occ[w.machine_id] = (occ[w.machine_id] || 0) + 1;
   const byMachine = Object.entries(occ).map(([mid, n]) => ({
     machineId: mid, code: mById[mid]?.code, name: mById[mid]?.name, sector: mById[mid]?.sector_name,
     corrective: n, stoppedMin: round(stoppedByMachine[mid] || 0, 0),
@@ -123,9 +127,19 @@ export function computeIndicators(db, q = {}) {
       workMin += mins(a, b);
       wosTouched.add(iv.wo_id);
     }
+    for (const w of inPeriod) {
+      if (w.responsible_id === u.id || (partByWo[w.id] || []).some((p) => p.user_id === u.id)) {
+        wosTouched.add(w.id);
+      }
+    }
+    for (const w of completedInPeriod) {
+      if (w.responsible_id === u.id || (partByWo[w.id] || []).some((p) => p.user_id === u.id)) {
+        wosTouched.add(w.id);
+      }
+    }
     const asResp = completedInPeriod.filter((w) => w.responsible_id === u.id);
-    const asCollab = completedInPeriod.filter((w) => w.responsible_id !== u.id && (partByWo[w.id] || []).some((p) => p.user_id === u.id));
-    const prevDone = asResp.filter((w) => w.type === 'preventiva');
+    const asCollab = completedInPeriod.filter((w) => w.responsible_id !== u.id && ((partByWo[w.id] || []).some((p) => p.user_id === u.id) || (ivByWo[w.id] || []).some((iv) => iv.user_id === u.id)));
+    const prevDone = completedInPeriod.filter((w) => w.type === 'preventiva' && (w.responsible_id === u.id || (partByWo[w.id] || []).some((p) => p.user_id === u.id)));
     const reworkOnMine = reworkEvents.filter((e) => allWos.find((w) => w.id === e.wo_id)?.responsible_id === u.id).length;
     return {
       userId: u.id, name: u.name, team: u.team_id, specialty: u.specialty,
@@ -142,7 +156,7 @@ export function computeIndicators(db, q = {}) {
     period: { from: F, to: T },
     current: {
       open: openNow.length, byStatus, overduePreventive: overdueNow.length,
-      stoppedMachines: stopsOpen.map((s) => ({ machineId: s.machine_id, code: mById[s.machine_id]?.code, name: mById[s.machine_id]?.name, since: s.started_at })),
+      stoppedMachines: (q.userId ? stopsOpen.filter((s) => openNow.some((w) => w.machine_id === s.machine_id)) : stopsOpen).map((s) => ({ machineId: s.machine_id, code: mById[s.machine_id]?.code, name: mById[s.machine_id]?.name, since: s.started_at })),
     },
     responseTime: { avgMin: round(avg(responses)), n: responses.length },
     correctiveDuration: { avgMin: round(avg(durations)), n: durations.length },
