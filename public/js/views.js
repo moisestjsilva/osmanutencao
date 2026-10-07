@@ -27,26 +27,46 @@ const savedMsg = () => (state.online ? 'Registrado' : 'Salvo no aparelho — ser
 // ======================================================================
 export function listView(root) {
   const onlyTech = isOnlyTech();
-  let filter = sessionStorage.getItem('nova-os:filter') || (onlyTech ? 'minhas' : 'abertas');
+  const isSol = me()?.role === 'solicitante';
+  const onlyTech = isOnlyTech();
+
+  let defaultFilter = 'abertas';
+  if (onlyTech) defaultFilter = 'minhas';
+  if (isSol) defaultFilter = 'abertas';
+
+  let filter = sessionStorage.getItem('nova-os:filter') || defaultFilter;
   let q = '';
 
-  const FILTERS = onlyTech ? [
-    ['minhas', 'Minhas Atribuídas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
-    ['disponiveis', 'Disponíveis na Fábrica', (w) => !isClosed(w) && !w.responsible?.id],
-    ['paradas', 'Máquinas Paradas', isStoppedNow],
-    ['concluidas', 'Concluídas por Mim', (w) => isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
-  ] : [
-    ['abertas', 'Abertas', (w) => !isClosed(w)],
-    ['minhas', 'Minhas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id) || w.requester?.id === me()?.id)],
-    ['paradas', 'Paradas', isStoppedNow],
-    ['preventivas', 'Preventivas', (w) => w.type === 'preventiva' && !isClosed(w)],
-    ['concluidas', 'Encerradas', isClosed],
-  ];
+  let FILTERS = [];
+  if (onlyTech) {
+    FILTERS = [
+      ['minhas', 'Minhas Atribuídas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
+      ['disponiveis', 'Disponíveis na Fábrica', (w) => !isClosed(w) && !w.responsible?.id],
+      ['concluidas', 'Concluídas por Mim', (w) => isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
+      ['paradas', 'Máquinas Paradas', isStoppedNow],
+    ];
+  } else if (isSol) {
+    FILTERS = [
+      ['abertas', 'Em Andamento', (w) => !isClosed(w)],
+      ['concluidas', 'Concluídos', isClosed],
+      ['todas', 'Todos os Chamados', () => true],
+    ];
+  } else {
+    FILTERS = [
+      ['abertas', 'Abertas', (w) => !isClosed(w)],
+      ['minhas', 'Minhas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id) || w.requester?.id === me()?.id)],
+      ['paradas', 'Paradas', isStoppedNow],
+      ['preventivas', 'Preventivas', (w) => w.type === 'preventiva' && !isClosed(w)],
+      ['concluidas', 'Encerradas', isClosed],
+    ];
+  }
+
+  const pageTitle = onlyTech ? 'Minhas Ordens de Serviço' : (isSol ? 'Meus Chamados de Manutenção' : 'Ordens de Serviço');
 
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>${onlyTech ? 'Minhas Ordens de Serviço' : 'Ordens de Serviço'}</h1>
+        <h1>${pageTitle}</h1>
         <p id="list-sub"></p>
       </div>
       <button class="icon-btn" id="btn-refresh" aria-label="Atualizar">${icon('refresh', 18)}</button>
