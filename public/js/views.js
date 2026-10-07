@@ -1217,63 +1217,199 @@ export function loginView(root) {
 // ======================================================================
 // GESTÃO DE USUÁRIOS E MANUTENTORES (ADMIN / SUPER ADMIN)
 // ======================================================================
-export function usersView(root) {
+// ======================================================================
+// CADASTROS DO SISTEMA (ADMIN / SUPER ADMIN)
+// Setores, Máquinas (TAG, Custo Parada, Horas Func., Fotos) e Manutentores
+// ======================================================================
+export function cadastrosView(root, params = {}) {
   if (!isAdmin()) {
     toast('Acesso restrito para administradores', 'warn');
     go('#/');
     return;
   }
 
+  let activeTab = params.tab || sessionStorage.getItem('nova-os:cad_tab') || 'maquinas';
+  let q = '';
+  let machines = [];
+  let sectors = [];
   let users = [];
   let filterRole = 'todos';
-  let q = '';
 
-  async function load() {
+  async function loadAll() {
     try {
-      users = await fetchUsers();
+      const [mList, sList, uList] = await Promise.all([
+        fetchMachines(),
+        fetchSectors(),
+        fetchUsers()
+      ]);
+      machines = mList;
+      sectors = sList;
+      users = uList;
       render();
     } catch (err) {
-      root.innerHTML = `<div class="error-box">Erro ao carregar usuários: ${esc(err.message)}</div>`;
+      root.innerHTML = `<div class="error-box">Erro ao carregar cadastros: ${esc(err.message)}</div>`;
     }
   }
 
-  function canDelete(u) {
-    if (!u || u.id === me()?.id) return false;
-    if (u.role === 'superadmin') return false;
-    if (!isAdmin()) return false;
-    if (me()?.role === 'admin' && (u.role === 'admin' || u.role === 'superadmin')) return false;
-    return true;
-  }
-
-  async function executeDelete(u) {
-    const ok = await confirmDialog({
-      title: 'Excluir usuário permanentemente?',
-      body: `Deseja realmente excluir "${u.name}" (${ROLE[u.role] || u.role})? O acesso será cancelado e o usuário removido do sistema.`,
-      confirm: 'Sim, Excluir',
-      danger: true
-    });
-    if (!ok) return;
-
-    try {
-      await deleteUser(u.id);
-      toast(`Usuário "${u.name}" excluído com sucesso!`);
-      await loadBoot();
-      load();
-    } catch (err) {
-      toast(err.message || 'Erro ao excluir usuário', 'alarm');
-    }
+  function setTab(t) {
+    activeTab = t;
+    sessionStorage.setItem('nova-os:cad_tab', t);
+    q = '';
+    render();
   }
 
   function render() {
-    const canCreateAny = isSuperAdmin();
+    root.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>Central de Cadastros</h1>
+          <p>Gestão de Máquinas, Setores e Equipe Técnica da Fábrica</p>
+        </div>
+        <div>
+          ${activeTab === 'maquinas' ? `
+            <button class="btn primary sm" id="btn-new-cad">
+              ${icon('plus', 16)} Nova Máquina
+            </button>
+          ` : activeTab === 'setores' ? `
+            <button class="btn primary sm" id="btn-new-cad">
+              ${icon('plus', 16)} Novo Setor
+            </button>
+          ` : `
+            <button class="btn primary sm" id="btn-new-cad">
+              ${icon('userPlus', 16)} ${isSuperAdmin() ? 'Novo Usuário' : 'Novo Manutentor'}
+            </button>
+          `}
+        </div>
+      </div>
+
+      <div class="cadastros-tabs" role="tablist">
+        <button class="cad-tab ${activeTab === 'maquinas' ? 'active' : ''}" data-tab="maquinas">
+          ${icon('factory', 18)} Máquinas & TAGs (${machines.length})
+        </button>
+        <button class="cad-tab ${activeTab === 'setores' ? 'active' : ''}" data-tab="setores">
+          ${icon('list', 18)} Setores (${sectors.length})
+        </button>
+        <button class="cad-tab ${activeTab === 'usuarios' ? 'active' : ''}" data-tab="usuarios">
+          ${icon('users', 18)} Manutentores & Usuários (${users.length})
+        </button>
+      </div>
+
+      <div class="input-group" style="margin-bottom:14px">
+        <input class="input" id="search-cad" type="search" placeholder="${activeTab === 'maquinas' ? 'Buscar máquina por TAG, nome ou setor...' : activeTab === 'setores' ? 'Buscar setor por nome ou código...' : 'Buscar colaborador por nome, usuário ou especialidade...'}" value="${esc(q)}" />
+      </div>
+
+      <div id="cad-content">
+        ${renderTabContent()}
+      </div>
+    `;
+
+    bindEvents();
+  }
+
+  function renderTabContent() {
+    const ql = q.toLowerCase();
+    if (activeTab === 'maquinas') {
+      const filtered = machines.filter((m) =>
+        !ql || `${m.code} ${m.name} ${m.sector_name || ''} ${m.criticality}`.toLowerCase().includes(ql)
+      );
+
+      if (!filtered.length) {
+        return '<div class="empty"><p class="muted">Nenhuma máquina encontrada.</p></div>';
+      }
+
+      return `
+        <div class="cad-grid">
+          ${filtered.map((m) => `
+            <div class="cad-card ${m.active ? '' : 'inactive'}" data-mid="${m.id}">
+              <div class="cad-card-header">
+                ${machineBadge(m, 'lg')}
+                <div class="grow" style="min-width:0">
+                  <div class="row wrap" style="gap:6px;align-items:center">
+                    <strong style="font-size:16px">${esc(m.name)}</strong>
+                    <span class="crit crit-${m.criticality}"></span>
+                    ${m.active ? '' : '<span class="badge" style="background:var(--danger-soft);color:var(--danger)">Inativa</span>'}
+                  </div>
+                  <div class="muted small" style="margin-top:2px">
+                    <span class="mono" style="font-weight:700;color:var(--accent)">TAG ${esc(m.code)}</span>
+                    • <span>${esc(m.sector_name || 'Setor')}</span>
+                  </div>
+                  <div class="row wrap" style="gap:8px;margin-top:6px">
+                    <span class="badge" style="background:var(--surface-2);font-size:11px" title="Custo de máquina parada por hora">
+                      💰 R$ ${Number(m.hourly_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/hora
+                    </span>
+                    <span class="badge" style="background:var(--surface-2);font-size:11px" title="Horas de funcionamento diário">
+                      ⏱️ ${m.operating_hours_per_day || 16}h/dia
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="cad-card-footer">
+                <div class="small muted">
+                  ${m.open_orders > 0 ? `<span style="color:var(--danger);font-weight:600">● ${m.open_orders} OS em aberto</span>` : '<span>Nenhuma OS aberta</span>'}
+                </div>
+                <div class="row" style="gap:6px">
+                  <button class="btn sm" data-edit-machine="${m.id}">
+                    ${icon('edit', 14)} Editar
+                  </button>
+                  <button class="icon-btn danger sm" data-del-machine="${m.id}" title="Desativar/Excluir" style="color:var(--danger)">
+                    ${icon('trash', 14)}
+                  </button>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    if (activeTab === 'setores') {
+      const filtered = sectors.filter((s) =>
+        !ql || `${s.code} ${s.name}`.toLowerCase().includes(ql)
+      );
+
+      if (!filtered.length) {
+        return '<div class="empty"><p class="muted">Nenhum setor cadastrado.</p></div>';
+      }
+
+      return `
+        <div class="cad-grid">
+          ${filtered.map((s) => `
+            <div class="cad-card" data-sid="${s.id}">
+              <div class="cad-card-header">
+                <div class="machine-thumb default-badge" style="width:52px;height:52px">
+                  <span class="badge-tag">${esc(s.code)}</span>
+                </div>
+                <div class="grow">
+                  <strong style="font-size:16px">${esc(s.name)}</strong>
+                  <div class="muted small" style="margin-top:2px">Código: <span class="mono">${esc(s.code)}</span></div>
+                  <div class="small" style="margin-top:4px;color:var(--text-2)">
+                    🏭 ${s.machine_count || 0} máquina(s) vinculada(s)
+                  </div>
+                </div>
+              </div>
+              <div class="cad-card-footer">
+                <div></div>
+                <div class="row" style="gap:6px">
+                  <button class="btn sm" data-edit-sector="${s.id}">${icon('edit', 14)} Editar</button>
+                  <button class="icon-btn danger sm" data-del-sector="${s.id}" title="Excluir setor" style="color:var(--danger)">
+                    ${icon('trash', 14)}
+                  </button>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Aba: Usuários & Manutentores
     const techs = users.filter((u) => u.role === 'manutentor');
     const admins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin');
     const sols = users.filter((u) => u.role === 'solicitante');
 
     const filtered = users.filter((u) => {
       if (filterRole !== 'todos' && u.role !== filterRole) return false;
-      if (!q) return true;
-      const ql = q.toLowerCase();
+      if (!ql) return true;
       return (
         u.name.toLowerCase().includes(ql) ||
         (u.username || '').toLowerCase().includes(ql) ||
@@ -1282,32 +1418,17 @@ export function usersView(root) {
       );
     });
 
-    root.innerHTML = `
-      <div class="page-head">
-        <div>
-          <h1>${isSuperAdmin() ? 'Usuários do Sistema' : 'Gestão de Manutentores'}</h1>
-          <p>${techs.length} manutentores • ${admins.length} administradores • ${sols.length} solicitantes</p>
-        </div>
-        <button class="btn primary sm" id="btn-new-user">
-          ${icon('userPlus', 16)} ${isSuperAdmin() ? 'Novo Usuário' : 'Novo Manutentor'}
-        </button>
-      </div>
-
-      <div class="input-group" style="margin-bottom:12px">
-        <input class="input" id="search-users" type="search" placeholder="Buscar por nome, usuário ou especialidade..." value="${esc(q)}" />
-      </div>
-
-      <div class="chips" style="margin-bottom:14px">
+    return `
+      <div class="chips" style="margin-bottom:12px">
         <button class="chip ${filterRole === 'todos' ? 'active' : ''}" data-role="todos">Todos (${users.length})</button>
         <button class="chip ${filterRole === 'manutentor' ? 'active' : ''}" data-role="manutentor">Manutentores (${techs.length})</button>
         <button class="chip ${filterRole === 'admin' ? 'active' : ''}" data-role="admin">Admins (${admins.length})</button>
         <button class="chip ${filterRole === 'solicitante' ? 'active' : ''}" data-role="solicitante">Solicitantes (${sols.length})</button>
       </div>
-
-      <div id="users-list">
-        ${filtered.length ? filtered.map((u) => `
+      <div class="cad-grid">
+        ${filtered.map((u) => `
           <div class="user-card-item ${u.active ? '' : 'inactive'}" data-uid="${u.id}">
-            ${avatar(u.name)}
+            ${avatar(u.name, '', u.avatar_url)}
             <div class="grow" style="min-width:0">
               <div class="row wrap" style="gap:6px;align-items:center">
                 <strong style="font-size:15px">${esc(u.name)}</strong>
@@ -1321,57 +1442,380 @@ export function usersView(root) {
               </div>
             </div>
             <div class="row" style="gap:4px">
-              <button class="icon-btn" data-edit="${u.id}" title="Editar ou trocar senha">${icon('wrench', 16)}</button>
-              ${canDelete(u) ? `
-                <button class="icon-btn danger" data-del="${u.id}" title="Excluir usuário" style="color:var(--danger)">
+              <button class="icon-btn" data-edit-user="${u.id}" title="Editar ou trocar senha">${icon('wrench', 16)}</button>
+              ${canDeleteUser(u) ? `
+                <button class="icon-btn danger" data-del-user="${u.id}" title="Excluir usuário" style="color:var(--danger)">
                   ${icon('trash', 16)}
                 </button>
               ` : ''}
             </div>
           </div>
-        `).join('') : '<div class="empty"><p class="muted">Nenhum usuário encontrado com esse filtro.</p></div>'}
+        `).join('')}
       </div>
     `;
+  }
 
-    $('#search-users', root).oninput = (e) => {
+  function canDeleteUser(u) {
+    if (!u || u.id === me()?.id) return false;
+    if (u.role === 'superadmin') return false;
+    if (!isAdmin()) return false;
+    if (me()?.role === 'admin' && (u.role === 'admin' || u.role === 'superadmin')) return false;
+    return true;
+  }
+
+  function bindEvents() {
+    $('#search-cad', root).oninput = (e) => {
       q = e.target.value;
-      render();
+      const el = $('#cad-content', root);
+      if (el) el.innerHTML = renderTabContent();
+      bindCardActions();
     };
 
+    $$('.cad-tab', root).forEach((btn) => {
+      btn.onclick = () => setTab(btn.dataset.tab);
+    });
+
+    $('#btn-new-cad', root).onclick = () => {
+      if (activeTab === 'maquinas') openMachineModal();
+      else if (activeTab === 'setores') openSectorModal();
+      else openUserModal();
+    };
+
+    bindCardActions();
+  }
+
+  function bindCardActions() {
     $$('[data-role]', root).forEach((chip) => {
       chip.onclick = () => {
         filterRole = chip.dataset.role;
-        render();
+        const el = $('#cad-content', root);
+        if (el) el.innerHTML = renderTabContent();
+        bindCardActions();
       };
     });
 
-    $('#btn-new-user', root).onclick = () => openUserModal();
-
-    $$('[data-edit]', root).forEach((btn) => {
+    $$('[data-edit-machine]', root).forEach((btn) => {
       btn.onclick = () => {
-        const u = users.find((x) => x.id === btn.dataset.edit);
+        const m = machines.find((x) => x.id === btn.dataset.editMachine);
+        if (m) openMachineModal(m);
+      };
+    });
+
+    $$('[data-del-machine]', root).forEach((btn) => {
+      btn.onclick = async () => {
+        const m = machines.find((x) => x.id === btn.dataset.delMachine);
+        if (!m) return;
+        const ok = await confirmDialog({
+          title: `Desativar ou excluir ${m.code}?`,
+          body: `Deseja remover a máquina "${m.name}"? Se houver histórico de ordens de serviço, ela será desativada para manter a rastreabilidade.`,
+          confirm: 'Confirmar',
+          danger: true
+        });
+        if (!ok) return;
+        try {
+          const res = await deleteMachine(m.id);
+          toast(res.deactivated ? 'Máquina desativada com sucesso' : 'Máquina excluída');
+          await loadBoot();
+          loadAll();
+        } catch (err) {
+          toast(err.message, 'alarm');
+        }
+      };
+    });
+
+    $$('[data-edit-sector]', root).forEach((btn) => {
+      btn.onclick = () => {
+        const s = sectors.find((x) => x.id === btn.dataset.editSector);
+        if (s) openSectorModal(s);
+      };
+    });
+
+    $$('[data-del-sector]', root).forEach((btn) => {
+      btn.onclick = async () => {
+        const s = sectors.find((x) => x.id === btn.dataset.delSector);
+        if (!s) return;
+        if ((s.machine_count || 0) > 0) {
+          return toast(`Não é possível excluir: existem ${s.machine_count} máquina(s) neste setor.`, 'warn');
+        }
+        const ok = await confirmDialog({
+          title: `Excluir setor ${s.code}?`,
+          body: `Deseja excluir o setor "${s.name}"?`,
+          confirm: 'Excluir',
+          danger: true
+        });
+        if (!ok) return;
+        try {
+          await deleteSector(s.id);
+          toast('Setor excluído');
+          await loadBoot();
+          loadAll();
+        } catch (err) {
+          toast(err.message, 'alarm');
+        }
+      };
+    });
+
+    $$('[data-edit-user]', root).forEach((btn) => {
+      btn.onclick = () => {
+        const u = users.find((x) => x.id === btn.dataset.editUser);
         if (u) openUserModal(u);
       };
     });
 
-    $$('[data-del]', root).forEach((btn) => {
-      btn.onclick = () => {
-        const u = users.find((x) => x.id === btn.dataset.del);
-        if (u) executeDelete(u);
+    $$('[data-del-user]', root).forEach((btn) => {
+      btn.onclick = async () => {
+        const u = users.find((x) => x.id === btn.dataset.delUser);
+        if (!u) return;
+        const ok = await confirmDialog({
+          title: 'Excluir usuário permanentemente?',
+          body: `Deseja realmente excluir "${u.name}" (${ROLE[u.role] || u.role})?`,
+          confirm: 'Sim, Excluir',
+          danger: true
+        });
+        if (!ok) return;
+        try {
+          await deleteUser(u.id);
+          toast(`Usuário "${u.name}" excluído`);
+          await loadBoot();
+          loadAll();
+        } catch (err) {
+          toast(err.message, 'alarm');
+        }
       };
     });
   }
 
+  // ---------- MODAL DE MÁQUINA (TAG, CUSTO HORA, HORAS FUNC, FOTO) ----------
+  function openMachineModal(target = null) {
+    const isEdit = !!target;
+    let currentImg = target?.image_url || null;
+
+    sheet(`
+      <h2>${isEdit ? 'Editar Máquina' : 'Cadastrar Nova Máquina'}</h2>
+      <p class="muted small">${isEdit ? `Atualize os parâmetros técnicos e foto da TAG ${esc(target.code)}` : 'Cadastre o equipamento, TAG, valor da hora e foto'}</p>
+
+      <form id="form-machine" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <div class="img-upload-box">
+          <div class="img-preview" id="mach-preview-box">
+            ${currentImg ? `<img src="${esc(currentImg)}" id="mach-img-preview" />` : `<span class="muted xs" style="text-align:center">Sem foto</span>`}
+          </div>
+          <div class="grow">
+            <span style="font-weight:600;font-size:13.5px;display:block">Foto da Máquina</span>
+            <span class="muted xs" style="display:block;margin-bottom:8px">Foto real do equipamento ou placa. Se não enviar, será usado um badge padrão.</span>
+            <div class="row" style="gap:8px">
+              <label class="btn sm primary" style="cursor:pointer">
+                ${icon('camera', 16)} Tirar / Enviar Foto
+                <input type="file" accept="image/*" capture="environment" hidden id="mach-file-inp" />
+              </label>
+              ${currentImg ? `<button type="button" class="btn sm danger" id="mach-rm-img">Remover</button>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="row wrap" style="gap:10px">
+          <label class="field grow" style="min-width:140px">
+            <span>TAG / Código da Máquina *</span>
+            <input class="input" id="m-code" required value="${esc(target?.code || '')}" placeholder="Ex: M-TOR01" style="font-family:var(--font-display);font-weight:700;text-transform:uppercase" />
+          </label>
+
+          <label class="field grow" style="min-width:180px">
+            <span>Setor da Fábrica *</span>
+            <select class="input select" id="m-sector" required>
+              <option value="">Selecione o setor...</option>
+              ${sectors.map((s) => `<option value="${s.id}" ${target?.sector_id === s.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})</option>`).join('')}
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Nome do Equipamento *</span>
+          <input class="input" id="m-name" required value="${esc(target?.name || '')}" placeholder="Ex: Torno CNC Romi 01" />
+        </label>
+
+        <div class="row wrap" style="gap:10px">
+          <label class="field grow" style="min-width:140px">
+            <span>Criticidade</span>
+            <select class="input select" id="m-crit">
+              <option value="baixa" ${target?.criticality === 'baixa' ? 'selected' : ''}>Baixa</option>
+              <option value="media" ${!target || target?.criticality === 'media' ? 'selected' : ''}>Média</option>
+              <option value="alta" ${target?.criticality === 'alta' ? 'selected' : ''}>Alta</option>
+            </select>
+          </label>
+
+          <label class="field grow" style="min-width:160px">
+            <span>Valor da Hora Produzida (R$/h) *</span>
+            <input class="input" id="m-cost" type="number" step="0.01" min="0" required value="${target?.hourly_cost ?? 0}" placeholder="Ex: 250.00" />
+            <span class="muted xs" style="margin-top:2px;display:block">Base para cálculo de prejuízo de horas paradas</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Horas de Funcionamento por Dia (h/dia) *</span>
+          <input class="input" id="m-op-hours" type="number" step="0.5" min="1" max="24" required value="${target?.operating_hours_per_day ?? 16}" placeholder="Ex: 16" />
+          <span class="muted xs" style="margin-top:2px;display:block">Horas que a máquina opera por dia (cálculo de horas de manutenção e MTBF)</span>
+        </label>
+
+        ${isEdit ? `
+        <label class="check-row ${target.active ? 'checked' : ''}" id="m-act-wrap">
+          <input type="checkbox" id="m-active" ${target.active ? 'checked' : ''} />
+          <span class="box">${icon('check', 16, 3)}</span>
+          <span class="text grow">Máquina ativa para abertura de novas OSs</span>
+        </label>` : ''}
+
+        <div class="sheet-actions" style="margin-top:14px">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" class="btn primary" id="mach-sub-btn">${isEdit ? 'Salvar Alterações' : 'Cadastrar Máquina'}</button>
+        </div>
+      </form>
+    `, {
+      onMount(el, modal) {
+        const fileInp = $('#mach-file-inp', el);
+        const prevBox = $('#mach-preview-box', el);
+        const rmBtn = $('#mach-rm-img', el);
+        const actWrap = $('#m-act-wrap', el);
+        const actInp = $('#m-active', el);
+
+        if (actWrap && actInp) {
+          actWrap.onclick = () => {
+            actInp.checked = !actInp.checked;
+            actWrap.classList.toggle('checked', actInp.checked);
+          };
+        }
+
+        if (rmBtn) {
+          rmBtn.onclick = () => {
+            currentImg = null;
+            prevBox.innerHTML = '<span class="muted xs" style="text-align:center">Sem foto</span>';
+            rmBtn.remove();
+          };
+        }
+
+        fileInp.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          try {
+            toast('Otimizando imagem...');
+            const dataUrl = await compressImage(file, 1024, 0.75);
+            prevBox.innerHTML = `<img src="${dataUrl}" />`;
+            const uploadedUrl = await uploadImage(dataUrl);
+            currentImg = uploadedUrl;
+            toast('Foto salva!');
+          } catch (err) {
+            toast('Erro ao processar imagem: ' + err.message, 'alarm');
+          }
+        };
+
+        $('#form-machine', el).onsubmit = async (e) => {
+          e.preventDefault();
+          const code = $('#m-code', el).value.trim().toUpperCase();
+          const sectorId = $('#m-sector', el).value;
+          const name = $('#m-name', el).value.trim();
+          const criticality = $('#m-crit', el).value;
+          const hourlyCost = parseFloat($('#m-cost', el).value) || 0;
+          const operatingHoursPerDay = parseFloat($('#m-op-hours', el).value) || 16;
+          const active = isEdit ? ($('#m-active', el)?.checked ?? true) : true;
+
+          const btn = $('#mach-sub-btn', el);
+          btn.disabled = true;
+
+          try {
+            if (isEdit) {
+              await updateMachine(target.id, {
+                code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl: currentImg, active
+              });
+              toast('Máquina atualizada!');
+            } else {
+              await createMachine({
+                code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl: currentImg
+              });
+              toast('Nova máquina cadastrada com sucesso!');
+            }
+            modal.close();
+            await loadBoot();
+            loadAll();
+          } catch (err) {
+            btn.disabled = false;
+            toast(err.message || 'Erro ao salvar máquina', 'alarm');
+          }
+        };
+      }
+    });
+  }
+
+  // ---------- MODAL DE SETOR ----------
+  function openSectorModal(target = null) {
+    const isEdit = !!target;
+    sheet(`
+      <h2>${isEdit ? 'Editar Setor' : 'Cadastrar Novo Setor'}</h2>
+      <p class="muted small">${isEdit ? 'Atualize as informações do setor' : 'Informe o código e nome do novo setor fabril'}</p>
+
+      <form id="form-sector" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <label class="field">
+          <span>Código do Setor *</span>
+          <input class="input" id="sec-code" required value="${esc(target?.code || '')}" placeholder="Ex: S-USI" style="text-transform:uppercase;font-weight:700" />
+        </label>
+        <label class="field">
+          <span>Nome do Setor *</span>
+          <input class="input" id="sec-name" required value="${esc(target?.name || '')}" placeholder="Ex: Usinagem" />
+        </label>
+        <div class="sheet-actions" style="margin-top:14px">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar Setor'}</button>
+        </div>
+      </form>
+    `, {
+      onMount(el, modal) {
+        $('#form-sector', el).onsubmit = async (e) => {
+          e.preventDefault();
+          const code = $('#sec-code', el).value.trim().toUpperCase();
+          const name = $('#sec-name', el).value.trim();
+          try {
+            if (isEdit) {
+              await updateSector(target.id, { code, name });
+              toast('Setor atualizado!');
+            } else {
+              await createSector({ code, name });
+              toast('Novo setor cadastrado com sucesso!');
+            }
+            modal.close();
+            await loadBoot();
+            loadAll();
+          } catch (err) {
+            toast(err.message || 'Erro ao salvar setor', 'alarm');
+          }
+        };
+      }
+    });
+  }
+
+  // ---------- MODAL DE USUÁRIO / MANUTENTOR (COM FOTO) ----------
   function openUserModal(target = null) {
     const isEdit = !!target;
     const canChooseRole = isSuperAdmin();
-    const allowDeleteTarget = isEdit && canDelete(target);
+    let currentAvatar = target?.avatar_url || null;
 
     sheet(`
       <h2>${isEdit ? 'Editar Usuário' : (canChooseRole ? 'Cadastrar Novo Usuário' : 'Cadastrar Novo Manutentor')}</h2>
-      <p class="muted small">${isEdit ? 'Atualize os dados ou defina uma nova senha' : 'Preencha os dados de acesso do colaborador'}</p>
+      <p class="muted small">${isEdit ? 'Atualize os dados, foto ou defina uma nova senha' : 'Preencha os dados e anexe a foto do colaborador'}</p>
 
-      <form id="form-user-edit" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+      <form id="form-user" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <div class="img-upload-box">
+          <div class="img-preview" id="user-preview-box" style="border-radius:50%">
+            ${currentAvatar ? `<img src="${esc(currentAvatar)}" style="border-radius:50%" />` : `<span class="muted xs" style="text-align:center">Sem foto</span>`}
+          </div>
+          <div class="grow">
+            <span style="font-weight:600;font-size:13.5px;display:block">Foto do Colaborador</span>
+            <span class="muted xs" style="display:block;margin-bottom:8px">Foto para crachá e perfil. Se não enviar, usa o avatar padrão.</span>
+            <div class="row" style="gap:8px">
+              <label class="btn sm primary" style="cursor:pointer">
+                ${icon('camera', 16)} Tirar / Enviar Foto
+                <input type="file" accept="image/*" capture="user" hidden id="user-file-inp" />
+              </label>
+              ${currentAvatar ? `<button type="button" class="btn sm danger" id="user-rm-img">Remover</button>` : ''}
+            </div>
+          </div>
+        </div>
+
         <label class="field">
           <span>Nome Completo *</span>
           <input class="input" id="u-name" required value="${esc(target?.name || '')}" placeholder="Ex: Carlos Mendes" />
@@ -1392,9 +1836,9 @@ export function usersView(root) {
           <span>Nível de Acesso</span>
           <select class="input select" id="u-role">
             <option value="manutentor" selected>Manutentor (Acesso simplificado às suas OS)</option>
-            <option value="admin">Admin (Gestão de Manutenção e Manutentores)</option>
-            <option value="superadmin">Super Admin (Acesso total)</option>
-            <option value="solicitante">Solicitante (Abertura de chamados)</option>
+            <option value="admin">Admin (Gestão de Manutenção, Máquinas e Setores)</option>
+            <option value="superadmin">Super Admin (Acesso irrestrito a todo o sistema)</option>
+            <option value="solicitante">Solicitante (Apenas abertura de chamados)</option>
           </select>
         </label>` : ''}
 
@@ -1416,28 +1860,41 @@ export function usersView(root) {
           <input class="input" id="u-pass" type="password" ${isEdit ? '' : 'required'} minlength="4" placeholder="${isEdit ? 'Opcional' : 'Mínimo 4 caracteres'}" />
         </label>
 
-        <div class="sheet-actions" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
-          ${allowDeleteTarget ? `
-            <button type="button" class="btn danger" id="btn-modal-del" style="margin-right:auto">
-              ${icon('trash', 16)} Excluir Usuário
-            </button>
-          ` : '<div></div>'}
-          <div class="row" style="gap:8px">
-            <button type="button" class="btn" data-close>Cancelar</button>
-            <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar'}</button>
-          </div>
+        <div class="sheet-actions" style="margin-top:14px">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar'}</button>
         </div>
       </form>
     `, {
       onMount(el, modal) {
-        if (allowDeleteTarget) {
-          $('#btn-modal-del', el)?.addEventListener('click', async () => {
-            modal.close();
-            await executeDelete(target);
-          });
+        const fileInp = $('#user-file-inp', el);
+        const prevBox = $('#user-preview-box', el);
+        const rmBtn = $('#user-rm-img', el);
+
+        if (rmBtn) {
+          rmBtn.onclick = () => {
+            currentAvatar = null;
+            prevBox.innerHTML = '<span class="muted xs" style="text-align:center">Sem foto</span>';
+            rmBtn.remove();
+          };
         }
 
-        $('#form-user-edit', el).onsubmit = async (e) => {
+        fileInp.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          try {
+            toast('Processando foto...');
+            const dataUrl = await compressImage(file, 640, 0.75);
+            prevBox.innerHTML = `<img src="${dataUrl}" style="border-radius:50%" />`;
+            const uploadedUrl = await uploadImage(dataUrl);
+            currentAvatar = uploadedUrl;
+            toast('Foto salva!');
+          } catch (err) {
+            toast('Erro ao processar imagem: ' + err.message, 'alarm');
+          }
+        };
+
+        $('#form-user', el).onsubmit = async (e) => {
           e.preventDefault();
           const name = $('#u-name', el).value.trim();
           const username = $('#u-username', el).value.trim();
@@ -1449,15 +1906,34 @@ export function usersView(root) {
 
           try {
             if (isEdit) {
-              await updateUser(target.id, { name, email, teamId, specialty, password: password || undefined });
+              await updateUser(target.id, {
+                name, email, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
+              });
               toast('Usuário atualizado com sucesso!');
             } else {
-              await createUser({ name, username, email, role, teamId, specialty, password });
+              await createUser({
+                name, username, email, role, teamId, specialty, password, avatarUrl: currentAvatar
+              });
               toast('Novo colaborador cadastrado com sucesso!');
             }
             modal.close();
             await loadBoot();
-            load();
+            loadAll();
+          } catch (err) {
+            toast(err.message || 'Erro ao salvar usuário', 'alarm');
+          }
+        };
+      }
+    });
+  }
+
+  loadAll();
+}
+
+// Alias de retrocompatibilidade
+export function usersView(root) {
+  return cadastrosView(root, { tab: 'usuarios' });
+}
           } catch (err) {
             toast(err.message || 'Erro ao salvar usuário', 'alarm');
           }
