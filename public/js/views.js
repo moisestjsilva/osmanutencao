@@ -918,40 +918,131 @@ export function plansView(root) {
 // ======================================================================
 export function kpiView(root) {
   const boot = state.boot;
-  const f = JSON.parse(sessionStorage.getItem('nova-os:kpi') || '{"days":"30"}');
+  const user = me();
+  const isTech = user?.role === 'manutentor';
+  const storageKey = isTech ? 'nova-os:kpi-tech' : 'nova-os:kpi';
+  const f = JSON.parse(sessionStorage.getItem(storageKey) || '{"days":"30"}');
   let alive = true;
-  root.innerHTML = `
-    <div class="page-head"><div><h1>Indicadores</h1><p id="kpi-period"></p></div></div>
-    <div class="chips" id="kpi-days">${[['7', '7 dias'], ['30', '30 dias'], ['90', '90 dias'], ['365', '12 meses']].map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
-    <div class="filters" style="margin:8px 0 6px">
-      <select class="input" id="f-sector"><option value="">Todos os setores</option>${boot.sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
-      <select class="input" id="f-machine"><option value="">Todas as máquinas</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
-      <select class="input" id="f-team"><option value="">Todas as equipes</option>${boot.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
-      <select class="input" id="f-user"><option value="">Todos os manutentores</option>${boot.users.filter((u) => u.role === 'manutentor').map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
-    </div>
-    <div id="kpi-body"><div class="skeleton"></div></div>`;
-  for (const [k, sel] of [['sectorId', '#f-sector'], ['machineId', '#f-machine'], ['teamId', '#f-team'], ['userId', '#f-user']]) {
-    $(sel, root).value = f[k] || '';
-    $(sel, root).onchange = (e) => { f[k] = e.target.value; load(); };
+
+  if (isTech) {
+    root.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>Meus Indicadores</h1>
+          <p id="kpi-period">Atendimentos de ${esc(user?.name || '')}</p>
+        </div>
+      </div>
+      <div class="chips" id="kpi-days">${[['7', '7 dias'], ['30', '30 dias'], ['90', '90 dias'], ['365', '12 meses']].map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
+      <div class="filters" style="margin:8px 0 6px">
+        <select class="input" id="f-sector"><option value="">Todos os setores</option>${boot.sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
+        <select class="input" id="f-machine"><option value="">Todas as máquinas</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
+      </div>
+      <div id="kpi-body"><div class="skeleton"></div></div>`;
+  } else {
+    root.innerHTML = `
+      <div class="page-head"><div><h1>Indicadores</h1><p id="kpi-period"></p></div></div>
+      <div class="chips" id="kpi-days">${[['7', '7 dias'], ['30', '30 dias'], ['90', '90 dias'], ['365', '12 meses']].map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
+      <div class="filters" style="margin:8px 0 6px">
+        <select class="input" id="f-sector"><option value="">Todos os setores</option>${boot.sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
+        <select class="input" id="f-machine"><option value="">Todas as máquinas</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
+        <select class="input" id="f-team"><option value="">Todas as equipes</option>${boot.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
+        <select class="input" id="f-user"><option value="">Todos os manutentores</option>${boot.users.filter((u) => u.role === 'manutentor').map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
+      </div>
+      <div id="kpi-body"><div class="skeleton"></div></div>`;
+  }
+
+  const filterFields = isTech ? [['sectorId', '#f-sector'], ['machineId', '#f-machine']] : [['sectorId', '#f-sector'], ['machineId', '#f-machine'], ['teamId', '#f-team'], ['userId', '#f-user']];
+  for (const [k, sel] of filterFields) {
+    const el = $(sel, root);
+    if (!el) continue;
+    el.value = f[k] || '';
+    el.onchange = (e) => { f[k] = e.target.value; load(); };
   }
   $$('[data-days]', root).forEach((b) => (b.onclick = () => { f.days = b.dataset.days; $$('[data-days]', root).forEach((x) => x.classList.toggle('active', x === b)); load(); }));
 
   async function load() {
-    sessionStorage.setItem('nova-os:kpi', JSON.stringify(f));
+    sessionStorage.setItem(storageKey, JSON.stringify(f));
     const to = new Date();
     const from = new Date(Date.now() - (Number(f.days) - 1) * 86400000);
-    const qs = new URLSearchParams({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), ...Object.fromEntries(['sectorId', 'machineId', 'teamId', 'userId'].filter((k) => f[k]).map((k) => [k, f[k]])) });
+    const filterKeys = isTech ? ['sectorId', 'machineId'] : ['sectorId', 'machineId', 'teamId', 'userId'];
+    const qs = new URLSearchParams({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), ...Object.fromEntries(filterKeys.filter((k) => f[k]).map((k) => [k, f[k]])) });
     let d;
-    try { d = await api(`/api/indicators?${qs}`); kv.set('kpi', d); }
-    catch { d = await kv.get('kpi'); if (!d) { $('#kpi-body', root).innerHTML = '<div class="empty">Indicadores exigem conexão.</div>'; return; } toast('Sem conexão — últimos indicadores salvos', 'warn'); }
+    try { d = await api(`/api/indicators?${qs}`); kv.set(storageKey, d); }
+    catch { d = await kv.get(storageKey); if (!d) { $('#kpi-body', root).innerHTML = '<div class="empty">Indicadores exigem conexão.</div>'; return; } toast('Sem conexão — últimos indicadores salvos', 'warn'); }
     if (alive) render(d);
   }
 
   function render(d) {
-    $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • ${d.dataQuality.wosInPeriod} OS no período`;
-    const maxOcc = Math.max(1, ...d.byMachine.map((m) => m.corrective));
     const kpi = (k, v, unit, s, color, na) => `<div class="kpi ${na ? 'na' : ''}" style="--kc:${color || 'var(--text)'}"><div class="k">${k}</div><div class="v">${v}${unit ? `<small>${unit}</small>` : ''}</div><div class="s">${s || ''}</div></div>`;
     const split = (min) => { if (min == null) return ['—', '']; if (min < 60) return [Math.round(min), 'min']; return [(min / 60).toFixed(1).replace('.', ','), 'h']; };
+
+    if (isTech) {
+      const myStats = d.people.find((p) => p.userId === user?.id) || d.people[0] || {};
+      const completedResp = myStats.completedAsResponsible || 0;
+      const completedCollab = myStats.completedAsCollaborator || 0;
+      const totalCompleted = completedResp + completedCollab;
+      const prevDone = myStats.preventiveDone || 0;
+      const corrDone = Math.max(0, totalCompleted - prevDone);
+      const totalWorkedWos = myStats.wosWorked || totalCompleted;
+
+      $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • ${totalCompleted} OS atendidas no período`;
+
+      const [rv, ru] = split(d.responseTime.avgMin);
+      const [mv, mu] = split(d.mttr.avgMin);
+      const maxOcc = Math.max(1, ...d.byMachine.map((m) => m.corrective));
+
+      $('#kpi-body', root).innerHTML = `
+        <div class="section-title"><span>Meus Atendimentos no Período</span></div>
+        <div class="kpis">
+          ${kpi('OS Concluídas', totalCompleted, '', `${completedResp} como responsável • ${completedCollab} como apoio`, 'var(--ok)')}
+          ${kpi('Minhas OS Abertas', d.current.open, '', Object.entries(d.current.byStatus).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' • ') || 'nenhuma no momento', d.current.open ? 'var(--info)' : 'var(--text)')}
+          ${kpi('Tempo em Atendimento', fmtMin(myStats.workMin || 0), '', 'horas ativas registradas', 'var(--accent)')}
+          ${kpi('Preventivas Concluídas', prevDone, '', d.preventiveOnTime.pct != null ? `${d.preventiveOnTime.pct}% dentro do prazo` : 'ciclos executados', 'hsl(180 70% 55%)')}
+        </div>
+
+        <div class="section-title"><span>Desempenho dos Meus Atendimentos</span></div>
+        <div class="kpis">
+          ${kpi('Corretivas Finalizadas', corrDone, '', `${totalWorkedWos} OS trabalhadas no período`, 'var(--text)')}
+          ${kpi('Tempo de 1º Início', rv, ru, `abertura → início efetivo (${d.responseTime.n} OS)`, 'var(--accent)')}
+          ${kpi('Tempo Médio Reparo (MTTR)', mv, mu, `duração de reparo nas suas OS (${d.mttr.n})`, 'var(--violet)')}
+          ${kpi('Retrabalhos', myStats.rework || 0, '', myStats.rework ? 'reabertura registrada' : 'nenhum retrabalho', myStats.rework ? 'var(--warn)' : 'var(--ok)')}
+        </div>
+
+        <div class="section-title"><span>Máquinas Onde Mais Atuei</span></div>
+        <section class="card">
+          ${d.byMachine.length ? d.byMachine.map((m) => `
+            <div class="bar-row">
+              <div class="ellipsis"><strong>${esc(m.code)}</strong> <span class="muted small">${esc(m.name)}</span></div>
+              <div class="mono small">${m.corrective} atendimentos • ${fmtMin(m.stoppedMin)} parada</div>
+              <div class="bar ${m.stoppedMin > 0 ? 'red' : ''}"><i style="width:${(m.corrective / maxOcc) * 100}%"></i></div>
+            </div>`).join('') : '<p class="muted small" style="margin:0;padding:4px 0">Nenhum atendimento registrado no período selecionado.</p>'}
+        </section>
+
+        <div class="section-title"><span>Minha Ficha de Produtividade</span></div>
+        <section class="card" style="padding:16px">
+          <div class="row" style="align-items:center;gap:12px;margin-bottom:12px">
+            ${avatar(user?.name || '', 'md', user?.avatar_url)}
+            <div>
+              <strong style="font-size:16px">${esc(user?.name || '')}</strong>
+              <div class="muted small">${esc(user?.specialty || 'Manutenção')} • ${roleBadge(user?.role)}</div>
+            </div>
+          </div>
+          <div class="kv" style="margin-top:8px">
+            <div><span>Total de OS atendidas</span><strong>${totalCompleted}</strong></div>
+            <div><span>OS como responsável direto</span><strong>${completedResp}</strong></div>
+            <div><span>OS em colaboração / apoio</span><strong>${completedCollab}</strong></div>
+            <div><span>Tempo em intervenção ativa</span><strong>${fmtMin(myStats.workMin || 0)}</strong></div>
+            <div><span>Preventivas concluídas</span><strong>${prevDone}</strong></div>
+            <div><span>Retrabalhos registrados</span><strong>${myStats.rework || 0}</strong></div>
+          </div>
+        </section>
+      `;
+      return;
+    }
+
+    // Visão gerencial completa para Admin / Super Admin
+    $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • ${d.dataQuality.wosInPeriod} OS no período`;
+    const maxOcc = Math.max(1, ...d.byMachine.map((m) => m.corrective));
     const [rv, ru] = split(d.responseTime.avgMin);
     const [mv, mu] = split(d.mttr.avgMin);
     const [sv, su] = split(d.stoppedTime.totalMin);
