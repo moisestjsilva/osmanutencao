@@ -878,23 +878,59 @@ export function kpiView(root) {
 // MAIS / MÁQUINAS / AVISOS / SINCRONIZAÇÃO / CONFIGURAÇÕES
 // ======================================================================
 export function moreView(root) {
+  const isAdm = isAdmin();
+  const isSuper = isSuperAdmin();
+
   const items = [
+    ...(isAdm ? [['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas']] : []),
     ['#/maquinas', 'qr', 'Máquinas e etiquetas QR', 'Cadastro e impressão de QR'],
-    ['#/avisos', 'bell', 'Central de avisos', `${state.unread} não lido(s)`],
-    ['#/sync', 'cloud', 'Sincronização', `${pendingOps().length} pendente(s) • ${failedOps().length} com falha`],
-    ['user', 'user', 'Trocar usuário de teste', `${me()?.name} • ${ROLE[me()?.role]}`],
-    ['#/config', 'cog', 'Configurações', isManager() ? 'Destinatários padrão, dados de demonstração' : 'Avisos no aparelho'],
+    ['#/avisos', 'bell', 'Central de avisos', `${state.notifs?.length || 0} avisos registrados`],
+    ['#/sync', 'cloud', 'Sincronização offline', `${pendingOps().length} pendente(s) • ${failedOps().length} com falha`],
+    ['chpass', 'key', 'Alterar Minha Senha', 'Trocar senha da conta atual'],
+    ['logout', 'logOut', 'Sair da Conta (Logout)', `Conectado como ${me()?.name} (${ROLE[me()?.role] || me()?.role})`],
   ];
+
   root.innerHTML = `
-    <div class="page-head"><div><h1>Mais</h1><p>Nova OS • versão de teste</p></div></div>
-    <section class="card menu-list" style="padding:6px">${items.map(([h, ic, t, s]) => `
-      <button class="menu-item" data-go="${h}" id="menu-${ic}"><span class="ico">${icon(ic, 19)}</span><span class="grow"><strong>${t}</strong><div class="muted xs">${esc(s)}</div></span><span class="chev">${icon('chev', 18)}</span></button>`).join('')}
+    <div class="page-head">
+      <div>
+        <h1>Mais Opções</h1>
+        <p>${esc(me()?.name)} • ${roleBadge(me()?.role)}</p>
+      </div>
+    </div>
+    <section class="card menu-list" style="padding:6px">
+      ${items.map(([h, ic, t, s]) => `
+        <button class="menu-item ${h === 'logout' ? 'menu-logout' : ''}" data-go="${h}" id="menu-${ic}">
+          <span class="ico">${icon(ic, 19)}</span>
+          <span class="grow">
+            <strong>${t}</strong>
+            <div class="muted xs">${esc(s)}</div>
+          </span>
+          <span class="chev">${icon('chev', 18)}</span>
+        </button>`).join('')}
     </section>
-    <div class="warn-box small" style="margin-top:14px"><strong>Versão de teste.</strong> Sem login real (usuário escolhido no aparelho), máquinas e equipes fictícias, avisos apenas dentro do app. Não usar como sistema oficial de manutenção.</div>`;
+  `;
+
   root.addEventListener('click', (e) => {
     const b = e.target.closest('[data-go]');
     if (!b) return;
-    if (b.dataset.go === 'user') window.dispatchEvent(new CustomEvent('pick-user')); else go(b.dataset.go);
+    if (b.dataset.go === 'chpass') {
+      changePasswordModal();
+    } else if (b.dataset.go === 'logout') {
+      confirmDialog({
+        title: 'Sair do sistema?',
+        body: 'Deseja encerrar sua sessão atual na Nova OS?',
+        confirm: 'Sair',
+        danger: true
+      }).then((ok) => {
+        if (ok) {
+          logout();
+          toast('Sessão encerrada com sucesso');
+          location.hash = '#/';
+        }
+      });
+    } else {
+      go(b.dataset.go);
+    }
   });
 }
 
