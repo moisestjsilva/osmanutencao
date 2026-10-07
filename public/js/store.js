@@ -229,12 +229,6 @@ export async function refresh(scope = '') {
     } else throw e;
   }
 }
-    await kv.set('wos', r.workOrders);
-    emit('wos');
-  } catch (e) {
-    if (!(e instanceof NetError)) console.warn(e);
-  }
-}
 
 export async function fetchDetail(id) {
   try {
