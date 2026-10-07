@@ -273,6 +273,54 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   res.json({ ok: true, user: updated });
 });
 
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  // Segurança 1: Não pode excluir a própria conta conectada
+  if (req.user.id === target.id) {
+    return res.status(400).json({ error: 'Você não pode excluir sua própria conta conectada' });
+  }
+
+  // Segurança 2: Super Admin nunca pode ser excluído
+  if (target.role === 'superadmin') {
+    return res.status(403).json({ error: 'O Super Admin do sistema não pode ser excluído' });
+  }
+
+  // Segurança 3: Admin comum só pode excluir manutentores e solicitantes
+  if (req.user.role === 'admin' && (target.role === 'admin' || target.role === 'superadmin')) {
+    return res.status(403).json({ error: 'Apenas o Super Admin tem permissão para excluir outros administradores' });
+  }
+
+  db.exec('BEGIN TRANSACTION;');
+  try {
+    // 1. Remove sessões ativas do usuário
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id);
+
+    // 2. Remove notificações
+    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(target.id);
+
+    // 3. Desvincula de ordens de serviço (preserva o histórico das OS, removendo apenas a chave estrangeira)
+    db.prepare('UPDATE work_orders SET responsible_id = NULL WHERE responsible_id = ?').run(target.id);
+    db.prepare('UPDATE work_orders SET requester_id = NULL WHERE requester_id = ?').run(target.id);
+    db.prepare('UPDATE wo_events SET user_id = NULL WHERE user_id = ?').run(target.id);
+
+    // 4. Remove apontamentos de presença e intervalos
+    db.prepare('DELETE FROM wo_participants WHERE user_id = ?').run(target.id);
+    db.prepare('DELETE FROM work_intervals WHERE user_id = ?').run(target.id);
+    db.prepare('DELETE FROM audit_log WHERE user_id = ?').run(target.id);
+
+    // 5. Exclui o cadastro da tabela users
+    db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
+
+    db.exec('COMMIT;');
+    res.json({ ok: true, deleted: target.id, name: target.name });
+  } catch (err) {
+    db.exec('ROLLBACK;');
+    res.status(500).json({ error: 'Erro ao excluir usuário: ' + err.message });
+  }
+});
+
 // ---------- Bootstrap e Dados Gerais ----------
 app.get('/api/bootstrap', (req, res) => {
   res.json({
