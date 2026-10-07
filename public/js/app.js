@@ -48,6 +48,23 @@ function router() {
   updateNav(path);
   updateHeader();
 
+  const role = state.user.role;
+  const isStaff = role === 'admin' || role === 'superadmin';
+
+  // Bloqueio de rotas administrativas para telas simplificadas (manutentor e solicitante)
+  if (!isStaff) {
+    if (['/indicadores', '/config', '/usuarios', '/preventivas', '/maquinas'].includes(path)) {
+      toast('Recurso restrito à gestão de manutenção', 'warn');
+      location.hash = '#/';
+      return;
+    }
+    if (path === '/mais') {
+      showUserProfile();
+      location.hash = '#/';
+      return;
+    }
+  }
+
   // Rotas
   if (path === '/' || path === '') {
     currentCleanup = listView(root, params);
@@ -57,12 +74,7 @@ function router() {
   } else if (path === '/nova') {
     currentCleanup = newView(root, params);
   } else if (path === '/usuarios') {
-    if (state.user.role === 'manutentor') {
-      toast('Acesso restrito a administradores', 'warn');
-      location.hash = '#/';
-    } else {
-      currentCleanup = usersView(root);
-    }
+    currentCleanup = usersView(root);
   } else if (path === '/preventivas') {
     currentCleanup = plansView(root);
   } else if (path === '/indicadores') {
@@ -102,7 +114,7 @@ function renderNav() {
   let html = '';
 
   if (role === 'manutentor') {
-    // Manutentor: visual focado nas suas OS e nas disponíveis para assumir
+    // Manutentor: visual ultra-simplificado para o chão de fábrica (SEM indicadores e SEM configurações)
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
@@ -115,17 +127,28 @@ function renderNav() {
       <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <button class="nav-item" data-nav="#/indicadores" id="nav-kpi">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
-        Indicadores
+      <button class="nav-item" data-action="profile" id="nav-profile">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+        Meu Perfil
       </button>
-      <button class="nav-item" data-nav="#/mais" id="nav-more">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
-        Mais
+    `;
+  } else if (role === 'solicitante') {
+    // Solicitante: apenas abertura e acompanhamento dos seus chamados
+    html = `
+      <button class="nav-item" data-nav="#/" id="nav-os">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        Meus Chamados
+      </button>
+      <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir chamado">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="nav-item" data-action="profile" id="nav-profile">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+        Meu Perfil
       </button>
     `;
   } else {
-    // Admin e Super Admin: visão gerencial com gestão de usuários/manutentores
+    // Admin e Super Admin: visão completa com gestão de usuários/manutentores e indicadores
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
@@ -143,7 +166,7 @@ function renderNav() {
         Indicadores
       </button>
       <button class="nav-item" data-nav="#/mais" id="nav-more">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
         Mais
       </button>
     `;
@@ -152,6 +175,10 @@ function renderNav() {
 
   $$('.nav-item, .nav-fab', nav).forEach((btn) => {
     btn.onclick = () => {
+      if (btn.dataset.action === 'profile') {
+        showUserProfile();
+        return;
+      }
       const target = btn.dataset.nav;
       if (target) location.hash = target;
     };
