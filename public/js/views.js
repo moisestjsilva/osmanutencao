@@ -1151,7 +1151,11 @@ export function loginView(root) {
     try {
       const user = await login(u, p);
       toast(`Bem-vindo(a), ${user.name}!`);
-      go('#/');
+      if (location.hash === '#/' || !location.hash) {
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } else {
+        go('#/');
+      }
     } catch (err) {
       toast(err.message || 'Falha no login', 'alarm');
       submitBtn.disabled = false;
