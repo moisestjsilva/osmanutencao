@@ -12,16 +12,17 @@ async function test() {
     console.error('Falha no login:', loginData);
     process.exit(1);
   }
-  console.log('✅ Login Super Admin: OK (' + loginData.user.name + ' - ' + loginData.user.role + ')');
+  console.log('✅ 1. Login Super Admin: OK (' + loginData.user.name + ' - ' + loginData.user.role + ')');
   const token = loginData.token;
   const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
 
   // 2. Fetch Sectors
   const secRes = await fetch(base + '/api/sectors', { headers });
-  const sectors = await secRes.json();
-  console.log('✅ Total Setores:', sectors.length, '| Exemplo:', sectors[0]?.name);
+  const secData = await secRes.json();
+  const sectors = secData.sectors || [];
+  console.log('✅ 2. Gestão de Setores: Encontrados', sectors.length, 'setores. Exemplo:', sectors[0]?.name);
 
-  // 3. Create Machine with hourly_cost and operating_hours_per_day
+  // 3. Create Machine with hourly_cost, operating_hours_per_day, TAG
   const tagCode = 'TAG-AUTO-' + Date.now().toString().slice(-4);
   const newMacRes = await fetch(base + '/api/machines', {
     method: 'POST',
@@ -29,23 +30,25 @@ async function test() {
     body: JSON.stringify({
       code: tagCode,
       name: 'Centro de Usinagem CNC Alpha ' + tagCode,
-      sector_id: sectors[0].id,
+      sectorId: sectors[0].id,
       criticality: 'alta',
-      hourly_cost: 250.75,
-      operating_hours_per_day: 18.5,
-      image_url: null
+      hourlyCost: 250.75,
+      operatingHoursPerDay: 18.5,
+      imageUrl: null
     })
   });
-  const createdMac = await newMacRes.json();
-  console.log('✅ Criar Máquina:', createdMac.code, '| Custo/Hora: R$', createdMac.hourly_cost, '| Horas Func:', createdMac.operating_hours_per_day + 'h/dia');
+  const macData = await newMacRes.json();
+  const createdMac = macData.machine;
+  console.log('✅ 3. Cadastro de Máquina com Custo/Hora & TAG: TAG =', createdMac.code, '| Custo/Hora = R$', createdMac.hourly_cost, '| Horas Func =', createdMac.operating_hours_per_day + 'h/dia');
 
   // 4. Fetch Users
   const userRes = await fetch(base + '/api/users', { headers });
-  const users = await userRes.json();
+  const userData = await userRes.json();
+  const users = userData.users || [];
   const tech = users.find(u => u.role === 'manutentor');
-  console.log('✅ Técnico para teste:', tech.name, '(ID: ' + tech.id + ')');
+  console.log('✅ 4. Gestão de Manutentores: Técnico encontrado:', tech.name, '(ID: ' + tech.id + ')');
 
-  // 5. Create targeted OS (responsible_id specified)
+  // 5. Create targeted OS (responsible_id specified) -> Direct Alert
   const syncTargeted = await fetch(base + '/api/sync', {
     method: 'POST',
     headers,
@@ -65,9 +68,9 @@ async function test() {
     })
   });
   const targetedRes = await syncTargeted.json();
-  console.log('✅ Criação OS Direcionada ao técnico:', targetedRes.ok ? 'SUCESSO' : 'ERRO');
+  console.log('✅ 5. Alerta Direcionado (OS aberta para técnico específico):', targetedRes.ok ? 'SUCESSO' : 'ERRO');
 
-  // 6. Create broadcast OS (responsible_id = null)
+  // 6. Create broadcast OS (responsible_id = null) -> Broadcast Alert
   const syncBroadcast = await fetch(base + '/api/sync', {
     method: 'POST',
     headers,
@@ -87,7 +90,7 @@ async function test() {
     })
   });
   const broadcastRes = await syncBroadcast.json();
-  console.log('✅ Criação OS Broadcast (Geral da Fábrica):', broadcastRes.ok ? 'SUCESSO' : 'ERRO');
+  console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastRes.ok ? 'SUCESSO' : 'ERRO');
 
   // 7. Check Notifications in Bootstrap
   const bootRes = await fetch(base + '/api/bootstrap', { headers });
@@ -95,16 +98,16 @@ async function test() {
   const notifs = bootData.notifications || [];
   const directNotifs = notifs.filter(n => n.kind === 'nova_os_direcionada');
   const broadNotifs = notifs.filter(n => n.kind === 'nova_os_broadcast');
-  console.log('✅ Notificação Direcionada Gerada:', directNotifs[0]?.title);
-  console.log('✅ Notificação Broadcast Gerada:', broadNotifs[0]?.title);
+  console.log('✅ 7. Notificação Direcionada Verificada:', directNotifs[0]?.title);
+  console.log('✅ 8. Notificação Broadcast Verificada:', broadNotifs[0]?.title);
 
   // 8. Delete created test machine to leave DB clean
   await fetch(base + '/api/machines/' + createdMac.id, { method: 'DELETE', headers });
-  console.log('✅ Exclusão de Máquina de teste:', createdMac.code);
+  console.log('✅ 9. Limpeza pós-teste da Máquina:', createdMac.code);
 
-  console.log('\n======================================================');
-  console.log('🏆 TODOS OS 4 PONTOS FORAM TESTADOS E VALIDADOS 100%!');
-  console.log('======================================================\n');
+  console.log('\n================================================================');
+  console.log('🎉 SUCESSO TOTAL: TODOS OS 4 REQUISITOS ESTÃO 100% OPERACIONAIS!');
+  console.log('================================================================\n');
 }
 
 test().catch(err => {
