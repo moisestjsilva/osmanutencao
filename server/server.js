@@ -202,10 +202,33 @@ app.post('/api/auth/change-password', requireUser, (req, res) => {
   res.json({ ok: true, message: 'Senha atualizada com sucesso' });
 });
 
+// ---------- Upload de Imagens (Máquinas, Usuários e Fotos) ----------
+app.post('/api/upload', requireUser, (req, res) => {
+  try {
+    const { dataUrl, filename } = req.body || {};
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      return res.status(400).json({ error: 'Nenhuma imagem enviada' });
+    }
+    const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+    if (!match) {
+      return res.status(400).json({ error: 'Formato de imagem inválido' });
+    }
+    const rawExt = match[1].toLowerCase();
+    const ext = rawExt === 'jpeg' ? 'jpg' : (rawExt.includes('svg') ? 'svg' : (rawExt.includes('png') ? 'png' : 'jpg'));
+    const buffer = Buffer.from(match[2], 'base64');
+    const fname = `${randomUUID()}.${ext}`;
+    const dest = path.join(UPLOAD_DIR, fname);
+    fs.writeFileSync(dest, buffer);
+    res.json({ ok: true, url: `/uploads/${fname}`, filename: fname });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar imagem: ' + err.message });
+  }
+});
+
 // ---------- Gestão de Usuários (Admin e Super Admin) ----------
 app.get('/api/users', requireAdmin, (req, res) => {
   const rows = db.prepare(`
-    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.active, u.created_at,
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.active, u.avatar_url, u.created_at,
            t.name as team_name
     FROM users u
     LEFT JOIN teams t ON t.id = u.team_id
@@ -215,7 +238,7 @@ app.get('/api/users', requireAdmin, (req, res) => {
 });
 
 app.post('/api/users', requireAdmin, (req, res) => {
-  const { name, email, username, password, role = 'manutentor', teamId, specialty } = req.body || {};
+  const { name, email, username, password, role = 'manutentor', teamId, specialty, avatarUrl, avatar_url } = req.body || {};
   if (!name || !username || !password) {
     return res.status(400).json({ error: 'Preencha o nome, nome de usuário e senha' });
   }
@@ -236,15 +259,16 @@ app.post('/api/users', requireAdmin, (req, res) => {
   const id = 'u-' + (role === 'manutentor' ? 'tech-' : '') + cleanUser + '-' + Date.now().toString(36).slice(-4);
   const { hash, salt } = hashPassword(password);
   const now = new Date().toISOString();
+  const finalAvatar = avatarUrl || avatar_url || null;
 
   db.prepare(`
-    INSERT INTO users (id, name, email, username, role, team_id, specialty, password_hash, salt, active, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, specialty || null, hash, salt, now);
+    INSERT INTO users (id, name, email, username, role, team_id, specialty, password_hash, salt, avatar_url, active, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, specialty || null, hash, salt, finalAvatar, now);
 
   res.status(201).json({
     ok: true,
-    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, specialty }
+    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, specialty, avatar_url: finalAvatar }
   });
 });
 
@@ -259,18 +283,21 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
     }
   }
 
-  const { name, email, username, password, teamId, specialty, active } = req.body || {};
+  const { name, email, username, password, teamId, specialty, active, avatarUrl, avatar_url } = req.body || {};
   if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name.trim(), target.id);
   if (email) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.trim().toLowerCase(), target.id);
   if (teamId !== undefined) db.prepare('UPDATE users SET team_id = ? WHERE id = ?').run(teamId || null, target.id);
   if (specialty !== undefined) db.prepare('UPDATE users SET specialty = ? WHERE id = ?').run(specialty || null, target.id);
   if (active !== undefined) db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, target.id);
+  if (avatarUrl !== undefined || avatar_url !== undefined) {
+    db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(avatarUrl ?? avatar_url ?? null, target.id);
+  }
   if (password && String(password).trim().length >= 4) {
     const { hash, salt } = hashPassword(String(password).trim());
     db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, target.id);
   }
 
-  const updated = db.prepare('SELECT id, name, email, username, role, team_id, specialty, active FROM users WHERE id = ?').get(target.id);
+  const updated = db.prepare('SELECT id, name, email, username, role, team_id, specialty, avatar_url, active FROM users WHERE id = ?').get(target.id);
   res.json({ ok: true, user: updated });
 });
 
@@ -322,6 +349,131 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
   }
 });
 
+// ---------- Gestão de Setores (Admin e Super Admin) ----------
+app.get('/api/sectors', (req, res) => {
+  const rows = db.prepare(`
+    SELECT s.*, (SELECT COUNT(*) FROM machines m WHERE m.sector_id = s.id AND m.active = 1) AS machine_count
+    FROM sectors s
+    ORDER BY s.name
+  `).all();
+  res.json({ sectors: rows });
+});
+
+app.post('/api/sectors', requireAdmin, (req, res) => {
+  const { code, name } = req.body || {};
+  if (!code || !name) return res.status(400).json({ error: 'Informe o código e o nome do setor' });
+  const cleanCode = String(code).trim().toUpperCase();
+  const cleanName = String(name).trim();
+  const exists = db.prepare('SELECT id FROM sectors WHERE UPPER(code) = ?').get(cleanCode);
+  if (exists) return res.status(400).json({ error: 'Já existe um setor com este código' });
+  const id = 'sec-' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '') + '-' + Date.now().toString(36).slice(-4);
+  db.prepare('INSERT INTO sectors (id, code, name) VALUES (?, ?, ?)').run(id, cleanCode, cleanName);
+  res.status(201).json({ ok: true, sector: { id, code: cleanCode, name: cleanName, machine_count: 0 } });
+});
+
+app.put('/api/sectors/:id', requireAdmin, (req, res) => {
+  const target = db.prepare('SELECT * FROM sectors WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Setor não encontrado' });
+  const { code, name } = req.body || {};
+  const cleanCode = code ? String(code).trim().toUpperCase() : target.code;
+  const cleanName = name ? String(name).trim() : target.name;
+  if (cleanCode !== target.code) {
+    const exists = db.prepare('SELECT id FROM sectors WHERE UPPER(code) = ? AND id != ?').get(cleanCode, target.id);
+    if (exists) return res.status(400).json({ error: 'Já existe outro setor com este código' });
+  }
+  db.prepare('UPDATE sectors SET code = ?, name = ? WHERE id = ?').run(cleanCode, cleanName, target.id);
+  const count = db.prepare('SELECT COUNT(*) AS n FROM machines WHERE sector_id = ? AND active = 1').get(target.id).n;
+  res.json({ ok: true, sector: { id: target.id, code: cleanCode, name: cleanName, machine_count: count } });
+});
+
+app.delete('/api/sectors/:id', requireAdmin, (req, res) => {
+  const target = db.prepare('SELECT * FROM sectors WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Setor não encontrado' });
+  const count = db.prepare('SELECT COUNT(*) AS n FROM machines WHERE sector_id = ?').get(target.id).n;
+  if (count > 0) {
+    return res.status(400).json({ error: `Não é possível excluir: existem ${count} máquina(s) vinculadas a este setor.` });
+  }
+  db.prepare('DELETE FROM sectors WHERE id = ?').run(target.id);
+  res.json({ ok: true, deleted: target.id });
+});
+
+// ---------- Gestão de Máquinas (Admin e Super Admin) ----------
+app.get('/api/machines', (req, res) => {
+  const rows = db.prepare(`
+    SELECT m.*, s.name AS sector_name, s.code AS sector_code,
+      (SELECT COUNT(*) FROM work_orders w WHERE w.machine_id = m.id AND w.status NOT IN ('Concluída', 'Cancelada')) AS open_orders,
+      (SELECT COUNT(*) FROM work_orders w WHERE w.machine_id = m.id AND w.machine_stopped = 1 AND w.status NOT IN ('Concluída', 'Cancelada')) AS stopped_orders
+    FROM machines m
+    JOIN sectors s ON s.id = m.sector_id
+    ORDER BY m.code
+  `).all();
+  res.json({ machines: rows });
+});
+
+app.post('/api/machines', requireAdmin, (req, res) => {
+  const { code, name, sectorId, criticality = 'media', hourlyCost = 0, operatingHoursPerDay = 16, imageUrl = null } = req.body || {};
+  if (!code || !name || !sectorId) {
+    return res.status(400).json({ error: 'Informe a TAG/código, o nome da máquina e o setor' });
+  }
+  const cleanCode = String(code).trim().toUpperCase();
+  const cleanName = String(name).trim();
+  const sec = db.prepare('SELECT id FROM sectors WHERE id = ?').get(sectorId);
+  if (!sec) return res.status(400).json({ error: 'Setor selecionado inválido' });
+  const exists = db.prepare('SELECT id FROM machines WHERE UPPER(code) = ?').get(cleanCode);
+  if (exists) return res.status(400).json({ error: 'Já existe uma máquina com esta TAG/código' });
+  const id = 'm-' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '') + '-' + Date.now().toString(36).slice(-4);
+  const hCost = Math.max(0, Number(hourlyCost) || 0);
+  const opHours = Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 16));
+
+  db.prepare(`
+    INSERT INTO machines (id, code, name, sector_id, criticality, hourly_cost, operating_hours_per_day, image_url, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(id, cleanCode, cleanName, sectorId, criticality, hCost, opHours, imageUrl || null);
+
+  const created = db.prepare('SELECT m.*, s.name as sector_name, s.code as sector_code FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(id);
+  res.status(201).json({ ok: true, machine: created });
+});
+
+app.put('/api/machines/:id', requireAdmin, (req, res) => {
+  const target = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Máquina não encontrada' });
+  const { code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl, active } = req.body || {};
+  const cleanCode = code ? String(code).trim().toUpperCase() : target.code;
+  const cleanName = name ? String(name).trim() : target.name;
+  const secId = sectorId || target.sector_id;
+  const crit = criticality || target.criticality;
+  const hCost = hourlyCost !== undefined ? Math.max(0, Number(hourlyCost) || 0) : target.hourly_cost;
+  const opHours = operatingHoursPerDay !== undefined ? Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 16)) : target.operating_hours_per_day;
+  const img = imageUrl !== undefined ? imageUrl : target.image_url;
+  const act = active !== undefined ? (active ? 1 : 0) : target.active;
+
+  if (cleanCode !== target.code) {
+    const exists = db.prepare('SELECT id FROM machines WHERE UPPER(code) = ? AND id != ?').get(cleanCode, target.id);
+    if (exists) return res.status(400).json({ error: 'Já existe outra máquina com esta TAG' });
+  }
+
+  db.prepare(`
+    UPDATE machines
+    SET code = ?, name = ?, sector_id = ?, criticality = ?, hourly_cost = ?, operating_hours_per_day = ?, image_url = ?, active = ?
+    WHERE id = ?
+  `).run(cleanCode, cleanName, secId, crit, hCost, opHours, img, act, target.id);
+
+  const updated = db.prepare('SELECT m.*, s.name as sector_name, s.code as sector_code FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(target.id);
+  res.json({ ok: true, machine: updated });
+});
+
+app.delete('/api/machines/:id', requireAdmin, (req, res) => {
+  const target = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Máquina não encontrada' });
+  const woCount = db.prepare('SELECT COUNT(*) AS n FROM work_orders WHERE machine_id = ?').get(target.id).n;
+  if (woCount > 0) {
+    db.prepare('UPDATE machines SET active = 0 WHERE id = ?').run(target.id);
+    return res.json({ ok: true, deactivated: true, message: `Máquina desativada para manter histórico de ${woCount} OSs.` });
+  }
+  db.prepare('DELETE FROM machines WHERE id = ?').run(target.id);
+  res.json({ ok: true, deleted: target.id });
+});
+
 // ---------- Bootstrap e Dados Gerais ----------
 app.get('/api/bootstrap', (req, res) => {
   res.json({
@@ -329,8 +481,8 @@ app.get('/api/bootstrap', (req, res) => {
     currentUser: req.user || null,
     sectors: db.prepare('SELECT * FROM sectors ORDER BY name').all(),
     teams: db.prepare('SELECT * FROM teams ORDER BY name').all(),
-    users: db.prepare('SELECT id,name,username,email,role,team_id,specialty FROM users WHERE active=1 ORDER BY role, name').all(),
-    machines: db.prepare('SELECT * FROM machines WHERE active=1 ORDER BY code').all(),
+    users: db.prepare('SELECT id,name,username,email,role,team_id,specialty,avatar_url FROM users WHERE active=1 ORDER BY role, name').all(),
+    machines: db.prepare('SELECT m.*, s.name as sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.active=1 ORDER BY m.code').all(),
     settings: { defaultRecipientsMode: getSetting(db, 'default_recipients_mode', 'todos') },
   });
 });
