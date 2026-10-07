@@ -1424,6 +1424,14 @@ export function cadastrosView(root, params = {}) {
                     <span class="badge" style="background:var(--surface-2);font-size:11px" title="Horas de funcionamento diário">
                       ⏱️ ${m.operating_hours_per_day || 16}h/dia
                     </span>
+                    <span class="badge" style="background:var(--surface-2);font-size:11px" title="Ficha de preventiva padrão">
+                      📋 ${(() => {
+                        try {
+                          const items = m.default_checklist_json ? JSON.parse(m.default_checklist_json) : [];
+                          return items.length ? `${items.length} itens no checklist padrão` : 'Sem checklist padrão';
+                        } catch { return 'Sem checklist padrão'; }
+                      })()}
+                    </span>
                   </div>
                 </div>
               </div>
