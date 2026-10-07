@@ -34,7 +34,20 @@ export function timeAgo(iso) {
 }
 export const initials = (name = '?') => name.replace(/\(.*\)/, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 export const hue = (str = '') => [...str].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-export const avatar = (name, cls = '') => `<span class="avatar ${cls}" style="--h:${hue(name)}" title="${esc(name)}">${esc(initials(name))}</span>`;
+export const avatar = (name, cls = '', imgUrl = null) => {
+  if (imgUrl) {
+    return `<span class="avatar ${cls} has-img" title="${esc(name)}"><img src="${esc(imgUrl)}" alt="${esc(name)}" class="avatar-photo" onerror="this.parentElement.innerHTML='${esc(initials(name))}'" /></span>`;
+  }
+  return `<span class="avatar ${cls}" style="--h:${hue(name)}" title="${esc(name)}">${esc(initials(name))}</span>`;
+};
+
+export const machineBadge = (m, cls = '') => {
+  if (m?.image_url) {
+    return `<div class="machine-thumb ${cls}"><img src="${esc(m.image_url)}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentElement.classList.add('default-badge');this.remove();" /></div>`;
+  }
+  const tag = m?.code || 'TAG';
+  return `<div class="machine-thumb default-badge ${cls}"><span class="badge-tag">${esc(tag)}</span></div>`;
+};
 
 export const PRIORITY = { baixa: 'Baixa', media: 'Média', alta: 'Alta', urgente: 'Urgente' };
 export const PRIO_COLOR = { urgente: 'var(--danger)', alta: 'hsl(355 70% 55%)', media: 'var(--accent)', baixa: 'var(--text-3)' };
