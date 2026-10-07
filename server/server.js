@@ -337,6 +337,7 @@ app.get('/api/bootstrap', (req, res) => {
 app.get('/api/workorders', (req, res) => {
   const since = new Date(Date.now() - Number(req.query.days || 30) * 86400000).toISOString();
   const isTech = req.user?.role === 'manutentor';
+  const isSol = req.user?.role === 'solicitante';
   const scope = req.query.scope; // 'minhas', 'disponiveis', 'todas'
 
   let query = `
@@ -345,7 +346,11 @@ app.get('/api/workorders', (req, res) => {
   `;
   const params = [since, since];
 
-  if (isTech && scope === 'disponiveis') {
+  if (isSol) {
+    // Solicitante: vê exclusivamente as ordens que ele próprio abriu
+    query += ` AND requester_id = ?`;
+    params.push(req.user.id);
+  } else if (isTech && scope === 'disponiveis') {
     // Abertas sem responsável atribuído para o manutentor assumir
     query += ` AND status = 'Aberta' AND responsible_id IS NULL`;
   } else if (isTech && scope !== 'todas') {
