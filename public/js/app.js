@@ -121,7 +121,7 @@ function renderNav() {
   let html = '';
 
   if (role === 'manutentor') {
-    // Manutentor: visual ultra-simplificado para o chão de fábrica (SEM indicadores e SEM configurações)
+    // Manutentor: Minhas OS, Disponíveis no chão de fábrica, Nova OS, Indicadores Pessoais e Perfil
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
@@ -133,6 +133,10 @@ function renderNav() {
       </button>
       <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="nav-item" data-nav="#/indicadores" id="nav-kpi">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+        Indicadores
       </button>
       <button class="nav-item" data-action="profile" id="nav-profile">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
