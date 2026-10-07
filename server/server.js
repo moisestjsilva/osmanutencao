@@ -655,7 +655,16 @@ app.post('/api/plans/:id/generate', requireUser, requireManager, (req, res) => {
   }
 });
 
-app.get('/api/indicators', requireAdmin, (req, res) => res.json(computeIndicators(db, req.query)));
+app.get('/api/indicators', requireUser, (req, res) => {
+  const q = { ...req.query };
+  if (req.user.role === 'manutentor') {
+    // Manutentor vê estritamente seus próprios atendimentos e indicadores
+    q.userId = req.user.id;
+  } else if (!['admin', 'superadmin', 'gerente'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Acesso restrito' });
+  }
+  res.json(computeIndicators(db, q));
+});
 
 // Conflitos de sincronização (revisão do gerente)
 app.get('/api/conflicts', requireUser, (req, res) => {
