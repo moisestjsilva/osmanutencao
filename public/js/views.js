@@ -1677,14 +1677,22 @@ export function cadastrosView(root, params = {}) {
     });
   }
 
-  // ---------- MODAL DE MÁQUINA (TAG, CUSTO HORA, HORAS FUNC, FOTO) ----------
+  // ---------- MODAL DE MÁQUINA (TAG, CUSTO HORA, HORAS FUNC, FOTO, FICHA PREVENTIVA PADRÃO) ----------
   function openMachineModal(target = null) {
     const isEdit = !!target;
     let currentImg = target?.image_url || null;
 
+    let initialChecklistText = '';
+    try {
+      const parsed = target?.default_checklist_json ? JSON.parse(target.default_checklist_json) : [];
+      if (Array.isArray(parsed)) {
+        initialChecklistText = parsed.map((item) => (typeof item === 'string' ? item : item.text || '')).filter(Boolean).join('\n');
+      }
+    } catch {}
+
     sheet(`
       <h2>${isEdit ? 'Editar Máquina' : 'Cadastrar Nova Máquina'}</h2>
-      <p class="muted small">${isEdit ? `Atualize os parâmetros técnicos e foto da TAG ${esc(target.code)}` : 'Cadastre o equipamento, TAG, valor da hora e foto'}</p>
+      <p class="muted small">${isEdit ? `Atualize os parâmetros técnicos, ficha de preventiva e foto da TAG ${esc(target.code)}` : 'Cadastre o equipamento, TAG, valor da hora, ficha de preventiva e foto'}</p>
 
       <form id="form-machine" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
         <div class="img-upload-box">
@@ -1747,6 +1755,17 @@ export function cadastrosView(root, params = {}) {
           <span class="muted xs" style="margin-top:2px;display:block">Horas que a máquina opera por dia (cálculo de horas de manutenção e MTBF)</span>
         </label>
 
+        <label class="field">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <span>Ficha de Preventiva Padrão (Checklist da Máquina)</span>
+            <span class="muted xs">1 item por linha</span>
+          </div>
+          <textarea class="input" id="m-checklist" rows="4" placeholder="Ex.:&#10;Verificar nível e vazamentos de óleo lubrificante&#10;Inspecionar aperto de parafusos e alinhamento de correias&#10;Limpeza de filtros de ar e dissipadores de calor&#10;Checar ruídos e temperatura dos mancais e rolamentos&#10;Testar botões de emergência e proteções">${esc(initialChecklistText)}</textarea>
+          <span class="muted xs" style="margin-top:2px;display:block">
+            📋 Esses itens serão carregados automaticamente como checklist padrão ao criar preventivas para este equipamento, podendo ser editados ou complementados no momento da OS.
+          </span>
+        </label>
+
         ${isEdit ? `
         <label class="check-row ${target.active ? 'checked' : ''}" id="m-act-wrap">
           <input type="checkbox" id="m-active" ${target.active ? 'checked' : ''} />
@@ -1806,6 +1825,10 @@ export function cadastrosView(root, params = {}) {
           const hourlyCost = parseFloat($('#m-cost', el).value) || 0;
           const operatingHoursPerDay = parseFloat($('#m-op-hours', el).value) || 16;
           const active = isEdit ? ($('#m-active', el)?.checked ?? true) : true;
+          const defaultChecklist = ($('#m-checklist', el)?.value || '')
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean);
 
           const btn = $('#mach-sub-btn', el);
           btn.disabled = true;
@@ -1813,12 +1836,12 @@ export function cadastrosView(root, params = {}) {
           try {
             if (isEdit) {
               await updateMachine(target.id, {
-                code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl: currentImg, active
+                code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl: currentImg, defaultChecklist, active
               });
               toast('Máquina atualizada!');
             } else {
               await createMachine({
-                code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl: currentImg
+                code, name, sectorId, criticality, hourlyCost, operatingHoursPerDay, imageUrl: currentImg, defaultChecklist
               });
               toast('Nova máquina cadastrada com sucesso!');
             }
