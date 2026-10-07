@@ -57,7 +57,7 @@ async function test() {
     headers,
     body: JSON.stringify({
       ops: [{
-        op_id: 'op-' + randomUUID(),
+        opId: 'op-' + randomUUID(),
         woId: targetedWoId,
         type: 'create_wo',
         localTime: new Date().toISOString(),
@@ -75,7 +75,8 @@ async function test() {
     })
   });
   const targetedRes = await syncTargeted.json();
-  console.log('✅ 5. Alerta Direcionado (OS aberta para técnico específico):', targetedRes.ok ? 'SUCESSO (Número gerado)' : 'ERRO');
+  const targetedResult = targetedRes.results?.[0];
+  console.log('✅ 5. Alerta Direcionado (OS aberta para técnico específico):', targetedResult?.status === 'ok' ? `SUCESSO (OS #${targetedResult.number})` : 'ERRO: ' + JSON.stringify(targetedResult));
 
   // 6. Create broadcast OS (responsible_id = null) -> Broadcast Alert
   const broadcastWoId = 'wo-test-' + randomUUID();
@@ -84,7 +85,7 @@ async function test() {
     headers,
     body: JSON.stringify({
       ops: [{
-        op_id: 'op-' + randomUUID(),
+        opId: 'op-' + randomUUID(),
         woId: broadcastWoId,
         type: 'create_wo',
         localTime: new Date().toISOString(),
@@ -102,7 +103,8 @@ async function test() {
     })
   });
   const broadcastRes = await syncBroadcast.json();
-  console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastRes.ok ? 'SUCESSO (Número gerado)' : 'ERRO');
+  const broadcastResult = broadcastRes.results?.[0];
+  console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastResult?.status === 'ok' ? `SUCESSO (OS #${broadcastResult.number})` : 'ERRO: ' + JSON.stringify(broadcastResult));
 
   // 7. Check Notifications in Bootstrap
   const bootRes = await fetch(base + '/api/bootstrap', { headers });
@@ -110,8 +112,8 @@ async function test() {
   const notifs = bootData.notifications || [];
   const directNotifs = notifs.filter(n => n.kind === 'atribuicao');
   const broadNotifs = notifs.filter(n => n.kind === 'nova_os_fabrica');
-  console.log('✅ 7. Notificação Direcionada Gerada:', directNotifs[0]?.title);
-  console.log('✅ 8. Notificação Broadcast Gerada:', broadNotifs[0]?.title);
+  console.log('✅ 7. Notificação Direcionada Gerada no Banco:', directNotifs[0]?.title);
+  console.log('✅ 8. Notificação Broadcast Gerada no Banco:', broadNotifs[0]?.title);
 
   // 8. Delete created test machine to leave DB clean
   await fetch(base + '/api/machines/' + createdMac.id, { method: 'DELETE', headers });
