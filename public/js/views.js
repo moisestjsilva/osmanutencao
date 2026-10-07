@@ -1107,7 +1107,11 @@ export function moreView(root) {
   const isSuper = isSuperAdmin();
 
   const items = [
-    ...(isAdm ? [['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas']] : []),
+    ...(isAdm ? [
+      ['#/cadastros?tab=preventivas', 'calendar', 'Planos de Manutenção Preventiva', 'Programação periódica, calendários e checklists'],
+      ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
+      ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
+    ] : []),
     ['#/maquinas', 'qr', 'Máquinas e etiquetas QR', 'Cadastro e impressão de QR'],
     ['#/avisos', 'bell', 'Central de avisos', `${state.notifs?.length || 0} avisos registrados`],
     ['#/sync', 'cloud', 'Sincronização offline', `${pendingOps().length} pendente(s) • ${failedOps().length} com falha`],
