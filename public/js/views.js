@@ -1124,24 +1124,6 @@ export function loginView(root) {
             <span>Entrar no Sistema</span> ${icon('chev', 18)}
           </button>
         </form>
-
-        <div class="quick-access">
-          <div class="quick-access-title">Acesso Rápido por Nível</div>
-          <div class="quick-pills">
-            <button type="button" class="quick-pill" data-user="moisestj86@gmail.com" data-pass="admin123">
-              <span>Super Admin</span>
-              <small>Moisés Silva</small>
-            </button>
-            <button type="button" class="quick-pill" data-user="admin" data-pass="admin123">
-              <span>Admin</span>
-              <small>Gestão</small>
-            </button>
-            <button type="button" class="quick-pill" data-user="reinilson" data-pass="123456">
-              <span>Manutentor</span>
-              <small>Reinilson</small>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   `;
@@ -1156,14 +1138,6 @@ export function loginView(root) {
     const isPass = passInp.type === 'password';
     passInp.type = isPass ? 'text' : 'password';
   };
-
-  $$('.quick-pill', root).forEach((pill) => {
-    pill.onclick = () => {
-      loginInp.value = pill.dataset.user;
-      passInp.value = pill.dataset.pass;
-      form.requestSubmit();
-    };
-  });
 
   form.onsubmit = async (e) => {
     e.preventDefault();
