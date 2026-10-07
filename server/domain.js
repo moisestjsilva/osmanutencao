@@ -164,13 +164,23 @@ const handlers = {
     const number = nextNumber(db);
     const stopped = p.machineStopped ? 1 : 0;
     const responsibleId = p.responsibleId || null;
+    const rawChecklist = Array.isArray(p.checklist)
+      ? p.checklist
+      : (typeof p.checklist === 'string'
+        ? p.checklist.split('\n')
+        : (type === 'preventiva' && machine.default_checklist_json ? JSON.parse(machine.default_checklist_json || '[]') : []));
+    const checklistItems = rawChecklist
+      .map((c) => (typeof c === 'string' ? { text: c.trim(), done: false } : { text: String(c.text || '').trim(), done: !!c.done }))
+      .filter((c) => c.text);
+    const checklistJson = checklistItems.length ? JSON.stringify(checklistItems) : null;
+
     db.prepare(`INSERT INTO work_orders (id,number,machine_id,type,priority,machine_stopped,requester_id,responsible_id,status,title,description,
-                recipients_mode,recipients_json,rework_of,created_at,received_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+                recipients_mode,recipients_json,checklist_json,rework_of,created_at,received_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id, number, machine.id, type, priority, stopped, user.id, responsibleId, 'Aberta', p.title || null, desc, mode, JSON.stringify(recipients),
-        p.reworkOf || null, at, nowIso());
+        checklistJson, p.reworkOf || null, at, nowIso());
     const effective = resolveRecipients(db, mode, recipients);
-    addEvent(db, id, user.id, 'criar', at, { origin: op.origin, data: { recipientsMode: mode, recipients, effectiveRecipients: effective, responsibleId } });
+    addEvent(db, id, user.id, 'criar', at, { origin: op.origin, data: { recipientsMode: mode, recipients, effectiveRecipients: effective, responsibleId, checklistCount: checklistItems.length } });
     if (stopped) openMachineStop(db, machine.id, id, at);
     const lbl = woLabel(db, { machine_id: machine.id });
 
