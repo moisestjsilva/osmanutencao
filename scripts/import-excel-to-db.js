@@ -281,8 +281,16 @@ for (const w of wosRaw) {
   const req = clean(w.Solicitante);
   if (!req) continue;
   const key = norm(req);
+  if (['5002', 'embalagem', 'furacao', 'linha', 'linhadepintura', 'linha de pintura', 'manutencao'].includes(key)) {
+    continue;
+  }
+  const slashBase = norm(req.split('/')[0]);
+  if (usersMap.has(slashBase)) {
+    usersMap.set(key, usersMap.get(slashBase));
+    continue;
+  }
   if (!usersMap.has(key)) {
-    const isKnownTech = usersMap.has(norm(req.replace(/\/.*$/, '')));
+    const isKnownTech = usersMap.has(slashBase);
     const num = usersMap.size + 1;
     const id = (isKnownTech ? 'u-tech-' : 'u-sol-') + norm(req).replace(/[^a-z0-9]/g, '').slice(0, 15) + '-' + num;
     const role = isKnownTech ? 'manutentor' : 'solicitante';
