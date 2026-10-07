@@ -574,8 +574,16 @@ app.get('/api/notifications', requireUser, (req, res) => {
 });
 app.post('/api/notifications/read', requireUser, (req, res) => {
   const at = new Date().toISOString();
-  if (req.body?.all) db.prepare('UPDATE notifications SET read_at=?, status=? WHERE user_id=? AND read_at IS NULL').run(at, 'lida', req.user.id);
-  for (const id of req.body?.ids || []) db.prepare('UPDATE notifications SET read_at=?, status=? WHERE id=? AND user_id=?').run(at, 'lida', id, req.user.id);
+  const notifCols = db.prepare(`PRAGMA table_info(notifications)`).all().map((c) => c.name);
+  const hasStatus = notifCols.includes('status');
+  if (req.body?.all) {
+    if (hasStatus) db.prepare('UPDATE notifications SET read_at=?, status=? WHERE user_id=? AND read_at IS NULL').run(at, 'lida', req.user.id);
+    else db.prepare('UPDATE notifications SET read_at=? WHERE user_id=? AND read_at IS NULL').run(at, req.user.id);
+  }
+  for (const id of req.body?.ids || []) {
+    if (hasStatus) db.prepare('UPDATE notifications SET read_at=?, status=? WHERE id=? AND user_id=?').run(at, 'lida', id, req.user.id);
+    else db.prepare('UPDATE notifications SET read_at=? WHERE id=? AND user_id=?').run(at, id, req.user.id);
+  }
   res.json({ ok: true });
 });
 
