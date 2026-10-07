@@ -169,6 +169,12 @@ export async function updateUser(id, userData) {
   });
 }
 
+export async function deleteUser(id) {
+  return await api(`/api/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+}
+
 // ---------------- Inicialização ----------------
 export async function init() {
   state.queue = (await qAll()).sort((a, b) => a.seq - b.seq);
