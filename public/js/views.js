@@ -26,7 +26,6 @@ const savedMsg = () => (state.online ? 'Registrado' : 'Salvo no aparelho — ser
 // LISTA DE OS
 // ======================================================================
 export function listView(root) {
-  const onlyTech = isOnlyTech();
   const isSol = me()?.role === 'solicitante';
   const onlyTech = isOnlyTech();
 
