@@ -156,21 +156,43 @@ const handlers = {
     const at = validTime(op.localTime);
     const number = nextNumber(db);
     const stopped = p.machineStopped ? 1 : 0;
-    db.prepare(`INSERT INTO work_orders (id,number,machine_id,type,priority,machine_stopped,requester_id,status,title,description,
+    const responsibleId = p.responsibleId || null;
+    db.prepare(`INSERT INTO work_orders (id,number,machine_id,type,priority,machine_stopped,requester_id,responsible_id,status,title,description,
                 recipients_mode,recipients_json,rework_of,created_at,received_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, number, machine.id, type, priority, stopped, user.id, 'Aberta', p.title || null, desc, mode, JSON.stringify(recipients),
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, number, machine.id, type, priority, stopped, user.id, responsibleId, 'Aberta', p.title || null, desc, mode, JSON.stringify(recipients),
         p.reworkOf || null, at, nowIso());
     const effective = resolveRecipients(db, mode, recipients);
-    addEvent(db, id, user.id, 'criar', at, { origin: op.origin, data: { recipientsMode: mode, recipients, effectiveRecipients: effective } });
+    addEvent(db, id, user.id, 'criar', at, { origin: op.origin, data: { recipientsMode: mode, recipients, effectiveRecipients: effective, responsibleId } });
     if (stopped) openMachineStop(db, machine.id, id, at);
     const lbl = woLabel(db, { machine_id: machine.id });
-    notify(db, effective.filter((u) => u !== user.id), {
-      woId: id,
-      kind: 'nova_os',
-      title: `${stopped ? 'MÁQUINA PARADA • ' : ''}OS ${number} • ${priority.toUpperCase()}`,
-      body: `${lbl.machine} — ${lbl.sector}: ${desc.slice(0, 90)}`,
-    });
+
+    // Item 3: Sistema de alertas inteligente
+    // Se direcionada a um técnico: notifica ele diretamente.
+    // Se não direcionada: todos os manutentores e admins recebem o alerta de chamado aberto na fábrica.
+    if (responsibleId) {
+      notify(db, [responsibleId], {
+        woId: id,
+        kind: 'atribuicao',
+        title: `🚨 Nova OS ${number} Atribuída a Você!`,
+        body: `TAG: ${machine.code} • ${lbl.machine} (${lbl.sector}): ${desc.slice(0, 90)}`,
+      });
+      const admins = db.prepare("SELECT id FROM users WHERE role IN ('admin', 'superadmin') AND active=1").all().map((u) => u.id);
+      notify(db, admins.filter((u) => u !== user.id && u !== responsibleId), {
+        woId: id,
+        kind: 'nova_os',
+        title: `${stopped ? 'MÁQUINA PARADA • ' : ''}OS ${number} Direcionada`,
+        body: `${lbl.machine} (${machine.code}) atribuída a técnico.`,
+      });
+    } else {
+      const allStaff = db.prepare("SELECT id FROM users WHERE role IN ('manutentor', 'admin', 'superadmin') AND active=1").all().map((u) => u.id);
+      notify(db, allStaff.filter((u) => u !== user.id), {
+        woId: id,
+        kind: 'nova_os_fabrica',
+        title: `🔔 ${stopped ? 'MÁQUINA PARADA • ' : ''}Nova OS ${number} Disponível na Fábrica`,
+        body: `TAG: ${machine.code} • ${lbl.machine} (${lbl.sector}) aguarda atendimento!`,
+      });
+    }
     return { woId: id, number };
   },
 
