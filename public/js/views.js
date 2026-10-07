@@ -1088,3 +1088,338 @@ export function configView(root) {
   }
   render();
 }
+
+// ======================================================================
+// TELA DE LOGIN
+// ======================================================================
+export function loginView(root) {
+  root.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="login-logo">${icon('wrench', 30)}</div>
+          <h1>Nova OS</h1>
+          <p>Móveis Rufato • Sistema de Manutenção</p>
+        </div>
+
+        <form class="login-form" id="form-login">
+          <div class="login-field">
+            <label for="login-input">Usuário ou E-mail</label>
+            <div class="input-wrap">
+              <span class="input-ico">${icon('user', 18)}</span>
+              <input class="input" id="login-input" type="text" placeholder="Ex: moisestj86@gmail.com ou reinilson" required autofocus autocomplete="username" />
+            </div>
+          </div>
+
+          <div class="login-field">
+            <label for="pass-input">Senha de Acesso</label>
+            <div class="input-wrap">
+              <span class="input-ico">${icon('lock', 18)}</span>
+              <input class="input" id="pass-input" type="password" placeholder="Digite sua senha" required autocomplete="current-password" />
+              <button type="button" class="toggle-pass" id="btn-toggle-pass" aria-label="Mostrar ou ocultar senha">${icon('eye', 18)}</button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-login" id="btn-submit-login">
+            <span>Entrar no Sistema</span> ${icon('chev', 18)}
+          </button>
+        </form>
+
+        <div class="quick-access">
+          <div class="quick-access-title">Acesso Rápido por Nível</div>
+          <div class="quick-pills">
+            <button type="button" class="quick-pill" data-user="moisestj86@gmail.com" data-pass="admin123">
+              <span>Super Admin</span>
+              <small>Moisés Silva</small>
+            </button>
+            <button type="button" class="quick-pill" data-user="admin" data-pass="admin123">
+              <span>Admin</span>
+              <small>Gestão</small>
+            </button>
+            <button type="button" class="quick-pill" data-user="reinilson" data-pass="123456">
+              <span>Manutentor</span>
+              <small>Reinilson</small>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const form = $('#form-login', root);
+  const loginInp = $('#login-input', root);
+  const passInp = $('#pass-input', root);
+  const toggleBtn = $('#btn-toggle-pass', root);
+  const submitBtn = $('#btn-submit-login', root);
+
+  toggleBtn.onclick = () => {
+    const isPass = passInp.type === 'password';
+    passInp.type = isPass ? 'text' : 'password';
+  };
+
+  $$('.quick-pill', root).forEach((pill) => {
+    pill.onclick = () => {
+      loginInp.value = pill.dataset.user;
+      passInp.value = pill.dataset.pass;
+      form.requestSubmit();
+    };
+  });
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const u = loginInp.value.trim();
+    const p = passInp.value;
+    if (!u || !p) return;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span>Verificando...</span>';
+
+    try {
+      const user = await login(u, p);
+      toast(`Bem-vindo(a), ${user.name}!`);
+      go('#/');
+    } catch (err) {
+      toast(err.message || 'Falha no login', 'alarm');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<span>Entrar no Sistema</span> ${icon('chev', 18)}`;
+      passInp.focus();
+    }
+  };
+}
+
+// ======================================================================
+// GESTÃO DE USUÁRIOS E MANUTENTORES (ADMIN / SUPER ADMIN)
+// ======================================================================
+export function usersView(root) {
+  if (!isAdmin()) {
+    toast('Acesso restrito para administradores', 'warn');
+    go('#/');
+    return;
+  }
+
+  let users = [];
+  let filterRole = 'todos';
+  let q = '';
+
+  async function load() {
+    try {
+      users = await fetchUsers();
+      render();
+    } catch (err) {
+      root.innerHTML = `<div class="error-box">Erro ao carregar usuários: ${esc(err.message)}</div>`;
+    }
+  }
+
+  function render() {
+    const canCreateAny = isSuperAdmin();
+    const techs = users.filter((u) => u.role === 'manutentor');
+    const admins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin');
+
+    const filtered = users.filter((u) => {
+      if (filterRole !== 'todos' && u.role !== filterRole) return false;
+      if (!q) return true;
+      const ql = q.toLowerCase();
+      return (
+        u.name.toLowerCase().includes(ql) ||
+        (u.username || '').toLowerCase().includes(ql) ||
+        (u.email || '').toLowerCase().includes(ql) ||
+        (u.specialty || '').toLowerCase().includes(ql)
+      );
+    });
+
+    root.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>${isSuperAdmin() ? 'Usuários do Sistema' : 'Gestão de Manutentores'}</h1>
+          <p>${techs.length} manutentores • ${admins.length} administradores</p>
+        </div>
+        <button class="btn primary sm" id="btn-new-user">
+          ${icon('userPlus', 16)} ${isSuperAdmin() ? 'Novo Usuário' : 'Novo Manutentor'}
+        </button>
+      </div>
+
+      <div class="input-group" style="margin-bottom:12px">
+        <input class="input" id="search-users" type="search" placeholder="Buscar por nome, usuário ou especialidade..." value="${esc(q)}" />
+      </div>
+
+      <div class="chips" style="margin-bottom:14px">
+        <button class="chip ${filterRole === 'todos' ? 'active' : ''}" data-role="todos">Todos (${users.length})</button>
+        <button class="chip ${filterRole === 'manutentor' ? 'active' : ''}" data-role="manutentor">Manutentores (${techs.length})</button>
+        <button class="chip ${filterRole === 'admin' ? 'active' : ''}" data-role="admin">Admins (${admins.length})</button>
+      </div>
+
+      <div id="users-list">
+        ${filtered.length ? filtered.map((u) => `
+          <div class="user-card-item ${u.active ? '' : 'inactive'}" data-uid="${u.id}">
+            ${avatar(u.name)}
+            <div class="grow" style="min-width:0">
+              <div class="row wrap" style="gap:6px;align-items:center">
+                <strong style="font-size:15px">${esc(u.name)}</strong>
+                ${roleBadge(u.role)}
+                ${u.active ? '' : '<span class="badge" style="background:var(--danger-soft);color:var(--danger)">Inativo</span>'}
+              </div>
+              <div class="muted small" style="margin-top:2px">
+                <span class="mono">${esc(u.username || u.email || 'sem login')}</span>
+                ${u.specialty ? ` • ${esc(u.specialty)}` : ''}
+                ${u.team_name ? ` • ${esc(u.team_name)}` : ''}
+              </div>
+            </div>
+            <div class="row" style="gap:4px">
+              <button class="icon-btn" data-edit="${u.id}" title="Editar ou trocar senha">${icon('wrench', 16)}</button>
+            </div>
+          </div>
+        `).join('') : '<div class="empty"><p class="muted">Nenhum usuário encontrado com esse filtro.</p></div>'}
+      </div>
+    `;
+
+    $('#search-users', root).oninput = (e) => {
+      q = e.target.value;
+      render();
+    };
+
+    $$('[data-role]', root).forEach((chip) => {
+      chip.onclick = () => {
+        filterRole = chip.dataset.role;
+        render();
+      };
+    });
+
+    $('#btn-new-user', root).onclick = () => openUserModal();
+
+    $$('[data-edit]', root).forEach((btn) => {
+      btn.onclick = () => {
+        const u = users.find((x) => x.id === btn.dataset.edit);
+        if (u) openUserModal(u);
+      };
+    });
+  }
+
+  function openUserModal(target = null) {
+    const isEdit = !!target;
+    const canChooseRole = isSuperAdmin();
+
+    sheet(`
+      <h2>${isEdit ? 'Editar Usuário' : (canChooseRole ? 'Cadastrar Novo Usuário' : 'Cadastrar Novo Manutentor')}</h2>
+      <p class="muted small">${isEdit ? 'Atualize os dados ou defina uma nova senha' : 'Preencha os dados de acesso do colaborador'}</p>
+
+      <form id="form-user-edit" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <label class="field">
+          <span>Nome Completo *</span>
+          <input class="input" id="u-name" required value="${esc(target?.name || '')}" placeholder="Ex: Carlos Mendes" />
+        </label>
+
+        <label class="field">
+          <span>Login / Nome de Usuário *</span>
+          <input class="input" id="u-username" required ${isEdit ? 'disabled' : ''} value="${esc(target?.username || '')}" placeholder="Ex: carlos" />
+        </label>
+
+        <label class="field">
+          <span>E-mail</span>
+          <input class="input" id="u-email" type="email" value="${esc(target?.email || '')}" placeholder="Ex: carlos@rufato.com.br" />
+        </label>
+
+        ${canChooseRole && !isEdit ? `
+        <label class="field">
+          <span>Nível de Acesso</span>
+          <select class="input select" id="u-role">
+            <option value="manutentor" selected>Manutentor (Acesso simplificado às suas OS)</option>
+            <option value="admin">Admin (Gestão de Manutenção e Manutentores)</option>
+            <option value="superadmin">Super Admin (Acesso total)</option>
+          </select>
+        </label>` : ''}
+
+        <label class="field">
+          <span>Equipe</span>
+          <select class="input select" id="u-team">
+            <option value="">Nenhuma equipe</option>
+            ${(state.boot?.teams || []).map((t) => `<option value="${t.id}" ${target?.team_id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Especialidade</span>
+          <input class="input" id="u-spec" value="${esc(target?.specialty || '')}" placeholder="Ex: Mecânico, Eletricista" />
+        </label>
+
+        <label class="field">
+          <span>${isEdit ? 'Nova Senha (deixe em branco para manter)' : 'Senha de Acesso *'}</span>
+          <input class="input" id="u-pass" type="password" ${isEdit ? '' : 'required'} minlength="4" placeholder="${isEdit ? 'Opcional' : 'Mínimo 4 caracteres'}" />
+        </label>
+
+        <div class="sheet-actions" style="margin-top:16px">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar'}</button>
+        </div>
+      </form>
+    `, {
+      onMount(el, modal) {
+        $('#form-user-edit', el).onsubmit = async (e) => {
+          e.preventDefault();
+          const name = $('#u-name', el).value.trim();
+          const username = $('#u-username', el).value.trim();
+          const email = $('#u-email', el).value.trim();
+          const teamId = $('#u-team', el).value || null;
+          const specialty = $('#u-spec', el).value.trim() || null;
+          const password = $('#u-pass', el).value.trim();
+          const role = $('#u-role', el)?.value || (target?.role || 'manutentor');
+
+          try {
+            if (isEdit) {
+              await updateUser(target.id, { name, email, teamId, specialty, password: password || undefined });
+              toast('Usuário atualizado com sucesso!');
+            } else {
+              await createUser({ name, username, email, role, teamId, specialty, password });
+              toast('Novo colaborador cadastrado com sucesso!');
+            }
+            modal.close();
+            loadBoot();
+            load();
+          } catch (err) {
+            toast(err.message || 'Erro ao salvar usuário', 'alarm');
+          }
+        };
+      }
+    });
+  }
+
+  load();
+}
+
+// ======================================================================
+// MODAL DE ALTERAÇÃO DE SENHA
+// ======================================================================
+export function changePasswordModal() {
+  sheet(`
+    <h2>Alterar Minha Senha</h2>
+    <p class="muted small">Digite sua senha atual e a nova senha desejada.</p>
+    <form id="form-chpass" style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+      <label class="field">
+        <span>Senha Atual</span>
+        <input class="input" id="ch-curr" type="password" required placeholder="Sua senha atual" />
+      </label>
+      <label class="field">
+        <span>Nova Senha</span>
+        <input class="input" id="ch-new" type="password" required minlength="4" placeholder="Mínimo 4 caracteres" />
+      </label>
+      <div class="sheet-actions" style="margin-top:14px">
+        <button type="button" class="btn" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Alterar Senha</button>
+      </div>
+    </form>
+  `, {
+    onMount(el, modal) {
+      $('#form-chpass', el).onsubmit = async (e) => {
+        e.preventDefault();
+        const curr = $('#ch-curr', el).value;
+        const npass = $('#ch-new', el).value;
+        try {
+          await changePassword(curr, npass);
+          modal.close();
+          toast('Senha alterada com sucesso!');
+        } catch (err) {
+          toast(err.message || 'Erro ao alterar senha', 'alarm');
+        }
+      };
+    }
+  });
+}
