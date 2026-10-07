@@ -72,8 +72,19 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('solicitante','manutentor','gerente')),
-    team_id TEXT REFERENCES teams(id), specialty TEXT, active INTEGER NOT NULL DEFAULT 1
+    email TEXT,
+    username TEXT UNIQUE,
+    password_hash TEXT,
+    salt TEXT,
+    role TEXT NOT NULL CHECK (role IN ('superadmin','admin','manutentor','solicitante','gerente')),
+    team_id TEXT REFERENCES teams(id), specialty TEXT, active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS machines (
     id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
