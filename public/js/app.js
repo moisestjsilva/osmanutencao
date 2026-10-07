@@ -1,9 +1,10 @@
 // Orquestrador do aplicativo Nova OS
-// Roteador por hash, controle de usuário de teste, atualização de relógios em tempo real
-import { state, init, on, setUser, sync, pendingOps, failedOps, resetNotifTracking } from './store.js';
-import { $, $$, sheet, avatar, esc, icon, toast, clock, ROLE } from './ui.js';
+// Roteador por hash, controle de autenticação e permissões, atualização de relógios em tempo real
+import { state, init, on, sync, pendingOps, failedOps, resetNotifTracking, logout } from './store.js';
+import { $, $$, sheet, avatar, esc, icon, toast, clock, ROLE, roleBadge } from './ui.js';
 import {
-  listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView
+  listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView,
+  loginView, usersView, changePasswordModal
 } from './views.js';
 
 let currentCleanup = null;
@@ -28,23 +29,40 @@ function router() {
   const root = $('#view');
   window.scrollTo(0, 0);
 
-  // Atualiza destaque na barra inferior
-  updateNav(path);
-
-  // Verificação de usuário antes de telas restritas
-  if (!state.user && state.boot) {
-    promptUserSelection(true);
+  // Se não autenticado, força login
+  if (!state.user) {
+    renderNav();
+    updateHeader();
+    currentCleanup = loginView(root);
     return;
   }
 
+  // Se já autenticado e navega para /login, redireciona para home
+  if (path === '/login') {
+    location.hash = '#/';
+    return;
+  }
+
+  // Renderiza a navegação de acordo com o papel do usuário
+  renderNav();
+  updateNav(path);
+  updateHeader();
+
   // Rotas
   if (path === '/' || path === '') {
-    currentCleanup = listView(root);
+    currentCleanup = listView(root, params);
   } else if (path.startsWith('/os/')) {
     const id = path.slice(4);
     currentCleanup = detailView(root, { id });
   } else if (path === '/nova') {
     currentCleanup = newView(root, params);
+  } else if (path === '/usuarios') {
+    if (state.user.role === 'manutentor') {
+      toast('Acesso restrito a administradores', 'warn');
+      location.hash = '#/';
+    } else {
+      currentCleanup = usersView(root);
+    }
   } else if (path === '/preventivas') {
     currentCleanup = plansView(root);
   } else if (path === '/indicadores') {
@@ -64,56 +82,148 @@ function router() {
   }
 }
 
+// ======================================================================
+// NAVEGAÇÃO ADAPTATIVA POR NÍVEL DE ACESSO
+// ======================================================================
+function renderNav() {
+  const nav = $('.bottom-nav');
+  if (!nav) return;
+
+  if (!state.user) {
+    nav.classList.add('hidden');
+    nav.style.display = 'none';
+    return;
+  }
+
+  nav.classList.remove('hidden');
+  nav.style.display = '';
+
+  const role = state.user.role;
+  let html = '';
+
+  if (role === 'manutentor') {
+    // Manutentor: visual focado nas suas OS e nas disponíveis para assumir
+    html = `
+      <button class="nav-item" data-nav="#/" id="nav-os">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        Minhas OS
+      </button>
+      <button class="nav-item" data-nav="#/?scope=disponiveis" id="nav-disp">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>
+        Disponíveis
+      </button>
+      <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="nav-item" data-nav="#/indicadores" id="nav-kpi">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+        Indicadores
+      </button>
+      <button class="nav-item" data-nav="#/mais" id="nav-more">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+        Mais
+      </button>
+    `;
+  } else {
+    // Admin e Super Admin: visão gerencial com gestão de usuários/manutentores
+    html = `
+      <button class="nav-item" data-nav="#/" id="nav-os">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        Ordens
+      </button>
+      <button class="nav-item" data-nav="#/usuarios" id="nav-users">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        ${role === 'superadmin' ? 'Usuários' : 'Manutentores'}
+      </button>
+      <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="nav-item" data-nav="#/indicadores" id="nav-kpi">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+        Indicadores
+      </button>
+      <button class="nav-item" data-nav="#/mais" id="nav-more">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+        Mais
+      </button>
+    `;
+  }
+  nav.innerHTML = html;
+
+  $$('.nav-item, .nav-fab', nav).forEach((btn) => {
+    btn.onclick = () => {
+      const target = btn.dataset.nav;
+      if (target) location.hash = target;
+    };
+  });
+}
+
 function updateNav(path) {
+  const fullHash = location.hash.slice(1) || '/';
   $$('.nav-item').forEach((item) => {
-    const navPath = item.dataset.nav?.replace('#', '');
-    const isActive = navPath === '/'
-      ? (path === '/' || path.startsWith('/os/'))
-      : (navPath && path.startsWith(navPath));
+    const navNav = item.dataset.nav?.replace('#', '') || '';
+    let isActive = false;
+    if (navNav === '/' || navNav === '') {
+      isActive = (fullHash === '/' || fullHash.startsWith('/os/'));
+    } else if (navNav.includes('?')) {
+      isActive = fullHash === navNav;
+    } else {
+      isActive = fullHash.startsWith(navNav);
+    }
     item.classList.toggle('active', !!isActive);
   });
 }
 
 // ======================================================================
-// SELETOR DE USUÁRIO DE TESTE
+// MODAL / SHEET DO PERFIL DO USUÁRIO
 // ======================================================================
-function promptUserSelection(forced = false) {
-  if (!state.boot) return;
-  const users = state.boot.users;
-
+function showUserProfile() {
+  if (!state.user) {
+    location.hash = '#/login';
+    return;
+  }
+  const u = state.user;
   sheet(`
-    <h2>Selecionar usuário de teste</h2>
-    <p class="muted small">${forced ? 'Escolha um perfil para começar a testar o aplicativo.' : 'Alterne entre perfis para testar permissões e fluxos distintos.'}</p>
-    <div style="margin-top:14px; max-height:60vh; overflow-y:auto">
-      ${users.map((u) => `
-        <button class="user-option ${state.user?.id === u.id ? 'active' : ''}" data-uid="${u.id}" id="pick-user-${u.id}">
-          ${avatar(u.name)}
-          <span class="grow">
-            <strong>${esc(u.name)}</strong>
-            <div class="muted xs">${esc(u.specialty || '')} ${u.specialty ? '•' : ''} <span class="role-tag role-${u.role}">${ROLE[u.role] || u.role}</span></div>
-          </span>
-          ${state.user?.id === u.id ? icon('check', 18) : ''}
-        </button>`).join('')}
+    <div style="text-align:center;padding:12px 0 8px">
+      <div style="display:inline-block;margin-bottom:10px">${avatar(u.name, 64)}</div>
+      <h2 style="margin:0 0 4px;font-size:20px">${esc(u.name)}</h2>
+      <div class="muted small" style="margin-bottom:8px">${esc(u.email || u.username || '')}</div>
+      <div style="margin-bottom:6px">${roleBadge(u.role)}</div>
+      ${u.specialty ? `<div class="muted xs">${esc(u.specialty)}</div>` : ''}
     </div>
-    <div class="sheet-actions" style="margin-top:14px">
-      ${forced ? '' : '<button class="btn" data-close>Cancelar</button>'}
+
+    <div class="profile-actions" style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn" id="btn-prof-chpass" style="justify-content:flex-start">
+        ${icon('key', 18)} <span class="grow" style="text-align:left">Alterar Minha Senha</span>
+      </button>
+
+      ${(u.role === 'admin' || u.role === 'superadmin') ? `
+      <button class="btn" id="btn-prof-users" style="justify-content:flex-start">
+        ${icon('userPlus', 18)} <span class="grow" style="text-align:left">Gerenciar Manutentores e Usuários</span>
+      </button>
+      ` : ''}
+
+      <button class="btn danger" id="btn-prof-logout" style="justify-content:flex-start;margin-top:8px">
+        ${icon('logOut', 18)} <span class="grow" style="text-align:left">Sair da Conta (Logout)</span>
+      </button>
     </div>
   `, {
-    dismissable: !forced,
     onMount(el, modal) {
-      el.querySelectorAll('[data-uid]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const u = users.find((x) => x.id === btn.dataset.uid);
-          if (u) {
-            setUser(u);
-            resetNotifTracking();
-            modal.close();
-            toast(`Perfil ativo: ${u.name}`);
-            updateHeader();
-            router();
-            sync();
-          }
-        });
+      $('#btn-prof-chpass', el)?.addEventListener('click', () => {
+        modal.close();
+        changePasswordModal();
+      });
+      $('#btn-prof-users', el)?.addEventListener('click', () => {
+        modal.close();
+        location.hash = '#/usuarios';
+      });
+      $('#btn-prof-logout', el)?.addEventListener('click', async () => {
+        modal.close();
+        await logout();
+        toast('Você saiu do sistema');
+        renderNav();
+        updateHeader();
+        router();
       });
     }
   });
@@ -130,7 +240,6 @@ export function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('nova-os:theme', theme);
   updateThemeUI();
-  // Atualiza meta theme-color para a barra do navegador mobile
   const meta = $('meta[name="theme-color"]');
   if (meta) {
     meta.setAttribute('content', theme === 'dark' ? '#0b0f17' : '#ffffff');
@@ -158,49 +267,60 @@ function updateThemeUI() {
 // ======================================================================
 function updateHeader() {
   updateThemeUI();
-  // Usuário
   const av = $('#user-avatar');
+  const syncPill = $('#sync-pill');
+  const notifBtn = $('#btn-notifs');
+
   if (state.user) {
     av.textContent = state.user.name.slice(0, 2).toUpperCase();
     av.title = `${state.user.name} (${ROLE[state.user.role] || state.user.role})`;
+    if (syncPill) syncPill.style.display = '';
+    if (notifBtn) notifBtn.style.display = '';
   } else {
-    av.textContent = '?';
+    av.innerHTML = icon('user', 18);
+    av.title = 'Fazer Login';
+    if (syncPill) syncPill.style.display = 'none';
+    if (notifBtn) notifBtn.style.display = 'none';
   }
 
   // Pílula de sincronização
-  const pill = $('#sync-pill');
-  const label = $('#sync-label');
-  const pend = pendingOps().length;
-  const fail = failedOps().length;
+  if (state.user && syncPill) {
+    const label = $('#sync-label');
+    const pend = pendingOps().length;
+    const fail = failedOps().length;
 
-  pill.classList.remove('offline', 'pending', 'syncing');
-  if (!state.online) {
-    pill.classList.add('offline');
-    label.textContent = pend ? `Offline (${pend})` : 'Offline';
-  } else if (state.syncing) {
-    pill.classList.add('syncing');
-    label.textContent = 'Enviando…';
-  } else if (fail > 0) {
-    pill.classList.add('offline');
-    label.textContent = `Falha (${fail})`;
-  } else if (pend > 0) {
-    pill.classList.add('pending');
-    label.textContent = `Pendente (${pend})`;
-  } else {
-    label.textContent = 'Online';
-  }
+    syncPill.classList.remove('offline', 'pending', 'syncing');
+    if (!state.online) {
+      syncPill.classList.add('offline');
+      if (label) label.textContent = pend ? `Offline (${pend})` : 'Offline';
+    } else if (state.syncing) {
+      syncPill.classList.add('syncing');
+      if (label) label.textContent = 'Enviando…';
+    } else if (fail > 0) {
+      syncPill.classList.add('offline');
+      if (label) label.textContent = `Falha (${fail})`;
+    } else if (pend > 0) {
+      syncPill.classList.add('pending');
+      if (label) label.textContent = `Pendente (${pend})`;
+    } else {
+      if (label) label.textContent = 'Online';
+    }
 
-  // Notificações
-  const nBadge = $('#notif-count');
-  if (state.unread > 0) {
-    nBadge.textContent = state.unread > 99 ? '99+' : state.unread;
-    nBadge.classList.remove('hidden');
-  } else {
-    nBadge.classList.add('hidden');
+    // Notificações
+    const nBadge = $('#notif-count');
+    if (nBadge) {
+      if (state.unread > 0) {
+        nBadge.textContent = state.unread > 99 ? '99+' : state.unread;
+        nBadge.classList.remove('hidden');
+      } else {
+        nBadge.classList.add('hidden');
+      }
+    }
   }
 
   // Banner offline
-  $('#offline-banner').classList.toggle('hidden', state.online);
+  const offBanner = $('#offline-banner');
+  if (offBanner) offBanner.classList.toggle('hidden', state.online);
 }
 
 // Atualiza relógios em tempo real a cada segundo
@@ -235,28 +355,22 @@ async function start() {
   window.addEventListener('hashchange', router);
 
   // Ações do cabeçalho
-  $('#sync-pill').addEventListener('click', () => { location.hash = '#/sync'; });
-  $('#btn-theme').addEventListener('click', toggleTheme);
-  $('#btn-notifs').addEventListener('click', () => { location.hash = '#/avisos'; });
-  $('#btn-user').addEventListener('click', () => promptUserSelection(false));
-  window.addEventListener('pick-user', () => promptUserSelection(false));
-
-  // Navegação inferior
-  $$('.nav-item, .nav-fab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.nav;
-      if (target) location.hash = target;
-    });
-  });
+  $('#sync-pill')?.addEventListener('click', () => { location.hash = '#/sync'; });
+  $('#btn-theme')?.addEventListener('click', toggleTheme);
+  $('#btn-notifs')?.addEventListener('click', () => { location.hash = '#/avisos'; });
+  $('#btn-user')?.addEventListener('click', showUserProfile);
 
   // Reações do Store
   on((ev) => {
     updateHeader();
+    if (ev === 'user') {
+      renderNav();
+      updateHeader();
+    }
     if (typeof ev === 'object' && ev?.type === 'new-notifs') {
       for (const n of ev.items) {
         const isStop = /PARADA/.test(n.title);
         toast(`${n.title}: ${n.body}`, isStop ? 'alarm' : 'warn', 5000);
-        // Notificação nativa se permitida
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(n.title, { body: n.body, icon: '/icons/icon.svg' });
         }
@@ -264,27 +378,22 @@ async function start() {
     }
   });
 
-  // Inicializa o banco de dados cliente e carrega dados
+  // Inicializa o banco de dados cliente e carrega sessão salva
   await init();
 
-  // Se não há usuário selecionado, define um padrão (Carlos Mendes - Manutentor) ou pergunta
-  if (!state.user && state.boot?.users?.length) {
-    const defaultUser = state.boot.users.find((u) => u.id === 'u-carlos') || state.boot.users[0];
-    setUser(defaultUser);
-  }
-
   updateHeader();
+  renderNav();
   router();
   startClocks();
   registerSW();
 
-  // Sincronização periódica a cada 30s se houver conexão
+  // Sincronização periódica a cada 30s se houver conexão e usuário logado
   setInterval(() => {
-    if (state.online && !state.syncing) sync();
+    if (state.user && state.online && !state.syncing) sync();
   }, 30000);
 
-  // Primeira sincronização
-  if (state.online) sync();
+  // Primeira sincronização se logado
+  if (state.user && state.online) sync();
 }
 
 window.addEventListener('DOMContentLoaded', start);
