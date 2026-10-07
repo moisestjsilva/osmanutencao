@@ -106,7 +106,7 @@ async function test() {
   const broadcastResult = broadcastRes.results?.[0];
   console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastResult?.status === 'ok' ? `SUCESSO (OS #${broadcastResult.number})` : 'ERRO: ' + JSON.stringify(broadcastResult));
 
-  // 7. Check Notifications on Technician Account
+  // 7. Check Notifications on Technician Account via /api/notifications
   const techLoginRes = await fetch(base + '/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -114,13 +114,13 @@ async function test() {
   });
   const techLoginData = await techLoginRes.json();
   const techHeaders = { 'Authorization': 'Bearer ' + techLoginData.token };
-  const techBootRes = await fetch(base + '/api/bootstrap', { headers: techHeaders });
-  const techBootData = await techBootRes.json();
-  const techNotifs = techBootData.notifications || [];
+  const techNotifRes = await fetch(base + '/api/notifications', { headers: techHeaders });
+  const techNotifData = await techNotifRes.json();
+  const techNotifs = techNotifData.notifications || [];
   const directNotif = techNotifs.find(n => n.kind === 'atribuicao');
   const broadNotif = techNotifs.find(n => n.kind === 'nova_os_fabrica');
-  console.log('✅ 7. Notificação Direcionada Recebida pelo Técnico:', directNotif?.title);
-  console.log('✅ 8. Notificação Broadcast Recebida pelo Técnico:', broadNotif?.title);
+  console.log('✅ 7. Notificação Direcionada Recebida pelo Técnico:', directNotif ? `"${directNotif.title}"` : 'N/A');
+  console.log('✅ 8. Notificação Broadcast Recebida pelo Técnico:', broadNotif ? `"${broadNotif.title}"` : 'N/A');
 
   // 8. Delete created test machine to leave DB clean
   await fetch(base + '/api/machines/' + createdMac.id, { method: 'DELETE', headers });
