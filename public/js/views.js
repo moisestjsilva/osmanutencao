@@ -850,12 +850,48 @@ export function plansView(root) {
       <div class="row"><label class="field grow"><span>Primeiro vencimento *</span><input class="input" type="date" id="p-a" value="${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}" /></label>
         <label class="field" style="width:120px;margin-top:0"><span>Antecedência</span><input class="input" type="number" id="p-l" min="0" max="30" value="2" /></label></div>
       <label class="field"><span>Responsável</span><select class="input" id="p-r"><option value="">Todos os manutentores</option>${techs.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select></label>
-      <label class="field"><span>Checklist (um item por linha)</span><textarea class="input" id="p-c" rows="4" placeholder="Verificar nível de óleo&#10;Reapertar parafusos"></textarea></label>
+      <label class="field">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <span>Checklist da Preventiva (Editável)</span>
+          <span class="muted xs" id="p-chk-hint" style="color:var(--accent)"></span>
+        </div>
+        <textarea class="input" id="p-c" rows="4" placeholder="Verificar nível de óleo&#10;Reapertar parafusos"></textarea>
+        <span class="muted xs" style="margin-top:2px;display:block">
+          Preenchido automaticamente da ficha padrão da máquina. Você pode editar, adicionar ou excluir itens para este plano.
+        </span>
+      </label>
       <div class="error-box hidden" id="p-err" style="margin-top:10px"></div>
       <div class="sheet-actions"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="p-ok">Criar plano</button></div>`, {
       onMount(el, sh) {
         let freq = 30;
         el.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => { freq = +b.dataset.d; el.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('active', x === b)); }));
+
+        const machSelect = el.querySelector('#p-m');
+        const chkArea = el.querySelector('#p-c');
+        const chkHint = el.querySelector('#p-chk-hint');
+
+        function loadChecklistFromMachine(mId, force = false) {
+          const m = boot.machines.find((x) => x.id === mId);
+          if (!m) return;
+          let items = [];
+          try {
+            items = m.default_checklist_json ? JSON.parse(m.default_checklist_json) : [];
+            if (!Array.isArray(items)) items = [];
+          } catch {}
+          const text = items.map((i) => (typeof i === 'string' ? i : i.text || '')).filter(Boolean).join('\n');
+          if (force || !chkArea.value.trim()) {
+            chkArea.value = text;
+          }
+          if (chkHint) {
+            chkHint.textContent = items.length ? `✓ ${items.length} itens da ficha padrão` : 'Sem checklist padrão na máquina';
+          }
+        }
+
+        if (machSelect) {
+          loadChecklistFromMachine(machSelect.value, true);
+          machSelect.onchange = () => loadChecklistFromMachine(machSelect.value, true);
+        }
+
         el.querySelector('#p-ok').onclick = async () => {
           try {
             await api('/api/plans', { method: 'POST', body: {
