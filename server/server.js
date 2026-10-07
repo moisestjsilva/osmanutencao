@@ -31,7 +31,9 @@ app.use(express.json({ limit: '25mb' }));
 
 // ---------- Estáticos ----------
 app.use(express.static(path.join(ROOT, 'public'), { extensions: ['html'], setHeaders: (res, p) => {
-  if (p.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
+  if (p.endsWith('.js') || p.endsWith('.css') || p.endsWith('.html') || p.endsWith('sw.js')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
 }}));
 app.get('/vendor/jsQR.js', (req, res) => res.sendFile(path.join(ROOT, 'node_modules', 'jsqr', 'dist', 'jsQR.js')));
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
