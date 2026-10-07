@@ -627,12 +627,16 @@ export function newView(root, params) {
         render();
         const i = $('#m-search', root); i.focus(); i.setSelectionRange(pos, pos);
       };
-      $$('[data-machine]', root).forEach((b) => (b.onclick = () => { machine = boot.machines.find((m) => m.id === b.dataset.machine); error = ''; render(); }));
+      $$('[data-machine]', root).forEach((b) => (b.onclick = () => { machine = boot.machines.find((m) => m.id === b.dataset.machine); error = ''; customChecklistText = null; render(); }));
       return;
     }
 
     const techs = boot.users.filter((u) => ['manutentor', 'gerente'].includes(u.role));
     const openOnMachine = workOrders().filter((w) => w.machine?.id === machine.id && !isClosed(w));
+    const defaultChecklistString = getMachineDefaultChecklist(machine);
+    const activeChecklistValue = customChecklistText !== null ? customChecklistText : defaultChecklistString;
+    const defaultItemCount = defaultChecklistString ? defaultChecklistString.split('\n').filter(Boolean).length : 0;
+
     root.innerHTML = `
       <div class="page-head"><div><h1>Abrir OS</h1><p>Solicitante: ${esc(me().name)}</p></div></div>
       <div class="machine-selected">
@@ -649,13 +653,28 @@ export function newView(root, params) {
         </button>
 
         <label class="field" style="margin-top:14px"><span>O que está acontecendo? *</span>
-          <textarea class="input" id="desc" rows="3" placeholder="Ex.: prensa não desce, barulho no motor, vazamento de óleo…"></textarea></label>
+          <textarea class="input" id="desc" rows="3" placeholder="${type === 'preventiva' ? 'Ex.: Preventiva periódica programada, revisão dos componentes principais…' : 'Ex.: prensa não desce, barulho no motor, vazamento de óleo…'}"></textarea></label>
 
         <div class="field"><span>Prioridade</span>
           <div class="segmented priority" id="seg-prio">${Object.entries(PRIORITY).map(([k, v]) => `<button type="button" data-value="${k}" class="${priority === k ? 'active' : ''}">${v}</button>`).join('')}</div></div>
 
         <div class="field"><span>Tipo</span>
           <div class="segmented" id="seg-type"><button type="button" data-value="corretiva" class="${type === 'corretiva' ? 'active' : ''}">Corretiva</button><button type="button" data-value="preventiva" class="${type === 'preventiva' ? 'active' : ''}">Preventiva/Inspeção</button></div></div>
+
+        ${type === 'preventiva' ? `
+          <div class="field" style="margin-top:12px;background:var(--surface-2);padding:12px;border-radius:var(--rad);border:1px solid var(--border)">
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-weight:700;color:var(--text);font-size:13.5px">📋 Checklist da Preventiva (Editável)</span>
+              <span class="badge" style="background:var(--accent-soft);color:var(--accent);font-size:11px">
+                ${defaultItemCount > 0 ? `✓ ${defaultItemCount} itens da ficha padrão` : 'Personalizado'}
+              </span>
+            </div>
+            <textarea class="input" id="prev-checklist" rows="4" placeholder="Verificar nível de óleo&#10;Inspecionar correias e polias&#10;Limpeza geral">${esc(activeChecklistValue)}</textarea>
+            <span class="muted xs" style="display:block;margin-top:4px">
+              Itens que o técnico deverá inspecionar e marcar no fechamento desta OS. Você pode editar, adicionar ou remover itens livremente para esta preventiva.
+            </span>
+          </div>
+        ` : ''}
 
         <div class="field"><span>Fotos (opcional)</span>
           <div class="photos">
@@ -695,7 +714,15 @@ export function newView(root, params) {
     const desc = $('#desc', root);
     desc.value = sessionStorage.getItem('nova-os:draft') || '';
     desc.oninput = () => sessionStorage.setItem('nova-os:draft', desc.value);
-    $('#btn-change', root).onclick = () => { machine = null; render(); };
+
+    const prevChkArea = $('#prev-checklist', root);
+    if (prevChkArea) {
+      prevChkArea.oninput = () => {
+        customChecklistText = prevChkArea.value;
+      };
+    }
+
+    $('#btn-change', root).onclick = () => { machine = null; customChecklistText = null; render(); };
     $('#toggle-stop', root).onclick = () => { stopped = !stopped; if (stopped && PRANK[priority] > 1) priority = 'alta'; render(); };
     const seg = (sel, set) => $$(`${sel} button`, root).forEach((b) => (b.onclick = () => { set(b.dataset.value); render(); }));
     seg('#seg-prio', (v) => (priority = v));
@@ -718,10 +745,19 @@ export function newView(root, params) {
       const recipients = mode === 'equipe' ? [...selTeams] : mode === 'selecionados' ? [...selUsers] : [];
       if (mode !== 'todos' && !recipients.length) return err(mode === 'equipe' ? 'Escolha ao menos uma equipe' : 'Escolha ao menos um manutentor');
       const responsibleId = $('#new-responsible', root)?.value || null;
+
+      const checklistItems = type === 'preventiva' && prevChkArea
+        ? prevChkArea.value.split('\n').map((s) => s.trim()).filter(Boolean)
+        : undefined;
+
       $('#btn-submit', root).disabled = true;
       const id = uuid();
       try {
-        await enqueue('create_wo', id, { id, machineId: machine.id, description, type, priority, machineStopped: stopped, recipientsMode: mode, recipients, responsibleId });
+        await enqueue('create_wo', id, {
+          id, machineId: machine.id, description, type, priority,
+          machineStopped: stopped, recipientsMode: mode, recipients, responsibleId,
+          checklist: checklistItems
+        });
         for (const p of photos) await enqueue('attach', id, { id: uuid(), dataUrl: p });
       } catch (ex) {
         $('#btn-submit', root).disabled = false;
