@@ -270,6 +270,12 @@ main#view {
   max-width: 860px; margin: 0 auto;
   animation: viewIn .25s var(--ease);
 }
+@media (min-width: 900px) {
+  main#view {
+    max-width: 1560px;
+    padding: 20px 24px calc(var(--nav-h) + var(--safe-b) + 32px);
+  }
+}
 @keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ---------- Bottom Navigation ---------- */
