@@ -186,6 +186,9 @@ function migrate(db) {
   if (!machCols.includes('image_url')) {
     db.exec(`ALTER TABLE machines ADD COLUMN image_url TEXT`);
   }
+  if (!machCols.includes('default_checklist_json')) {
+    db.exec(`ALTER TABLE machines ADD COLUMN default_checklist_json TEXT NOT NULL DEFAULT '[]'`);
+  }
 
   // Migração de colunas adicionais para usuários (foto/avatar)
   const userCols = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
