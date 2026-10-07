@@ -141,12 +141,146 @@ function serializeWo(w, full = false) {
 // ---------- API ----------
 app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
+// ---------- Autenticação ----------
+app.post('/api/auth/login', (req, res) => {
+  const { login, password } = req.body || {};
+  if (!login || !password) {
+    return res.status(400).json({ error: 'Informe o usuário/e-mail e a senha' });
+  }
+
+  const cleanLogin = String(login).trim().toLowerCase();
+  const user = db.prepare(`
+    SELECT * FROM users
+    WHERE (LOWER(email) = ? OR LOWER(username) = ?) AND active = 1
+  `).get(cleanLogin, cleanLogin);
+
+  if (!user || !user.password_hash || !verifyPassword(password, user.password_hash, user.salt)) {
+    return res.status(401).json({ error: 'Usuário ou senha incorretos' });
+  }
+
+  const { token, expiresAt } = createSession(db, user.id);
+  res.json({
+    ok: true,
+    token,
+    expiresAt,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      teamId: user.team_id,
+      specialty: user.specialty,
+    }
+  });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
+  res.json({ user: req.user });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  if (req.token) deleteSession(db, req.token);
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/change-password', requireUser, (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 4) {
+    return res.status(400).json({ error: 'A nova senha deve ter pelo menos 4 caracteres' });
+  }
+
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!u || !verifyPassword(currentPassword, u.password_hash, u.salt)) {
+    return res.status(400).json({ error: 'Senha atual incorreta' });
+  }
+
+  const { hash, salt } = hashPassword(newPassword);
+  db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, req.user.id);
+  res.json({ ok: true, message: 'Senha atualizada com sucesso' });
+});
+
+// ---------- Gestão de Usuários (Admin e Super Admin) ----------
+app.get('/api/users', requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.active, u.created_at,
+           t.name as team_name
+    FROM users u
+    LEFT JOIN teams t ON t.id = u.team_id
+    ORDER BY CASE u.role WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 WHEN 'manutentor' THEN 3 ELSE 4 END, u.name
+  `).all();
+  res.json({ users: rows });
+});
+
+app.post('/api/users', requireAdmin, (req, res) => {
+  const { name, email, username, password, role = 'manutentor', teamId, specialty } = req.body || {};
+  if (!name || !username || !password) {
+    return res.status(400).json({ error: 'Preencha o nome, nome de usuário e senha' });
+  }
+
+  // O Admin comum só pode cadastrar manutentores
+  if (req.user.role === 'admin' && (role === 'admin' || role === 'superadmin')) {
+    return res.status(403).json({ error: 'Administradores só têm permissão para cadastrar manutentores' });
+  }
+
+  const cleanUser = String(username).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  const cleanEmail = email ? String(email).trim().toLowerCase() : `${cleanUser}@rufato.com.br`;
+
+  const exists = db.prepare('SELECT id FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?').get(cleanUser, cleanEmail);
+  if (exists) {
+    return res.status(400).json({ error: 'Nome de usuário ou e-mail já cadastrado' });
+  }
+
+  const id = 'u-' + (role === 'manutentor' ? 'tech-' : '') + cleanUser + '-' + Date.now().toString(36).slice(-4);
+  const { hash, salt } = hashPassword(password);
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO users (id, name, email, username, role, team_id, specialty, password_hash, salt, active, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, specialty || null, hash, salt, now);
+
+  res.status(201).json({
+    ok: true,
+    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, specialty }
+  });
+});
+
+app.put('/api/users/:id', requireAdmin, (req, res) => {
+  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  // Regra: Admin comum não pode alterar Super Admin nem outros Admins
+  if (req.user.role === 'admin' && (target.role === 'superadmin' || target.role === 'admin')) {
+    if (target.id !== req.user.id) {
+      return res.status(403).json({ error: 'Você só pode gerenciar manutentores' });
+    }
+  }
+
+  const { name, email, username, password, teamId, specialty, active } = req.body || {};
+  if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name.trim(), target.id);
+  if (email) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.trim().toLowerCase(), target.id);
+  if (teamId !== undefined) db.prepare('UPDATE users SET team_id = ? WHERE id = ?').run(teamId || null, target.id);
+  if (specialty !== undefined) db.prepare('UPDATE users SET specialty = ? WHERE id = ?').run(specialty || null, target.id);
+  if (active !== undefined) db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, target.id);
+  if (password && String(password).trim().length >= 4) {
+    const { hash, salt } = hashPassword(String(password).trim());
+    db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, target.id);
+  }
+
+  const updated = db.prepare('SELECT id, name, email, username, role, team_id, specialty, active FROM users WHERE id = ?').get(target.id);
+  res.json({ ok: true, user: updated });
+});
+
+// ---------- Bootstrap e Dados Gerais ----------
 app.get('/api/bootstrap', (req, res) => {
   res.json({
     serverTime: new Date().toISOString(),
+    currentUser: req.user || null,
     sectors: db.prepare('SELECT * FROM sectors ORDER BY name').all(),
     teams: db.prepare('SELECT * FROM teams ORDER BY name').all(),
-    users: db.prepare('SELECT id,name,role,team_id,specialty FROM users WHERE active=1 ORDER BY role, name').all(),
+    users: db.prepare('SELECT id,name,username,email,role,team_id,specialty FROM users WHERE active=1 ORDER BY role, name').all(),
     machines: db.prepare('SELECT * FROM machines WHERE active=1 ORDER BY code').all(),
     settings: { defaultRecipientsMode: getSetting(db, 'default_recipients_mode', 'todos') },
   });
@@ -154,9 +288,36 @@ app.get('/api/bootstrap', (req, res) => {
 
 app.get('/api/workorders', (req, res) => {
   const since = new Date(Date.now() - Number(req.query.days || 30) * 86400000).toISOString();
-  const rows = db.prepare(`SELECT * FROM work_orders WHERE status NOT IN ('Concluída','Cancelada') OR closed_at >= ? OR created_at >= ?
-                           ORDER BY machine_stopped DESC, created_at DESC`).all(since, since);
-  res.json({ serverTime: new Date().toISOString(), workOrders: rows.map((w) => serializeWo(w)) });
+  const isTech = req.user?.role === 'manutentor';
+  const scope = req.query.scope; // 'minhas', 'disponiveis', 'todas'
+
+  let query = `
+    SELECT * FROM work_orders
+    WHERE (status NOT IN ('Concluída','Cancelada') OR closed_at >= ? OR created_at >= ?)
+  `;
+  const params = [since, since];
+
+  if (isTech && scope === 'disponiveis') {
+    // Abertas sem responsável atribuído para o manutentor assumir
+    query += ` AND status = 'Aberta' AND responsible_id IS NULL`;
+  } else if (isTech && scope !== 'todas') {
+    // Padrão do manutentor: somente as OS vinculadas a ele (responsável ou participante)
+    query += ` AND (responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
+    params.push(req.user.id, req.user.id);
+  } else if (req.query.tech) {
+    // Filtro por técnico específico (para admin ou superadmin)
+    query += ` AND (responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
+    params.push(req.query.tech, req.query.tech);
+  }
+
+  query += ` ORDER BY machine_stopped DESC, created_at DESC`;
+
+  const rows = db.prepare(query).all(...params);
+  res.json({
+    serverTime: new Date().toISOString(),
+    userRole: req.user?.role || 'anon',
+    workOrders: rows.map((w) => serializeWo(w))
+  });
 });
 
 app.get('/api/workorders/:id', (req, res) => {
