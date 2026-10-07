@@ -149,6 +149,14 @@ export async function changePassword(currentPassword, newPassword) {
   });
 }
 
+export async function uploadImage(dataUrl) {
+  const r = await api('/api/upload', {
+    method: 'POST',
+    body: { dataUrl }
+  });
+  return r.url;
+}
+
 // ---------------- Gestão de Usuários (Admin / Super Admin) ----------------
 export async function fetchUsers() {
   const r = await api('/api/users');
@@ -171,6 +179,58 @@ export async function updateUser(id, userData) {
 
 export async function deleteUser(id) {
   return await api(`/api/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+}
+
+// ---------------- Gestão de Setores (Admin / Super Admin) ----------------
+export async function fetchSectors() {
+  const r = await api('/api/sectors');
+  return r.sectors || [];
+}
+
+export async function createSector(data) {
+  return await api('/api/sectors', {
+    method: 'POST',
+    body: data
+  });
+}
+
+export async function updateSector(id, data) {
+  return await api(`/api/sectors/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: data
+  });
+}
+
+export async function deleteSector(id) {
+  return await api(`/api/sectors/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+}
+
+// ---------------- Gestão de Máquinas (Admin / Super Admin) ----------------
+export async function fetchMachines() {
+  const r = await api('/api/machines');
+  return r.machines || [];
+}
+
+export async function createMachine(data) {
+  return await api('/api/machines', {
+    method: 'POST',
+    body: data
+  });
+}
+
+export async function updateMachine(id, data) {
+  return await api(`/api/machines/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: data
+  });
+}
+
+export async function deleteMachine(id) {
+  return await api(`/api/machines/${encodeURIComponent(id)}`, {
     method: 'DELETE'
   });
 }
