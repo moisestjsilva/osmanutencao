@@ -556,6 +556,18 @@ export function newView(root, params) {
   let error = '';
   let codeTyped = '';
   let search = '';
+  let customChecklistText = null;
+
+  function getMachineDefaultChecklist(m) {
+    if (!m) return '';
+    try {
+      const items = m.default_checklist_json ? JSON.parse(m.default_checklist_json) : [];
+      if (!Array.isArray(items)) return '';
+      return items.map((i) => (typeof i === 'string' ? i : i.text || '')).filter(Boolean).join('\n');
+    } catch {
+      return '';
+    }
+  }
 
   async function resolve(code) {
     code = extractCode(code);
