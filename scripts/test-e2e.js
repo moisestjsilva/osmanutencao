@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 async function test() {
   const base = 'http://localhost:3000';
   
@@ -49,57 +51,67 @@ async function test() {
   console.log('✅ 4. Gestão de Manutentores: Técnico encontrado:', tech.name, '(ID: ' + tech.id + ')');
 
   // 5. Create targeted OS (responsible_id specified) -> Direct Alert
+  const targetedWoId = 'wo-test-' + randomUUID();
   const syncTargeted = await fetch(base + '/api/sync', {
     method: 'POST',
     headers,
     body: JSON.stringify({
       ops: [{
-        op_id: 'op-test-targeted-' + Date.now(),
+        op_id: 'op-' + randomUUID(),
+        woId: targetedWoId,
         type: 'create_wo',
+        localTime: new Date().toISOString(),
         payload: {
+          id: targetedWoId,
           machineId: createdMac.id,
           type: 'corretiva',
           priority: 'alta',
           machineStopped: true,
           description: 'Vibração anormal no fuso CNC',
-          responsibleId: tech.id
+          responsibleId: tech.id,
+          recipientsMode: 'todos'
         }
       }]
     })
   });
   const targetedRes = await syncTargeted.json();
-  console.log('✅ 5. Alerta Direcionado (OS aberta para técnico específico):', targetedRes.ok ? 'SUCESSO' : 'ERRO');
+  console.log('✅ 5. Alerta Direcionado (OS aberta para técnico específico):', targetedRes.ok ? 'SUCESSO (Número gerado)' : 'ERRO');
 
   // 6. Create broadcast OS (responsible_id = null) -> Broadcast Alert
+  const broadcastWoId = 'wo-test-' + randomUUID();
   const syncBroadcast = await fetch(base + '/api/sync', {
     method: 'POST',
     headers,
     body: JSON.stringify({
       ops: [{
-        op_id: 'op-test-broadcast-' + Date.now(),
+        op_id: 'op-' + randomUUID(),
+        woId: broadcastWoId,
         type: 'create_wo',
+        localTime: new Date().toISOString(),
         payload: {
+          id: broadcastWoId,
           machineId: createdMac.id,
           type: 'corretiva',
           priority: 'critica',
           machineStopped: true,
-          description: 'Alimentador travado - parada geral',
-          responsibleId: null
+          description: 'Alimentador travado - parada geral da fábrica',
+          responsibleId: null,
+          recipientsMode: 'todos'
         }
       }]
     })
   });
   const broadcastRes = await syncBroadcast.json();
-  console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastRes.ok ? 'SUCESSO' : 'ERRO');
+  console.log('✅ 6. Alerta Geral (OS aberta para toda a fábrica):', broadcastRes.ok ? 'SUCESSO (Número gerado)' : 'ERRO');
 
   // 7. Check Notifications in Bootstrap
   const bootRes = await fetch(base + '/api/bootstrap', { headers });
   const bootData = await bootRes.json();
   const notifs = bootData.notifications || [];
-  const directNotifs = notifs.filter(n => n.kind === 'nova_os_direcionada');
-  const broadNotifs = notifs.filter(n => n.kind === 'nova_os_broadcast');
-  console.log('✅ 7. Notificação Direcionada Verificada:', directNotifs[0]?.title);
-  console.log('✅ 8. Notificação Broadcast Verificada:', broadNotifs[0]?.title);
+  const directNotifs = notifs.filter(n => n.kind === 'atribuicao');
+  const broadNotifs = notifs.filter(n => n.kind === 'nova_os_fabrica');
+  console.log('✅ 7. Notificação Direcionada Gerada:', directNotifs[0]?.title);
+  console.log('✅ 8. Notificação Broadcast Gerada:', broadNotifs[0]?.title);
 
   // 8. Delete created test machine to leave DB clean
   await fetch(base + '/api/machines/' + createdMac.id, { method: 'DELETE', headers });
