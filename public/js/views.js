@@ -1,10 +1,12 @@
 // Telas do app. Cada tela recebe o elemento raiz e devolve uma função de limpeza opcional.
 import {
   state, on, api, enqueue, sync, workOrders, fetchDetail, pendingOps, failedOps, retryOp, discardOp, markRead, loadBoot, kv, uuid, NetError, userName,
-  login, logout, changePassword, fetchUsers, createUser, updateUser, deleteUser
+  login, logout, changePassword, fetchUsers, createUser, updateUser, deleteUser,
+  uploadImage, fetchSectors, createSector, updateSector, deleteSector,
+  fetchMachines, createMachine, updateMachine, deleteMachine
 } from './store.js';
 import {
-  esc, $, $$, icon, avatar, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, statusBadge, prioBadge, roleBadge,
+  esc, $, $$, icon, avatar, machineBadge, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, statusBadge, prioBadge, roleBadge,
   PRIORITY, PRIO_COLOR, ROLE, compressImage, localInputValue,
 } from './ui.js';
 import { scanQR, extractCode, cameraSupported } from './scanner.js';
@@ -120,21 +122,37 @@ export function listView(root) {
 function woCard(w, i = 0) {
   const parts = w.participants || [];
   const working = parts.filter((p) => p.state === 'trabalhando');
+  const stopped = isStoppedNow(w);
+  const m = w.machine;
+  let costBadge = '';
+  if (stopped && m?.hourly_cost > 0) {
+    const elapsedHours = (Date.now() - new Date(w.createdAt).getTime()) / 3600000;
+    const estimatedCost = Math.round(elapsedHours * m.hourly_cost);
+    costBadge = `<span class="cost-chip" title="Custo de parada: R$ ${m.hourly_cost}/hora">${icon('alert', 12)} R$ ${estimatedCost.toLocaleString('pt-BR')}</span>`;
+  }
   return `
-  <article class="wo-card ${isStoppedNow(w) ? 'is-stopped' : ''}" data-open="${w.id}" id="wo-${w.id}" style="--prio:${PRIO_COLOR[w.priority]};animation-delay:${Math.min(i, 10) * 30}ms">
-    <div class="top">
-      <span class="num">${w.number ? `OS ${w.number}` : 'OS nova'}</span>
-      ${statusBadge(w.status)}
-      ${isStoppedNow(w) ? '<span class="badge stopped">PARADA</span>' : ''}
-      ${w.type === 'preventiva' ? '<span class="badge prev">Preventiva</span>' : ''}
-      ${w.overdue ? '<span class="badge late">Atrasada</span>' : ''}
-      ${w._pending ? `<span class="badge pending">${icon('cloud', 12)} pendente</span>` : ''}
-      <span style="margin-left:auto">${prioBadge(w.priority)}</span>
+  <article class="wo-card ${stopped ? 'is-stopped' : ''}" data-open="${w.id}" id="wo-${w.id}" style="--prio:${PRIO_COLOR[w.priority]};animation-delay:${Math.min(i, 10) * 30}ms">
+    <div>
+      <div class="top">
+        <span class="num">${w.number ? `OS ${w.number}` : 'OS nova'}</span>
+        ${statusBadge(w.status)}
+        ${stopped ? '<span class="badge stopped">PARADA</span>' : ''}
+        ${costBadge}
+        ${w.type === 'preventiva' ? '<span class="badge prev">Preventiva</span>' : ''}
+        ${w.overdue ? '<span class="badge late">Atrasada</span>' : ''}
+        ${w._pending ? `<span class="badge pending">${icon('cloud', 12)} pendente</span>` : ''}
+        <span style="margin-left:auto">${prioBadge(w.priority)}</span>
+      </div>
+      <div class="card-main">
+        ${machineBadge(m, 'sm')}
+        <div class="card-content">
+          <h3>${esc(m?.name || 'Equipamento')} <span class="muted small" style="font-weight:500">${m?.code ? `• TAG ${esc(m.code)} ` : ''}• ${esc(m?.sector || '')}</span></h3>
+          <div class="desc">${esc(w.description)}</div>
+        </div>
+      </div>
     </div>
-    <h3>${esc(w.machine?.name)} <span class="muted small" style="font-weight:500">${w.machine?.code ? `• TAG ${esc(w.machine.code)} ` : ''}• ${esc(w.machine?.sector || '')}</span></h3>
-    <div class="desc">${esc(w.description)}</div>
     <div class="meta">
-      ${parts.length ? `<span class="avatar-stack">${parts.slice(0, 4).map((p) => avatar(p.name, 'sm')).join('')}</span>` : `<span>${icon('user', 14)} sem responsável</span>`}
+      ${parts.length ? `<span class="avatar-stack">${parts.slice(0, 4).map((p) => avatar(p.name, 'sm', p.avatar_url)).join('')}</span>` : `<span>${icon('user', 14)} sem responsável</span>`}
       ${working.length ? `<span style="color:var(--accent)">● ${working.length} em atendimento</span>` : ''}
       <span style="margin-left:auto">${w.dueDate && !isClosed(w) ? `vence ${fmtDate(w.dueDate)}` : timeAgo(w.createdAt)}</span>
     </div>
