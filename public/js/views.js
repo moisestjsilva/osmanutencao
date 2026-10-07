@@ -1769,6 +1769,8 @@ export function cadastrosView(root, params = {}) {
       else openUserModal();
     };
 
+    $('#btn-view-qrs', root)?.addEventListener('click', () => go('#/maquinas'));
+
     bindCardActions();
   }
 
@@ -1779,6 +1781,13 @@ export function cadastrosView(root, params = {}) {
         const el = $('#cad-content', root);
         if (el) el.innerHTML = renderTabContent();
         bindCardActions();
+      };
+    });
+
+    $$('[data-qr-modal]', root).forEach((btn) => {
+      btn.onclick = () => {
+        const m = machines.find((x) => x.id === btn.dataset.qrModal);
+        if (m) showMachineQRModal(m);
       };
     });
 
