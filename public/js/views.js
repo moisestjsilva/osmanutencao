@@ -1108,7 +1108,7 @@ export function moreView(root) {
 
   const items = [
     ...(isAdm ? [
-      ['#/cadastros?tab=preventivas', 'calendar', 'Planos de Manutenção Preventiva', 'Programação periódica, calendários e checklists'],
+      ['#/preventivas', 'calendar', 'Planos de Manutenção Preventiva', 'Programação periódica, calendários e checklists'],
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
     ] : []),
@@ -1471,6 +1471,9 @@ export function cadastrosView(root, params = {}) {
         </button>
         <button class="cad-tab ${activeTab === 'usuarios' ? 'active' : ''}" data-tab="usuarios">
           ${icon('users', 18)} Manutentores & Usuários (${users.length})
+        </button>
+        <button class="cad-tab" data-goto="#/preventivas" id="tab-preventivas">
+          ${icon('calendar', 18)} Preventivas
         </button>
       </div>
 
