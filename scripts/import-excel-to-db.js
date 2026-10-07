@@ -94,6 +94,7 @@ db.exec(`
     hourly_cost REAL NOT NULL DEFAULT 0.0,
     operating_hours_per_day REAL NOT NULL DEFAULT 16.0,
     image_url TEXT,
+    default_checklist_json TEXT NOT NULL DEFAULT '[]',
     active INTEGER NOT NULL DEFAULT 1
   );
 
