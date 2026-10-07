@@ -151,15 +151,15 @@ function renderNav() {
       </button>
     `;
   } else {
-    // Admin e Super Admin: visão completa com gestão de usuários/manutentores e indicadores
+    // Admin e Super Admin: visão completa com cadastros unificados e indicadores
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
         Ordens
       </button>
-      <button class="nav-item" data-nav="#/usuarios" id="nav-users">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        ${role === 'superadmin' ? 'Usuários' : 'Manutentores'}
+      <button class="nav-item" data-nav="#/cadastros" id="nav-cad">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><path d="M19 11v6M22 14h-6"/></svg>
+        Cadastros
       </button>
       <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -215,7 +215,7 @@ function showUserProfile() {
   const u = state.user;
   sheet(`
     <div style="text-align:center;padding:12px 0 8px">
-      <div style="display:inline-block;margin-bottom:10px">${avatar(u.name, 64)}</div>
+      <div style="display:inline-block;margin-bottom:10px">${avatar(u.name, 64, u.avatar_url)}</div>
       <h2 style="margin:0 0 4px;font-size:20px">${esc(u.name)}</h2>
       <div class="muted small" style="margin-bottom:8px">${esc(u.email || u.username || '')}</div>
       <div style="margin-bottom:6px">${roleBadge(u.role)}</div>
@@ -223,13 +223,19 @@ function showUserProfile() {
     </div>
 
     <div class="profile-actions" style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn" id="btn-prof-install" style="justify-content:flex-start">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="grow" style="text-align:left">Instalar no Celular / Computador</span>
+      </button>
+
       <button class="btn" id="btn-prof-chpass" style="justify-content:flex-start">
         ${icon('key', 18)} <span class="grow" style="text-align:left">Alterar Minha Senha</span>
       </button>
 
       ${(u.role === 'admin' || u.role === 'superadmin') ? `
-      <button class="btn" id="btn-prof-users" style="justify-content:flex-start">
-        ${icon('userPlus', 18)} <span class="grow" style="text-align:left">Gerenciar Manutentores e Usuários</span>
+      <button class="btn" id="btn-prof-cadastros" style="justify-content:flex-start">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><path d="M19 11v6M22 14h-6"/></svg>
+        <span class="grow" style="text-align:left">Central de Cadastros (Máquinas, Setores, Equipe)</span>
       </button>
       ` : ''}
 
@@ -239,13 +245,17 @@ function showUserProfile() {
     </div>
   `, {
     onMount(el, modal) {
+      $('#btn-prof-install', el)?.addEventListener('click', () => {
+        modal.close();
+        openInstallModal();
+      });
       $('#btn-prof-chpass', el)?.addEventListener('click', () => {
         modal.close();
         changePasswordModal();
       });
-      $('#btn-prof-users', el)?.addEventListener('click', () => {
+      $('#btn-prof-cadastros', el)?.addEventListener('click', () => {
         modal.close();
-        location.hash = '#/usuarios';
+        location.hash = '#/cadastros';
       });
       $('#btn-prof-logout', el)?.addEventListener('click', async () => {
         modal.close();
