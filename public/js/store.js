@@ -5,6 +5,7 @@ const listeners = new Set();
 
 export const state = {
   user: null,
+  token: localStorage.getItem('nova-os:token') || null,
   boot: null,            // máquinas, setores, equipes, usuários, configurações
   serverWos: [],         // última lista confirmada pelo servidor
   queue: [],             // operações pendentes/falhas (persistidas)
@@ -57,7 +58,6 @@ const qDel = (id) => store('queue', 'readwrite', (s) => s.delete(id));
 // ---------------- Utilidades ----------------
 export function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
-  // Fallback para contextos sem HTTPS
   const b = crypto.getRandomValues(new Uint8Array(16));
   b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
   const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
@@ -69,10 +69,18 @@ export class ApiError extends Error {}
 
 export async function api(path, { method = 'GET', body, userId } = {}) {
   let res;
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-User-Id': userId || state.user?.id || '',
+  };
+  if (state.token) {
+    headers['Authorization'] = `Bearer ${state.token}`;
+  }
+
   try {
     res = await fetch(path, {
       method,
-      headers: { 'Content-Type': 'application/json', 'X-User-Id': userId || state.user?.id || '' },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
       cache: 'no-store',
     });
@@ -82,6 +90,13 @@ export async function api(path, { method = 'GET', body, userId } = {}) {
   }
   setOnline(true);
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && path !== '/api/auth/login') {
+    // Sessão expirada ou inválida
+    if (state.token) {
+      logout(false);
+    }
+    throw new ApiError(data.error || 'Sessão expirada. Faça login novamente.');
+  }
   if (!res.ok) throw new ApiError(data.error || `Erro ${res.status}`);
   return data;
 }
@@ -93,23 +108,100 @@ function setOnline(v) {
   }
 }
 
+// ---------------- Autenticação no Cliente ----------------
+export async function login(usernameOrEmail, password) {
+  const data = await api('/api/auth/login', {
+    method: 'POST',
+    body: { login: usernameOrEmail, password }
+  });
+
+  state.token = data.token;
+  state.user = data.user;
+  localStorage.setItem('nova-os:token', data.token);
+  localStorage.setItem('nova-os:user', data.user.id);
+  state.notifs = [];
+  state.unread = 0;
+
+  await loadBoot();
+  await refresh();
+  emit('user');
+  return data.user;
+}
+
+export async function logout(callApi = true) {
+  if (callApi && state.token) {
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch {}
+  }
+  state.token = null;
+  state.user = null;
+  localStorage.removeItem('nova-os:token');
+  localStorage.removeItem('nova-os:user');
+  state.serverWos = [];
+  emit('user');
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  return await api('/api/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword }
+  });
+}
+
+// ---------------- Gestão de Usuários (Admin / Super Admin) ----------------
+export async function fetchUsers() {
+  const r = await api('/api/users');
+  return r.users || [];
+}
+
+export async function createUser(userData) {
+  return await api('/api/users', {
+    method: 'POST',
+    body: userData
+  });
+}
+
+export async function updateUser(id, userData) {
+  return await api(`/api/users/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: userData
+  });
+}
+
 // ---------------- Inicialização ----------------
 export async function init() {
   state.queue = (await qAll()).sort((a, b) => a.seq - b.seq);
   state.boot = await kv.get('boot');
   state.serverWos = (await kv.get('wos')) || [];
   state.lastSync = await kv.get('lastSync');
-  const uid = localStorage.getItem('nova-os:user');
-  if (uid && state.boot) state.user = state.boot.users.find((u) => u.id === uid) || null;
+
+  // Verifica se há token salvo
+  const token = localStorage.getItem('nova-os:token');
+  if (token) {
+    state.token = token;
+    try {
+      const me = await api('/api/auth/me');
+      state.user = me.user;
+    } catch (e) {
+      // Token inválido ou expirado
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem('nova-os:token');
+    }
+  }
+
   try {
     await loadBoot();
   } catch {}
-  if (uid && state.boot) state.user = state.boot.users.find((u) => u.id === uid) || null;
 }
 
 export async function loadBoot() {
   const b = await api('/api/bootstrap');
   state.boot = b;
+  if (b.currentUser) {
+    state.user = b.currentUser;
+  }
   await kv.set('boot', b);
   emit();
   return b;
@@ -124,10 +216,19 @@ export function setUser(u) {
 }
 
 // ---------------- Leitura ----------------
-export async function refresh() {
+export async function refresh(scope = '') {
   try {
-    const r = await api('/api/workorders');
+    const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+    const r = await api(`/api/workorders${qs}`);
     state.serverWos = r.workOrders;
+    await kv.set('wos', r.workOrders);
+    emit('wos');
+  } catch (e) {
+    if (e instanceof NetError) {
+      // offline: mantém cache
+    } else throw e;
+  }
+}
     await kv.set('wos', r.workOrders);
     emit('wos');
   } catch (e) {
