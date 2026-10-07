@@ -4,10 +4,11 @@ import { state, init, on, sync, pendingOps, failedOps, resetNotifTracking, logou
 import { $, $$, sheet, avatar, esc, icon, toast, clock, ROLE, roleBadge } from './ui.js';
 import {
   listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView,
-  loginView, usersView, changePasswordModal
+  loginView, usersView, cadastrosView, changePasswordModal
 } from './views.js';
 
 let currentCleanup = null;
+let deferredInstallPrompt = null;
 
 // ======================================================================
 // ROTEADOR
@@ -53,7 +54,7 @@ function router() {
 
   // Bloqueio de rotas administrativas para telas simplificadas (manutentor e solicitante)
   if (!isStaff) {
-    if (['/indicadores', '/config', '/usuarios', '/preventivas', '/maquinas'].includes(path)) {
+    if (['/indicadores', '/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros'].includes(path)) {
       toast('Recurso restrito à gestão de manutenção', 'warn');
       location.hash = '#/';
       return;
@@ -73,16 +74,18 @@ function router() {
     currentCleanup = detailView(root, { id });
   } else if (path === '/nova') {
     currentCleanup = newView(root, params);
+  } else if (path === '/cadastros') {
+    currentCleanup = cadastrosView(root, params);
   } else if (path === '/usuarios') {
-    currentCleanup = usersView(root);
+    currentCleanup = cadastrosView(root, { ...params, tab: 'usuarios' });
+  } else if (path === '/maquinas') {
+    currentCleanup = cadastrosView(root, { ...params, tab: 'maquinas' });
   } else if (path === '/preventivas') {
     currentCleanup = plansView(root);
   } else if (path === '/indicadores') {
     currentCleanup = kpiView(root);
   } else if (path === '/mais') {
     currentCleanup = moreView(root);
-  } else if (path === '/maquinas') {
-    currentCleanup = machinesView(root);
   } else if (path === '/avisos') {
     currentCleanup = notifsView(root);
   } else if (path === '/sync') {
