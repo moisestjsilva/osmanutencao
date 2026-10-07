@@ -671,12 +671,202 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 .offline-banner { background: #e11d48; color: white; font-size: 12.5px; font-weight: 600; padding: 7px 14px; text-align: center; }
 
-/* ---------- Impressão de Etiquetas QR ---------- */
-@media print {
-  body { background: white !important; color: black !important; }
-  .app-header, .bottom-nav, .action-bar, .no-print, .toasts { display: none !important; }
-  main#view { padding: 0; max-width: none; }
-  .qr-grid { grid-template-columns: repeat(4, 1fr); gap: 6mm; }
-  .qr-card { border: 1px solid #ccc; background: white; color: black; box-shadow: none; break-inside: avoid; }
-  .qr-card .muted { color: #555; }
+/* ---------- Roles & Badges ---------- */
+.badge.role-super { background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2)); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 700; }
+.badge.role-admin { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600; }
+.badge.role-tech { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600; }
+.role-superadmin { background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2)); color: #f59e0b; }
+.role-admin { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+
+/* ---------- Tela de Login Moderna ---------- */
+.login-wrap {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 40px;
 }
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px 28px;
+  box-shadow: var(--shadow-lg), 0 0 40px -10px var(--accent-glow);
+  position: relative;
+  overflow: hidden;
+}
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), #f59e0b);
+}
+.login-brand {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.login-logo {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 14px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: white;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 24px -4px var(--accent-glow);
+}
+.login-brand h1 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+}
+.login-brand p {
+  color: var(--text-2);
+  font-size: 13.5px;
+  margin: 0;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-field label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-wrap .input-ico {
+  position: absolute;
+  left: 14px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.input-wrap .input {
+  padding-left: 42px;
+  padding-right: 44px;
+  height: 46px;
+  font-size: 15px;
+  width: 100%;
+}
+.input-wrap .toggle-pass {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+.input-wrap .toggle-pass:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.btn-login {
+  height: 48px;
+  font-size: 15.5px;
+  font-weight: 700;
+  border-radius: 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 6px 20px -4px var(--accent-glow);
+  transition: transform .15s, box-shadow .15s;
+  margin-top: 6px;
+}
+.btn-login:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px -4px var(--accent-glow);
+}
+.btn-login:active {
+  transform: translateY(0);
+}
+.quick-access {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.quick-access-title {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  margin-bottom: 12px;
+  text-align: center;
+}
+.quick-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.quick-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  transition: all .15s;
+}
+.quick-pill:hover {
+  border-color: var(--accent);
+  background: var(--surface-3);
+  transform: translateY(-2px);
+}
+.quick-pill small {
+  font-size: 9.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+  font-weight: normal;
+}
+
+/* ---------- Gestão de Usuários e Manutentores ---------- */
+.user-card-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: border-color .15s;
+}
+.user-card-item + .user-card-item {
+  margin-top: 10px;
+}
+.user-card-item:hover {
+  border-color: var(--border-hover);
+}
+.user-card-item.inactive {
+  opacity: 0.6;
+}
+
