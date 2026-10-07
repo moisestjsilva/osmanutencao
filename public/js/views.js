@@ -1210,10 +1210,38 @@ export function usersView(root) {
     }
   }
 
+  function canDelete(u) {
+    if (!u || u.id === me()?.id) return false;
+    if (u.role === 'superadmin') return false;
+    if (!isAdmin()) return false;
+    if (me()?.role === 'admin' && (u.role === 'admin' || u.role === 'superadmin')) return false;
+    return true;
+  }
+
+  async function executeDelete(u) {
+    const ok = await confirmDialog({
+      title: 'Excluir usuário permanentemente?',
+      body: `Deseja realmente excluir "${u.name}" (${ROLE[u.role] || u.role})? O acesso será cancelado e o usuário removido do sistema.`,
+      confirm: 'Sim, Excluir',
+      danger: true
+    });
+    if (!ok) return;
+
+    try {
+      await deleteUser(u.id);
+      toast(`Usuário "${u.name}" excluído com sucesso!`);
+      await loadBoot();
+      load();
+    } catch (err) {
+      toast(err.message || 'Erro ao excluir usuário', 'alarm');
+    }
+  }
+
   function render() {
     const canCreateAny = isSuperAdmin();
     const techs = users.filter((u) => u.role === 'manutentor');
     const admins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin');
+    const sols = users.filter((u) => u.role === 'solicitante');
 
     const filtered = users.filter((u) => {
       if (filterRole !== 'todos' && u.role !== filterRole) return false;
@@ -1231,7 +1259,7 @@ export function usersView(root) {
       <div class="page-head">
         <div>
           <h1>${isSuperAdmin() ? 'Usuários do Sistema' : 'Gestão de Manutentores'}</h1>
-          <p>${techs.length} manutentores • ${admins.length} administradores</p>
+          <p>${techs.length} manutentores • ${admins.length} administradores • ${sols.length} solicitantes</p>
         </div>
         <button class="btn primary sm" id="btn-new-user">
           ${icon('userPlus', 16)} ${isSuperAdmin() ? 'Novo Usuário' : 'Novo Manutentor'}
@@ -1246,6 +1274,7 @@ export function usersView(root) {
         <button class="chip ${filterRole === 'todos' ? 'active' : ''}" data-role="todos">Todos (${users.length})</button>
         <button class="chip ${filterRole === 'manutentor' ? 'active' : ''}" data-role="manutentor">Manutentores (${techs.length})</button>
         <button class="chip ${filterRole === 'admin' ? 'active' : ''}" data-role="admin">Admins (${admins.length})</button>
+        <button class="chip ${filterRole === 'solicitante' ? 'active' : ''}" data-role="solicitante">Solicitantes (${sols.length})</button>
       </div>
 
       <div id="users-list">
@@ -1266,6 +1295,11 @@ export function usersView(root) {
             </div>
             <div class="row" style="gap:4px">
               <button class="icon-btn" data-edit="${u.id}" title="Editar ou trocar senha">${icon('wrench', 16)}</button>
+              ${canDelete(u) ? `
+                <button class="icon-btn danger" data-del="${u.id}" title="Excluir usuário" style="color:var(--danger)">
+                  ${icon('trash', 16)}
+                </button>
+              ` : ''}
             </div>
           </div>
         `).join('') : '<div class="empty"><p class="muted">Nenhum usuário encontrado com esse filtro.</p></div>'}
@@ -1292,11 +1326,19 @@ export function usersView(root) {
         if (u) openUserModal(u);
       };
     });
+
+    $$('[data-del]', root).forEach((btn) => {
+      btn.onclick = () => {
+        const u = users.find((x) => x.id === btn.dataset.del);
+        if (u) executeDelete(u);
+      };
+    });
   }
 
   function openUserModal(target = null) {
     const isEdit = !!target;
     const canChooseRole = isSuperAdmin();
+    const allowDeleteTarget = isEdit && canDelete(target);
 
     sheet(`
       <h2>${isEdit ? 'Editar Usuário' : (canChooseRole ? 'Cadastrar Novo Usuário' : 'Cadastrar Novo Manutentor')}</h2>
@@ -1325,6 +1367,7 @@ export function usersView(root) {
             <option value="manutentor" selected>Manutentor (Acesso simplificado às suas OS)</option>
             <option value="admin">Admin (Gestão de Manutenção e Manutentores)</option>
             <option value="superadmin">Super Admin (Acesso total)</option>
+            <option value="solicitante">Solicitante (Abertura de chamados)</option>
           </select>
         </label>` : ''}
 
@@ -1346,13 +1389,27 @@ export function usersView(root) {
           <input class="input" id="u-pass" type="password" ${isEdit ? '' : 'required'} minlength="4" placeholder="${isEdit ? 'Opcional' : 'Mínimo 4 caracteres'}" />
         </label>
 
-        <div class="sheet-actions" style="margin-top:16px">
-          <button type="button" class="btn" data-close>Cancelar</button>
-          <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar'}</button>
+        <div class="sheet-actions" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
+          ${allowDeleteTarget ? `
+            <button type="button" class="btn danger" id="btn-modal-del" style="margin-right:auto">
+              ${icon('trash', 16)} Excluir Usuário
+            </button>
+          ` : '<div></div>'}
+          <div class="row" style="gap:8px">
+            <button type="button" class="btn" data-close>Cancelar</button>
+            <button type="submit" class="btn primary">${isEdit ? 'Salvar Alterações' : 'Cadastrar'}</button>
+          </div>
         </div>
       </form>
     `, {
       onMount(el, modal) {
+        if (allowDeleteTarget) {
+          $('#btn-modal-del', el)?.addEventListener('click', async () => {
+            modal.close();
+            await executeDelete(target);
+          });
+        }
+
         $('#form-user-edit', el).onsubmit = async (e) => {
           e.preventDefault();
           const name = $('#u-name', el).value.trim();
@@ -1372,7 +1429,7 @@ export function usersView(root) {
               toast('Novo colaborador cadastrado com sucesso!');
             }
             modal.close();
-            loadBoot();
+            await loadBoot();
             load();
           } catch (err) {
             toast(err.message || 'Erro ao salvar usuário', 'alarm');
