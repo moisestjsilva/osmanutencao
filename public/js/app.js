@@ -50,23 +50,22 @@ function router() {
   updateHeader();
 
   const role = state.user.role;
-  const isStaff = role === 'admin' || role === 'superadmin';
+  const isStaff = role === 'admin' || role === 'superadmin' || role === 'gerente';
 
-  // Bloqueio de rotas administrativas para telas simplificadas (manutentor e solicitante)
+  // Bloqueio de rotas administrativas para telas simplificadas
   if (!isStaff) {
-    if (role === 'solicitante' && path === '/indicadores') {
-      location.hash = '#/';
-      return;
-    }
-    if (['/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros'].includes(path)) {
-      toast('Recurso restrito à gestão de manutenção', 'warn');
-      location.hash = '#/';
-      return;
-    }
-    if (path === '/mais') {
-      showUserProfile();
-      location.hash = '#/';
-      return;
+    if (role === 'solicitante') {
+      if (['/indicadores', '/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros', '/mais'].includes(path)) {
+        toast('Recurso restrito à equipe de manutenção', 'warn');
+        location.hash = '#/';
+        return;
+      }
+    } else if (role === 'manutentor') {
+      if (['/config', '/usuarios', '/cadastros'].includes(path)) {
+        toast('Recurso restrito à gestão de manutenção', 'warn');
+        location.hash = '#/';
+        return;
+      }
     }
   }
 
@@ -120,31 +119,8 @@ function renderNav() {
   const role = state.user.role;
   let html = '';
 
-  if (role === 'manutentor') {
-    // Manutentor: Minhas OS, Disponíveis no chão de fábrica, Nova OS, Indicadores Pessoais e Perfil
-    html = `
-      <button class="nav-item" data-nav="#/" id="nav-os">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
-        Minhas OS
-      </button>
-      <button class="nav-item" data-nav="#/?scope=disponiveis" id="nav-disp">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>
-        Disponíveis
-      </button>
-      <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-      </button>
-      <button class="nav-item" data-nav="#/indicadores" id="nav-kpi">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
-        Indicadores
-      </button>
-      <button class="nav-item" data-action="profile" id="nav-profile">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-        Meu Perfil
-      </button>
-    `;
-  } else if (role === 'solicitante') {
-    // Solicitante: apenas abertura e acompanhamento dos seus chamados
+  if (role === 'solicitante') {
+    // Solicitante: apenas abertura e acompanhamento dos seus chamados e perfil
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
@@ -159,15 +135,15 @@ function renderNav() {
       </button>
     `;
   } else {
-    // Admin e Super Admin: visão completa com cadastros unificados e indicadores
+    // Manutentor, Gerente, Admin e Super Admin: acesso direto às Preventivas, Ordens, Indicadores e Mais
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
         Ordens
       </button>
-      <button class="nav-item" data-nav="#/cadastros" id="nav-cad">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><path d="M19 11v6M22 14h-6"/></svg>
-        Cadastros
+      <button class="nav-item" data-nav="#/preventivas" id="nav-prev">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>
+        Preventivas
       </button>
       <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>

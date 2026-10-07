@@ -817,8 +817,8 @@ export function plansView(root) {
             <div><span>Gera com antecedência</span><strong>${p.lead_days} dia(s)</strong></div>
             <div><span>Última concluída</span><strong>${p.lastDone ? `${fmtDate(p.lastDone.closed_at)}${p.lastDone.closed_at.slice(0, 10) > p.lastDone.due_date ? ' <span class="badge late" style="height:18px">fora do prazo</span>' : ''}` : '—'}</strong></div>
           </div>
-          <div class="muted xs" style="margin-top:10px">Checklist: ${p.checklist.map((c) => esc(c.text)).join(' • ')}</div>
-          ${p.openOrders.length ? `<div class="row wrap" style="margin-top:10px">${p.openOrders.map((o) => `<a class="badge ${o.due_date < today ? 'late' : 'prev'}" href="#/os/${o.id}">OS ${o.number} • ${fmtDate(o.due_date)}${o.due_date < today ? ' • atrasada' : ''}</a>`).join('')}</div>` : ''}
+          <div class="muted xs" style="margin-top:10px">Checklist: ${(p.checklist || []).map((c) => esc(typeof c === 'string' ? c : (c.text || ''))).filter(Boolean).join(' • ')}</div>
+          ${p.openOrders?.length ? `<div class="row wrap" style="margin-top:10px">${p.openOrders.map((o) => `<a class="badge ${o.due_date < today ? 'late' : 'prev'}" href="#/os/${o.id}">OS ${o.number} • ${fmtDate(o.due_date)}${o.due_date < today ? ' • atrasada' : ''}</a>`).join('')}</div>` : ''}
           ${isManager() ? `<div class="row" style="margin-top:12px">
             <button class="btn sm" data-gen="${p.id}" ${p.active ? '' : 'disabled'}>${icon('plus', 14)} Gerar OS do próximo ciclo</button>
             <button class="btn ghost sm" data-toggle="${p.id}" data-active="${p.active}">${p.active ? 'Pausar plano' : 'Reativar'}</button></div>` : ''}
@@ -1104,11 +1104,14 @@ export function kpiView(root) {
 // ======================================================================
 export function moreView(root) {
   const isAdm = isAdmin();
+  const isTechUser = isTech();
   const isSuper = isSuperAdmin();
 
   const items = [
-    ...(isAdm ? [
+    ...(isTechUser ? [
       ['#/preventivas', 'calendar', 'Planos de Manutenção Preventiva', 'Programação periódica, calendários e checklists'],
+    ] : []),
+    ...(isAdm ? [
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
     ] : []),
@@ -1663,7 +1666,13 @@ export function cadastrosView(root, params = {}) {
     };
 
     $$('.cad-tab', root).forEach((btn) => {
-      btn.onclick = () => setTab(btn.dataset.tab);
+      btn.onclick = () => {
+        if (btn.dataset.goto) {
+          go(btn.dataset.goto);
+        } else if (btn.dataset.tab) {
+          setTab(btn.dataset.tab);
+        }
+      };
     });
 
     $('#btn-new-cad', root).onclick = () => {
