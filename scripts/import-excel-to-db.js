@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
+import { migrateAuth, seedAuthUsers } from '../server/auth.js';
 
 const file = path.resolve('Relatorio_Geral_Manutencao_Rufato_2026-10-06.xlsx');
 if (!fs.existsSync(file)) {
