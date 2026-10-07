@@ -651,6 +651,17 @@ export function newView(root, params) {
             <label class="add-photo" aria-label="Adicionar foto">${icon('camera', 24)}<input type="file" accept="image/*" capture="environment" multiple hidden id="new-photo" /></label>
           </div></div>
 
+        <label class="field">
+          <span>Manutentor Direcionado (Opcional)</span>
+          <select class="input select" id="new-responsible">
+            <option value="">Não direcionar (Alerta geral para todos os técnicos)</option>
+            ${techs.map((t) => `<option value="${t.id}">${esc(t.name)} ${t.specialty ? `(${esc(t.specialty)})` : ''}</option>`).join('')}
+          </select>
+          <span class="muted xs" style="display:block;margin-top:3px">
+            Se direcionado a um técnico específico, ele receberá um alerta sonoro direto. Deixe em aberto para acionar toda a fábrica.
+          </span>
+        </label>
+
         <div class="field"><span>Quem será avisado</span>
           <div class="segmented" id="seg-mode">
             <button type="button" data-value="todos" class="${mode === 'todos' ? 'active' : ''}">Todos</button>
@@ -694,10 +705,11 @@ export function newView(root, params) {
       if (description.length < 3) return err('Descreva o problema');
       const recipients = mode === 'equipe' ? [...selTeams] : mode === 'selecionados' ? [...selUsers] : [];
       if (mode !== 'todos' && !recipients.length) return err(mode === 'equipe' ? 'Escolha ao menos uma equipe' : 'Escolha ao menos um manutentor');
+      const responsibleId = $('#new-responsible', root)?.value || null;
       $('#btn-submit', root).disabled = true;
       const id = uuid();
       try {
-        await enqueue('create_wo', id, { id, machineId: machine.id, description, type, priority, machineStopped: stopped, recipientsMode: mode, recipients });
+        await enqueue('create_wo', id, { id, machineId: machine.id, description, type, priority, machineStopped: stopped, recipientsMode: mode, recipients, responsibleId });
         for (const p of photos) await enqueue('attach', id, { id: uuid(), dataUrl: p });
       } catch (ex) {
         $('#btn-submit', root).disabled = false;
@@ -709,7 +721,7 @@ export function newView(root, params) {
     };
   }
 
-  if (!['solicitante', 'manutentor', 'gerente'].includes(me()?.role)) return;
+  if (!['solicitante', 'manutentor', 'gerente', 'admin', 'superadmin'].includes(me()?.role)) return;
   if (params.qr) resolve(params.qr); else render();
 }
 
