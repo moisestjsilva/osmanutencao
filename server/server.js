@@ -476,7 +476,7 @@ app.post('/api/plans/:id/generate', requireUser, requireManager, (req, res) => {
   }
 });
 
-app.get('/api/indicators', (req, res) => res.json(computeIndicators(db, req.query)));
+app.get('/api/indicators', requireAdmin, (req, res) => res.json(computeIndicators(db, req.query)));
 
 // Conflitos de sincronização (revisão do gerente)
 app.get('/api/conflicts', requireUser, (req, res) => {
