@@ -1,6 +1,6 @@
 // Service worker: guarda o "casco" do app para abrir mesmo sem internet.
 // Os dados (OS, máquinas, fila de operações) ficam no IndexedDB, controlados pelo app.
-const VERSION = 'nova-os-v1';
+const VERSION = 'nova-os-v2';
 const SHELL = [
   '/', '/index.html', '/css/styles.css', '/js/app.js', '/js/store.js', '/js/ui.js', '/js/views.js', '/js/scanner.js',
   '/manifest.webmanifest', '/icons/icon.svg', '/vendor/jsQR.js',
