@@ -576,14 +576,26 @@ export function newView(root, params) {
     codeTyped = code;
     error = '';
     sectorMachines = null;
-    const m = boot.machines.find((x) => x.code.toUpperCase() === code);
+
+    const m = boot.machines.find((x) => x.code.toUpperCase() === code || x.id === code);
     if (m) { machine = m; return render(); }
-    const s = boot.sectors.find((x) => x.code.toUpperCase() === code);
-    if (s) { sectorMachines = { sector: s, machines: boot.machines.filter((x) => x.sector_id === s.id) }; return render(); }
+
+    const s = boot.sectors.find((x) => x.code.toUpperCase() === code || x.id === code || x.name.toUpperCase() === code);
+    if (s) {
+      const ms = boot.machines.filter((x) => x.sector_id === s.id && x.active !== 0);
+      sectorMachines = { sector: s, machines: ms };
+      return render();
+    }
+
     try {
       const r = await api(`/api/resolve/${encodeURIComponent(code)}`);
-      if (r.kind === 'machine') machine = r.machine;
-      else sectorMachines = { sector: r.sector, machines: r.machines };
+      if (r.kind === 'machine') {
+        machine = boot.machines.find((x) => x.id === r.machine.id) || r.machine;
+      } else if (r.kind === 'sector') {
+        const sec = boot.sectors.find((x) => x.id === r.sector.id) || r.sector;
+        const ms = boot.machines.filter((x) => x.sector_id === sec.id && x.active !== 0);
+        sectorMachines = { sector: sec, machines: ms.length ? ms : (r.machines || []) };
+      }
     } catch {
       error = `Código “${esc(code)}” não encontrado. Confira a etiqueta ou busque a máquina pelo nome abaixo.`;
       search = '';
@@ -592,6 +604,7 @@ export function newView(root, params) {
   }
 
   const sectorName = (id) => boot.sectors.find((s) => s.id === id)?.name || '';
+  const getOpenCount = (mId) => workOrders().filter((w) => w.machine?.id === mId && !isClosed(w)).length;
 
   function render() {
     if (!machine) {
@@ -599,30 +612,60 @@ export function newView(root, params) {
       const ql = search.toLowerCase();
       const filtered = list.filter((m) => !ql || `${m.code} ${m.name} ${sectorName(m.sector_id)}`.toLowerCase().includes(ql));
       root.innerHTML = `
-        <div class="page-head"><div><h1>Abrir OS</h1><p>Identifique a máquina pelo QR ou código</p></div></div>
-        <div class="big-actions">
-          <button class="big-action" id="btn-scan"><div class="ico">${icon('qr', 24)}</div><strong>Escanear QR</strong><span>${cameraSupported() ? 'Usar a câmera' : 'Requer HTTPS'}</span></button>
-          <button class="big-action" id="btn-type"><div class="ico">${icon('keyboard', 24)}</div><strong>Digitar código</strong><span>Ex.: M-PRS01</span></button>
-        </div>
-        <form id="code-form" class="input-group" style="margin-top:12px">
-          <input class="input" id="code-input" placeholder="Código da máquina ou setor" value="${esc(codeTyped)}" autocapitalize="characters" autocomplete="off" />
-          <button class="btn primary" type="submit" id="btn-resolve">Buscar</button>
-        </form>
+        <div class="page-head"><div><h1>Abrir OS</h1><p>${sectorMachines ? `Setor: ${esc(sectorMachines.sector.name)}` : 'Identifique a máquina pelo QR ou código'}</p></div></div>
+
+        ${sectorMachines ? `
+          <div class="sector-banner" style="background:var(--surface-2);border:1.5px solid var(--accent);border-radius:var(--rad);padding:14px 16px;margin-bottom:16px">
+            <div class="row" style="justify-content:space-between;align-items:flex-start">
+              <div>
+                <span class="badge" style="background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:11px;text-transform:uppercase">📍 QR do Setor Lido</span>
+                <h2 style="margin:4px 0 2px;font-size:18px;font-weight:700;color:var(--text)">Setor: ${esc(sectorMachines.sector.name)}</h2>
+                <p class="muted small" style="margin:0">Selecione abaixo a máquina deste setor que necessita de manutenção:</p>
+              </div>
+              <button class="btn ghost sm" id="btn-all" style="white-space:nowrap">${icon('x', 14)} Ver todos os setores</button>
+            </div>
+          </div>
+        ` : `
+          <div class="big-actions">
+            <button class="big-action" id="btn-scan"><div class="ico">${icon('qr', 24)}</div><strong>Escanear QR</strong><span>${cameraSupported() ? 'Usar a câmera' : 'Requer HTTPS'}</span></button>
+            <button class="big-action" id="btn-type"><div class="ico">${icon('keyboard', 24)}</div><strong>Digitar código</strong><span>Ex.: M-PRS01 ou setor</span></button>
+          </div>
+          <form id="code-form" class="input-group" style="margin-top:12px">
+            <input class="input" id="code-input" placeholder="Código da máquina ou setor" value="${esc(codeTyped)}" autocapitalize="characters" autocomplete="off" />
+            <button class="btn primary" type="submit" id="btn-resolve">Buscar</button>
+          </form>
+        `}
+
         ${error ? `<div class="error-box" style="margin-top:12px">${error}</div>` : ''}
-        ${sectorMachines ? `<div class="info-box" style="margin-top:12px">QR do setor <strong>${esc(sectorMachines.sector.name)}</strong> — escolha a máquina:</div>` : ''}
-        <div class="section-title"><span>${sectorMachines ? 'Máquinas do setor' : 'Ou escolha na lista'}</span>
-          ${sectorMachines ? '<button class="btn ghost sm" id="btn-all">Ver todas</button>' : ''}</div>
-        <input class="input" id="m-search" placeholder="Filtrar por nome ou setor" value="${esc(search)}" style="margin-bottom:10px" />
-        <div id="m-list">${filtered.map((m) => `
+
+        <div class="section-title" style="margin-top:14px">
+          <span>${sectorMachines ? `Máquinas vinculadas ao setor (${filtered.length})` : 'Ou escolha na lista'}</span>
+        </div>
+        <input class="input" id="m-search" placeholder="${sectorMachines ? 'Filtrar máquina neste setor...' : 'Filtrar por nome ou setor...'}" value="${esc(search)}" style="margin-bottom:10px" />
+        <div id="m-list">${filtered.map((m) => {
+          const openCount = getOpenCount(m.id);
+          return `
           <button class="machine-pick" data-machine="${m.id}" id="pick-${m.code}">
             <span class="code">${esc(m.code)}</span>
-            <span class="grow"><strong>${esc(m.name)}</strong><div class="muted xs"><span class="crit crit-${m.criticality}"></span>${esc(sectorName(m.sector_id))}</div></span>
+            <span class="grow">
+              <strong>${esc(m.name)}</strong>
+              <div class="muted xs">
+                <span class="crit crit-${m.criticality}"></span>${esc(sectorName(m.sector_id))}
+                ${openCount > 0 ? `<span class="badge warn xs" style="margin-left:6px">${openCount} OS aberta(s)</span>` : ''}
+              </div>
+            </span>
             ${icon('chev', 18)}
-          </button>`).join('') || '<p class="muted">Nenhuma máquina encontrada.</p>'}</div>`;
-      $('#btn-scan', root).onclick = async () => { const c = await scanQR(); if (c) resolve(c); };
-      $('#btn-type', root).onclick = () => $('#code-input', root).focus();
-      $('#code-form', root).onsubmit = (e) => { e.preventDefault(); const v = $('#code-input', root).value.trim(); if (v) resolve(v); };
-      $('#btn-all', root)?.addEventListener('click', () => { sectorMachines = null; render(); });
+          </button>`;
+        }).join('') || `<div class="empty" style="padding:24px"><p class="muted">Nenhuma máquina encontrada${sectorMachines ? ' neste setor' : ''}.</p></div>`}</div>`;
+
+      if (!sectorMachines) {
+        $('#btn-scan', root).onclick = async () => { const c = await scanQR(); if (c) resolve(c); };
+        $('#btn-type', root).onclick = () => $('#code-input', root).focus();
+        $('#code-form', root).onsubmit = (e) => { e.preventDefault(); const v = $('#code-input', root).value.trim(); if (v) resolve(v); };
+      } else {
+        $('#btn-all', root)?.addEventListener('click', () => { sectorMachines = null; search = ''; render(); });
+      }
+
       $('#m-search', root).oninput = (e) => {
         search = e.target.value;
         const pos = e.target.selectionStart;
@@ -772,7 +815,8 @@ export function newView(root, params) {
   }
 
   if (!['solicitante', 'manutentor', 'gerente', 'admin', 'superadmin'].includes(me()?.role)) return;
-  if (params.qr) resolve(params.qr); else render();
+  const initialQr = params?.qr || params?.code || params?.sector || new URLSearchParams(window.location.search).get('qr') || new URLSearchParams(window.location.search).get('code');
+  if (initialQr) resolve(initialQr); else render();
 }
 
 // ======================================================================
@@ -1254,8 +1298,8 @@ export function machinesView(root) {
     ${boot.sectors.map((s) => `
       <div class="section-title"><span>${esc(s.name)}</span></div>
       <div class="qr-grid">
-        <div class="qr-card" style="border-color:hsl(36 100% 56% / 0.4)"><div class="qr"><img src="/api/qr/${encodeURIComponent(s.code)}.svg" alt="QR do setor ${esc(s.name)}" loading="lazy" /></div>
-          <strong>${esc(s.code)}</strong><div class="muted xs">Setor ${esc(s.name)}</div></div>
+        <div class="qr-card" data-qr="${esc(s.code)}" style="border-color:hsl(36 100% 56% / 0.4);cursor:pointer"><div class="qr"><img src="/api/qr/${encodeURIComponent(s.code)}.svg" alt="QR do setor ${esc(s.name)}" loading="lazy" /></div>
+          <strong>${esc(s.code)}</strong><div class="muted xs">📍 QR do Setor ${esc(s.name)}</div></div>
         ${boot.machines.filter((m) => m.sector_id === s.id).map((m) => `
         <div class="qr-card" data-qr="${esc(m.code)}" style="cursor:pointer"><div class="qr"><img src="/api/qr/${encodeURIComponent(m.code)}.svg" alt="QR ${esc(m.name)}" loading="lazy" /></div>
           <strong>${esc(m.code)}</strong><div class="muted xs"><span class="crit crit-${m.criticality}"></span>${esc(m.name)}</div></div>`).join('')}
