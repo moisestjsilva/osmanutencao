@@ -542,7 +542,6 @@ export async function discardAllFailed() {
 
 // ---------------- Avisos ----------------
 const seen = new Set(JSON.parse(sessionStorage.getItem('nova-os:seen') || '[]'));
-let firstLoad = true;
 export async function loadNotifs() {
   if (!state.user) return;
   try {
@@ -550,14 +549,18 @@ export async function loadNotifs() {
     const fresh = r.notifications.filter((n) => !n.read_at && !seen.has(n.id));
     state.notifs = r.notifications;
     state.unread = r.unread;
-    r.notifications.forEach((n) => seen.add(n.id));
-    sessionStorage.setItem('nova-os:seen', JSON.stringify([...seen].slice(-500)));
-    if (!firstLoad && fresh.length) emit({ type: 'new-notifs', items: fresh });
-    firstLoad = false;
+    if (fresh.length) {
+      for (const n of fresh) seen.add(n.id);
+      sessionStorage.setItem('nova-os:seen', JSON.stringify([...seen].slice(-500)));
+      emit({ type: 'new-notifs', items: fresh });
+    }
     emit('notifs');
   } catch {}
 }
-export function resetNotifTracking() { firstLoad = true; }
+export function resetNotifTracking() {
+  seen.clear();
+  sessionStorage.removeItem('nova-os:seen');
+}
 
 export async function markRead(ids) {
   await api('/api/notifications/read', { method: 'POST', body: ids ? { ids } : { all: true } });

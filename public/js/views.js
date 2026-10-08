@@ -31,8 +31,7 @@ export function listView(root) {
   const isSol = me()?.role === 'solicitante';
   const onlyTech = isOnlyTech();
 
-  let defaultFilter = 'abertas';
-  if (onlyTech) defaultFilter = 'minhas';
+  let defaultFilter = 'todas';
   if (isSol) defaultFilter = 'abertas';
 
   let filter = sessionStorage.getItem('nova-os:filter') || defaultFilter;
@@ -41,10 +40,11 @@ export function listView(root) {
   let FILTERS = [];
   if (onlyTech) {
     FILTERS = [
-      ['minhas', 'Minhas Atribuídas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
+      ['todas', 'Todas Abertas', (w) => !isClosed(w)],
       ['disponiveis', 'Disponíveis na Fábrica', (w) => !isClosed(w) && !w.responsible?.id],
-      ['concluidas', 'Concluídas por Mim', (w) => isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
+      ['minhas', 'Minhas Atribuídas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
       ['paradas', 'Máquinas Paradas', isStoppedNow],
+      ['concluidas', 'Concluídas por Mim', (w) => isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
     ];
   } else if (isSol) {
     FILTERS = [
@@ -98,15 +98,23 @@ export function listView(root) {
     $('#filters', root).innerHTML = FILTERS.map(([k, label, fn]) =>
       `<button class="chip ${filter === k ? 'active' : ''}" data-filter="${k}" id="filter-${k}">${label}<span class="count">${wos.filter(fn).length}</span></button>`).join('');
 
-    const fn = FILTERS.find((f) => f[0] === filter)[2];
+    const fn = FILTERS.find((f) => f[0] === filter)?.[2] || FILTERS[0][2];
     const ql = q.toLowerCase();
     const items = wos.filter(fn).filter((w) => !ql || `${w.number} ${w.machine?.name} ${w.machine?.code} ${w.description} ${w.machine?.sector}`.toLowerCase().includes(ql))
       .sort((a, b) => filter === 'concluidas'
         ? (b.closedAt || '').localeCompare(a.closedAt || '')
         : (isStoppedNow(b) - isStoppedNow(a)) || (PRANK[a.priority] - PRANK[b.priority]) || (b.overdue - a.overdue) || b.createdAt.localeCompare(a.createdAt));
 
+    const dispCount = wos.filter((w) => !isClosed(w) && !w.responsible?.id).length;
     $('#list', root).innerHTML = items.length ? items.map((w, i) => woCard(w, i)).join('') : `
-      <div class="empty"><div class="ico">${icon('check', 28)}</div><strong>Nenhuma OS aqui</strong><p class="small">Toque em + para abrir um chamado.</p></div>`;
+      <div class="empty">
+        <div class="ico">${icon('check', 28)}</div>
+        <strong>${filter === 'minhas' && onlyTech ? 'Nenhuma OS atribuída a você no momento' : 'Nenhuma OS aqui'}</strong>
+        ${filter === 'minhas' && onlyTech && dispCount > 0 ? `
+          <p class="small" style="margin-top:6px">Há <strong>${dispCount}</strong> OS aguardando atendimento na fábrica.</p>
+          <button class="btn primary sm" style="margin-top:12px" data-filter="disponiveis">Ver OS Disponíveis na Fábrica</button>
+        ` : '<p class="small">Toque em + para abrir um chamado.</p>'}
+      </div>`;
   }
 
   root.addEventListener('click', (e) => {

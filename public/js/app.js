@@ -595,11 +595,33 @@ async function start() {
         }
 
         if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(n.title, { body: n.body, icon: '/icons/icon.svg' });
+          try {
+            new Notification(n.title, { body: n.body, icon: '/icons/icon.svg', tag: n.id });
+          } catch {}
         }
       }
     }
   });
+
+  // Desbloqueia áudio para toques e alarmes na primeira interação
+  const unlockAudio = () => {
+    try {
+      if (!audioCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) audioCtx = new AudioCtx();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    } catch {}
+  };
+  window.addEventListener('click', unlockAudio, { once: true });
+  window.addEventListener('touchstart', unlockAudio, { once: true });
+
+  // Solicita permissão para notificações do sistema se ainda não concedida
+  if ('Notification' in window && Notification.permission === 'default') {
+    setTimeout(() => {
+      try { Notification.requestPermission(); } catch {}
+    }, 2000);
+  }
 
   // Inicializa o banco de dados cliente e carrega sessão salva
   await init();
@@ -611,10 +633,10 @@ async function start() {
   startClocks();
   registerSW();
 
-  // Sincronização periódica a cada 15s para entrega rápida de alertas
+  // Sincronização periódica a cada 8s para entrega rápida de alertas de OS
   setInterval(() => {
     if (state.user && state.online && !state.syncing) sync();
-  }, 15000);
+  }, 8000);
 
   // Primeira sincronização se logado
   if (state.user && state.online) sync();

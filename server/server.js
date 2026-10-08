@@ -548,13 +548,17 @@ app.get('/api/workorders', (req, res) => {
       query += ` AND requester_id = ?`;
       params.push(req.user.id);
     }
-  } else if (isTech && scope === 'disponiveis') {
-    // Abertas sem responsável atribuído para o manutentor assumir
-    query += ` AND status = 'Aberta' AND responsible_id IS NULL`;
-  } else if (isTech && scope !== 'todas') {
-    // Padrão do manutentor: somente as OS vinculadas a ele (responsável ou participante)
-    query += ` AND (responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
-    params.push(req.user.id, req.user.id);
+  } else if (isTech) {
+    if (scope === 'minhas') {
+      query += ` AND (responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
+      params.push(req.user.id, req.user.id);
+    } else if (scope === 'disponiveis') {
+      query += ` AND status NOT IN ('Concluída','Cancelada') AND responsible_id IS NULL`;
+    } else if (scope !== 'todas') {
+      // Padrão do manutentor: todas as OS ativas da fábrica (para atender/assumir) + concluídas que ele participou
+      query += ` AND (status NOT IN ('Concluída','Cancelada') OR responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
+      params.push(req.user.id, req.user.id);
+    }
   } else if (req.query.tech) {
     // Filtro por técnico específico (para admin ou superadmin)
     query += ` AND (responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
