@@ -16,6 +16,7 @@ import {
   deleteSession,
   seedAuthUsers,
 } from './auth.js';
+import { initMySQLSync } from './mysql-sync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -23,6 +24,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 let db = openDb();
 seedAuthUsers(db);
+initMySQLSync(db);
 
 const app = express();
 app.disable('x-powered-by');
