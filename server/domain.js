@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { UPLOAD_DIR } from './db.js';
+import { sendPushToUsers } from './push.js';
 
 export const CLOSED = ['Concluída', 'Cancelada'];
 const nowIso = () => new Date().toISOString();
@@ -136,6 +137,15 @@ export function notify(db, userIds, { woId = null, kind, title, body }) {
   for (const uid of new Set(userIds)) {
     if (hasStatus) st.run(randomUUID(), woId, uid, 'app', kind, title, body || '', 'enviada', at);
     else st.run(randomUUID(), woId, uid, 'app', kind, title, body || '', at);
+  }
+
+  // Disparo assíncrono de notificações Web Push para dispositivos móveis
+  try {
+    sendPushToUsers(db, userIds, { woId, kind, title, body }).catch((err) => {
+      console.warn('[WebPush] Falha ao enviar notificação em segundo plano:', err.message);
+    });
+  } catch (err) {
+    console.warn('[WebPush] Falha ao invocar sendPushToUsers:', err.message);
   }
 }
 

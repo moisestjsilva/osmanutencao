@@ -17,6 +17,12 @@ import {
   seedAuthUsers,
 } from './auth.js';
 import { initMySQLSync } from './mysql-sync.js';
+import {
+  getVapidPublicKey,
+  saveSubscription,
+  removeSubscription,
+  sendPushToUsers,
+} from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -641,6 +647,52 @@ app.post('/api/notifications/read', requireUser, (req, res) => {
     else db.prepare('UPDATE notifications SET read_at=? WHERE id=? AND user_id=?').run(at, id, req.user.id);
   }
   res.json({ ok: true });
+});
+
+// ---------- Web Push Notifications ----------
+app.get('/api/push/vapid-public-key', (req, res) => {
+  try {
+    const key = getVapidPublicKey(db);
+    res.json({ publicKey: key });
+  } catch (e) {
+    res.status(500).json({ error: 'Falha ao obter chave VAPID: ' + e.message });
+  }
+});
+
+app.post('/api/push/subscribe', requireUser, (req, res) => {
+  try {
+    const { subscription } = req.body || {};
+    if (!subscription) return res.status(400).json({ error: 'Subscrição não informada' });
+    const userAgent = req.get('User-Agent') || '';
+    const id = saveSubscription(db, req.user.id, subscription, userAgent);
+    res.json({ ok: true, id });
+  } catch (e) {
+    res.status(400).json({ error: 'Falha ao salvar inscrição: ' + e.message });
+  }
+});
+
+app.post('/api/push/unsubscribe', requireUser, (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (endpoint) removeSubscription(db, endpoint);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Falha ao remover inscrição: ' + e.message });
+  }
+});
+
+app.post('/api/push/test', requireUser, async (req, res) => {
+  try {
+    await sendPushToUsers(db, [req.user.id], {
+      title: '🔔 Teste de Notificação',
+      body: 'Notificação push no celular funcionando perfeitamente mesmo em segundo plano!',
+      kind: 'teste',
+      woId: null,
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Falha ao disparar push de teste: ' + e.message });
+  }
 });
 
 // Planos preventivos

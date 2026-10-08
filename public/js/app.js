@@ -214,6 +214,11 @@ function showUserProfile() {
         <span class="grow" style="text-align:left">Instalar no Celular / Computador</span>
       </button>
 
+      <button class="btn" id="btn-prof-push-test" style="justify-content:flex-start">
+        🔔 <span class="grow" style="text-align:left">Testar Notificações no Celular</span>
+        <span class="badge ${'Notification' in window && Notification.permission === 'granted' ? 'ok' : 'warn'} xs">${'Notification' in window && Notification.permission === 'granted' ? 'Ativo ✓' : 'Ativar'}</span>
+      </button>
+
       <button class="btn" id="btn-prof-chpass" style="justify-content:flex-start">
         ${icon('key', 18)} <span class="grow" style="text-align:left">Alterar Minha Senha</span>
       </button>
@@ -234,6 +239,9 @@ function showUserProfile() {
       $('#btn-prof-install', el)?.addEventListener('click', () => {
         modal.close();
         openInstallModal();
+      });
+      $('#btn-prof-push-test', el)?.addEventListener('click', async () => {
+        await testPushNotification();
       });
       $('#btn-prof-chpass', el)?.addEventListener('click', () => {
         modal.close();
@@ -539,16 +547,138 @@ function startClocks() {
   }, 1000);
 }
 
-// Registra Service Worker para suporte PWA/offline
+// ======================================================================
+// NOTIFICAÇÕES WEB PUSH (VAPID + RFC 8030) E RECONEXÃO INSTANTÂNEA
+// ======================================================================
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+// Configura ou renova a inscrição Web Push do usuário no aparelho
+export async function setupPushNotifications(forcePrompt = false) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return { supported: false, status: 'unsupported' };
+  }
+  if (!state.user) {
+    return { supported: true, status: 'unauthenticated' };
+  }
+
+  let perm = Notification.permission;
+  if (perm === 'default' && forcePrompt) {
+    try {
+      perm = await Notification.requestPermission();
+    } catch {}
+  }
+
+  if (perm !== 'granted') {
+    return { supported: true, status: perm };
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+
+    if (!sub) {
+      const res = await api('/api/push/vapid-public-key');
+      if (!res.publicKey) throw new Error('Chave VAPID não configurada no servidor');
+      const appServerKey = urlBase64ToUint8Array(res.publicKey);
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: appServerKey,
+      });
+    }
+
+    if (sub) {
+      await api('/api/push/subscribe', {
+        method: 'POST',
+        body: { subscription: sub.toJSON() },
+      });
+    }
+    return { supported: true, status: 'granted', subscribed: true };
+  } catch (err) {
+    console.warn('[WebPush] Falha ao registrar inscrição push:', err.message);
+    return { supported: true, status: perm, error: err.message };
+  }
+}
+
+// Dispara notificação de teste direto no aparelho do usuário logado
+export async function testPushNotification() {
+  if (!('Notification' in window)) {
+    return toast('Este navegador não suporta notificações de sistema.', 'err');
+  }
+
+  if (Notification.permission !== 'granted') {
+    const setup = await setupPushNotifications(true);
+    if (setup.status !== 'granted') {
+      return toast('Permissão de notificações não concedida. Habilite nas configurações do navegador.', 'warn', 5000);
+    }
+  } else {
+    await setupPushNotifications(false);
+  }
+
+  try {
+    toast('Disparando notificação de teste...', 'info', 1800);
+    await api('/api/push/test', { method: 'POST' });
+    toast('Notificação push enviada! Ela aparecerá mesmo se o celular estiver bloqueado.', 'ok', 6000);
+  } catch (e) {
+    toast('Falha ao enviar notificação de teste: ' + e.message, 'err');
+  }
+}
+
+window.NovaPush = {
+  setup: setupPushNotifications,
+  test: testPushNotification,
+};
+
+// Registra Service Worker para suporte PWA, offline e Push
 async function registerSW() {
   if ('serviceWorker' in navigator) {
     try {
-      await navigator.serviceWorker.register('/sw.js');
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'navigate' && event.data.url) {
+          const hashIdx = event.data.url.indexOf('#');
+          if (hashIdx !== -1) {
+            location.hash = event.data.url.slice(hashIdx);
+          }
+        }
+      });
+      // Se já houver usuário autenticado, assegura subscrição push
+      if (state.user) {
+        setupPushNotifications(false);
+      }
     } catch (e) {
       console.warn('Service worker não registrado:', e);
     }
   }
 }
+
+// ======================================================================
+// RECONEXÃO INSTANTÂNEA AO RESTAURAR O APP (MINIMIZADO / TELA BLOQUEADA)
+// ======================================================================
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    // Aparelho desbloqueado ou aba restaurada: sincroniza imediatamente!
+    if (state.user && navigator.onLine) {
+      sync();
+      setupPushNotifications(false);
+    }
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (state.user && navigator.onLine && !state.syncing) {
+    sync();
+  }
+});
 
 // ======================================================================
 // INICIALIZAÇÃO
@@ -573,15 +703,18 @@ async function start() {
       renderNav();
       updateHeader();
       router();
+      if (state.user) {
+        setupPushNotifications(false);
+      }
     }
 
-    // Item 3: Sistema inteligente de alertas sonoros e notificações
+    // Alertas sonoros e toasts na tela quando o app está aberto em primeiro plano
     if (typeof ev === 'object' && ev?.type === 'new-notifs') {
       for (const n of ev.items) {
         const isStop = /PARADA/i.test(n.title);
         const isDirect = /Atribuída a Você/i.test(n.title) || n.kind === 'atribuicao';
 
-        // Toca o alarme correspondente
+        // Toca o alarme sonoro
         playAlertChime(isDirect || isStop ? 'urgent' : 'normal');
 
         const toastKind = isStop ? 'alarm' : (isDirect ? 'warn' : 'ok');
@@ -592,12 +725,6 @@ async function start() {
           t.onclick = () => {
             location.hash = `#/os/${n.wo_id}`;
           };
-        }
-
-        if ('Notification' in window && Notification.permission === 'granted') {
-          try {
-            new Notification(n.title, { body: n.body, icon: '/icons/icon.svg', tag: n.id });
-          } catch {}
         }
       }
     }
@@ -616,13 +743,6 @@ async function start() {
   window.addEventListener('click', unlockAudio, { once: true });
   window.addEventListener('touchstart', unlockAudio, { once: true });
 
-  // Solicita permissão para notificações do sistema se ainda não concedida
-  if ('Notification' in window && Notification.permission === 'default') {
-    setTimeout(() => {
-      try { Notification.requestPermission(); } catch {}
-    }, 2000);
-  }
-
   // Inicializa o banco de dados cliente e carrega sessão salva
   await init();
 
@@ -631,9 +751,16 @@ async function start() {
   renderNav();
   router();
   startClocks();
-  registerSW();
+  await registerSW();
 
-  // Sincronização periódica a cada 8s para entrega rápida de alertas de OS
+  // Se logado e com permissão pendente, solicita suavemente após 2s
+  if (state.user && 'Notification' in window && Notification.permission === 'default') {
+    setTimeout(() => {
+      setupPushNotifications(true);
+    }, 2500);
+  }
+
+  // Sincronização periódica a cada 8s para entrega de dados quando em primeiro plano
   setInterval(() => {
     if (state.user && state.online && !state.syncing) sync();
   }, 8000);
@@ -643,4 +770,5 @@ async function start() {
 }
 
 window.addEventListener('DOMContentLoaded', start);
+
 

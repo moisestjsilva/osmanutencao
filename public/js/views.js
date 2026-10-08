@@ -1455,9 +1455,34 @@ export function configView(root) {
         </div>
       </section>
       <section class="card">
-        <strong>Avisos no aparelho</strong>
-        <p class="muted small">Mostra alerta do sistema enquanto o app está aberto. Push com app fechado depende da plataforma (fora do escopo desta versão).</p>
-        <button class="btn sm" id="btn-perm" ${perm === 'granted' || perm === 'unsupported' ? 'disabled' : ''}>${perm === 'granted' ? 'Ativado ✓' : perm === 'unsupported' ? 'Não suportado' : 'Ativar avisos'}</button>
+        <div class="row" style="align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <strong>Notificações Web Push no Aparelho</strong>
+            <p class="muted small" style="margin-top:2px">Receba alertas em tempo real de chamados e máquinas paradas, mesmo com o celular bloqueado ou minimizado.</p>
+          </div>
+          <span class="badge ${perm === 'granted' ? 'ok' : perm === 'denied' ? 'alarm' : 'warn'}">
+            ${perm === 'granted' ? 'Ativadas ✓' : perm === 'denied' ? 'Bloqueadas ✕' : 'Desativadas'}
+          </span>
+        </div>
+        <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
+          ${perm !== 'granted' ? `
+            <button class="btn primary sm" id="btn-perm">
+              ${icon('bell', 16)} Ativar Notificações no Celular
+            </button>
+          ` : `
+            <button class="btn ok sm" id="btn-re-subscribe">
+              ${icon('check', 16)} Sincronizar Inscrição Push
+            </button>
+          `}
+          <button class="btn sm" id="btn-test-push">
+            🔔 Testar Notificação no Celular
+          </button>
+        </div>
+        ${perm === 'denied' ? `
+          <div class="info-box warn small" style="margin-top:10px">
+            ⚠️ As notificações foram bloqueadas no navegador. Para reativar, clique no ícone de configurações ao lado do endereço do site e altere "Notificações" para "Permitir".
+          </div>
+        ` : ''}
       </section>
       ${isManager() ? `
       <section class="card">
@@ -1484,7 +1509,28 @@ export function configView(root) {
       toast(`Tema ${th === 'dark' ? 'escuro' : 'claro'} ativado`);
       render();
     }));
-    $('#btn-perm', root).onclick = async () => { await Notification.requestPermission(); render(); };
+    $('#btn-perm', root)?.addEventListener('click', async () => {
+      if (window.NovaPush?.setup) {
+        const res = await window.NovaPush.setup(true);
+        if (res.status === 'granted') toast('Notificações ativadas com sucesso!', 'ok');
+        else toast('Permissão de notificação: ' + res.status, 'warn');
+      } else {
+        await Notification.requestPermission();
+      }
+      render();
+    });
+    $('#btn-re-subscribe', root)?.addEventListener('click', async () => {
+      if (window.NovaPush?.setup) {
+        toast('Sincronizando inscrição push...', 'info', 1500);
+        await window.NovaPush.setup(false);
+        toast('Inscrição push sincronizada com sucesso!', 'ok');
+      }
+    });
+    $('#btn-test-push', root)?.addEventListener('click', async () => {
+      if (window.NovaPush?.test) {
+        await window.NovaPush.test();
+      }
+    });
     $$('#seg-def button', root).forEach((b) => (b.onclick = async () => {
       try { await api('/api/settings', { method: 'PUT', body: { defaultRecipientsMode: b.dataset.value } }); await loadBoot(); render(); toast('Padrão atualizado'); } catch (e) { toast(esc(e.message), 'err'); }
     }));

@@ -170,9 +170,20 @@ function migrate(db) {
     reason TEXT, user_id TEXT, created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_events_wo ON wo_events(wo_id);
   CREATE INDEX IF NOT EXISTS idx_intervals_wo ON work_intervals(wo_id, user_id);
   CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read_at);
+  CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
   `);
 
   // Migração de colunas adicionais para máquinas (custo hora parada, horas funcionamento, foto)
