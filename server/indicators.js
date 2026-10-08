@@ -1,5 +1,5 @@
-// Indicadores conforme seção 6 do PRD. Cálculos sobre eventos/intervalos reais;
-// quando faltam dados (ex.: calendário operacional) o indicador NÃO é exibido como calculado.
+import { calcOperatingStoppedMinutes } from './business-hours.js';
+
 const MIN = 60000;
 const mins = (a, b) => (new Date(b) - new Date(a)) / MIN;
 const avg = (arr) => (arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : null);
@@ -70,10 +70,13 @@ export function computeIndicators(db, q = {}) {
   const correctiveDone = inPeriod.filter((w) => w.type === 'corretiva' && w.status === 'Concluída' && w.closed_at);
   const durations = correctiveDone.map((w) => mins(w.created_at, w.closed_at));
 
-  // MTTR: parada → retorno à operação (OS corretivas com parada e retorno informados)
-  const repairs = correctiveDone.filter((w) => w.machine_stopped && w.returned_at).map((w) => mins(w.created_at, w.returned_at)).filter((x) => x >= 0);
+  // MTTR: parada → retorno à operação (OS corretivas com parada e retorno informados em horas úteis disponíveis)
+  const repairs = correctiveDone.filter((w) => w.machine_stopped && w.returned_at).map((w) => {
+    const opHours = mById[w.machine_id]?.operating_hours_per_day || 8;
+    return calcOperatingStoppedMinutes(w.created_at, w.returned_at, opHours);
+  }).filter((x) => x >= 0);
 
-  // Tempo de máquina parada, deduplicado por máquina (intervalos de parada)
+  // Tempo de máquina parada, deduplicado por máquina (intervalos de parada em horas úteis disponíveis)
   const stops = db.prepare('SELECT * FROM machine_stops WHERE started_at <= ? AND (ended_at IS NULL OR ended_at >= ?)').all(T, F)
     .filter((s) => machineOk(s.machine_id));
   let stoppedMin = 0;
@@ -82,7 +85,8 @@ export function computeIndicators(db, q = {}) {
     const a = s.started_at < F ? F : s.started_at;
     const bRaw = s.ended_at || new Date().toISOString();
     const b = bRaw > T ? T : bRaw;
-    const m = Math.max(0, mins(a, b));
+    const opHours = mById[s.machine_id]?.operating_hours_per_day || 8;
+    const m = calcOperatingStoppedMinutes(a, b, opHours);
     stoppedMin += m;
     stoppedByMachine[s.machine_id] = (stoppedByMachine[s.machine_id] || 0) + m;
   }

@@ -1,7 +1,7 @@
 // Orquestrador do aplicativo Nova OS
 // Roteador por hash, controle de autenticação e permissões, atualização de relógios em tempo real
 import { state, init, on, sync, pendingOps, failedOps, resetNotifTracking, logout } from './store.js';
-import { $, $$, sheet, avatar, esc, icon, toast, clock, ROLE, roleBadge } from './ui.js';
+import { $, $$, sheet, avatar, esc, icon, toast, clock, stoppedClock, ROLE, roleBadge } from './ui.js';
 import {
   listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView,
   loginView, usersView, cadastrosView, changePasswordModal
@@ -527,6 +527,13 @@ function startClocks() {
       const base = Number(el.dataset.base || 0);
       if (since) {
         el.textContent = clock(since, base);
+      }
+    });
+    $$('[data-stopped-clock]').forEach((el) => {
+      const since = el.dataset.stoppedClock;
+      const opHours = Number(el.dataset.opHours || 8);
+      if (since) {
+        el.textContent = stoppedClock(since, opHours);
       }
     });
   }, 1000);

@@ -6,7 +6,7 @@ import {
   fetchMachines, createMachine, updateMachine, deleteMachine
 } from './store.js';
 import {
-  esc, $, $$, icon, avatar, machineBadge, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, statusBadge, prioBadge, roleBadge,
+  esc, $, $$, icon, avatar, machineBadge, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, stoppedClock, calcOperatingStoppedSeconds, statusBadge, prioBadge, roleBadge,
   PRIORITY, PRIO_COLOR, ROLE, compressImage, localInputValue,
 } from './ui.js';
 import { scanQR, extractCode, cameraSupported } from './scanner.js';
@@ -92,7 +92,7 @@ export function listView(root) {
           <div class="label-top"><span class="dot"></span>PARADA • OS ${w.number ?? '(pendente)'}</div>
           <h3>${esc(w.machine?.name)}</h3>
           <div class="small" style="opacity:.8">${esc(w.machine?.sector || '')} • ${esc(w.status)}</div>
-          <div class="timer mono" data-clock="${w.createdAt}">${clock(w.createdAt)}</div>
+          <div class="timer mono" data-stopped-clock="${w.createdAt}" data-op-hours="${w.machine?.operating_hours_per_day || 8}">${stoppedClock(w.createdAt, w.machine?.operating_hours_per_day || 8)}</div>
         </article>`).join('')}</div>` : '';
 
     $('#filters', root).innerHTML = FILTERS.map(([k, label, fn]) =>
@@ -128,9 +128,9 @@ function woCard(w, i = 0) {
   const m = w.machine;
   let costBadge = '';
   if (stopped && m?.hourly_cost > 0) {
-    const elapsedHours = (Date.now() - new Date(w.createdAt).getTime()) / 3600000;
+    const elapsedHours = calcOperatingStoppedSeconds(w.createdAt, { operatingHours: m.operating_hours_per_day || 8 }) / 3600;
     const estimatedCost = Math.round(elapsedHours * m.hourly_cost);
-    costBadge = `<span class="cost-chip" title="Custo de parada: R$ ${m.hourly_cost}/hora">${icon('alert', 12)} R$ ${estimatedCost.toLocaleString('pt-BR')}</span>`;
+    costBadge = `<span class="cost-chip" title="Custo de parada útil: R$ ${m.hourly_cost}/hora">${icon('alert', 12)} R$ ${estimatedCost.toLocaleString('pt-BR')}</span>`;
   }
   return `
   <article class="wo-card ${stopped ? 'is-stopped' : ''}" data-open="${w.id}" id="wo-${w.id}" style="--prio:${PRIO_COLOR[w.priority]};animation-delay:${Math.min(i, 10) * 30}ms">
@@ -192,8 +192,8 @@ export function detailView(root, { id }) {
 
       <section class="card detail-hero ${wo.machineStopped ? 'is-stopped' : ''}">
         ${wo.machineStopped ? (stoppedNow
-          ? `<div class="stop-banner">${icon('alert', 20)} MÁQUINA PARADA <span class="timer mono" data-clock="${wo.createdAt}">${clock(wo.createdAt)}</span></div>`
-          : `<div class="stop-banner recovered">${icon('check', 20)} Máquina retornou à operação ${wo.returnedAt ? `• ${fmtDateTime(wo.returnedAt)}` : ''}</div>`) : ''}
+          ? `<div class="stop-banner">${icon('alert', 20)} MÁQUINA PARADA <span class="timer mono" data-stopped-clock="${wo.createdAt}" data-op-hours="${wo.machine?.operating_hours_per_day || 8}">${stoppedClock(wo.createdAt, wo.machine?.operating_hours_per_day || 8)}</span></div>`
+          : `<div class="stop-banner recovered">${icon('check', 20)} Máquina retornou à operação ${wo.returnedAt ? `• ${fmtDateTime(wo.returnedAt)} (parada: ${stoppedClock(wo.createdAt, wo.machine?.operating_hours_per_day || 8, wo.returnedAt)})` : ''}</div>`) : ''}
         <div class="row wrap">
           <h1 style="font-size:24px">${wo.number ? `OS ${wo.number}` : 'OS (aguardando nº)'}</h1>
           ${statusBadge(wo.status)} ${prioBadge(wo.priority)}

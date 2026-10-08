@@ -97,7 +97,7 @@ app.use('/api', identify);
 const nameOf = (id) => (id ? db.prepare('SELECT name FROM users WHERE id=?').get(id)?.name : null);
 
 function serializeWo(w, full = false) {
-  const m = db.prepare('SELECT m.id, m.code, m.name, m.criticality, s.id sector_id, s.name sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(w.machine_id);
+  const m = db.prepare('SELECT m.id, m.code, m.name, m.criticality, m.hourly_cost, m.operating_hours_per_day, m.image_url, s.id sector_id, s.name sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(w.machine_id);
   const parts = db.prepare(`SELECT p.*, u.name FROM wo_participants p JOIN users u ON u.id=p.user_id WHERE p.wo_id=? ORDER BY p.role DESC, p.joined_at`).all(w.id);
   const ivs = db.prepare('SELECT * FROM work_intervals WHERE wo_id=? ORDER BY started_at').all(w.id);
   const now = Date.now();
