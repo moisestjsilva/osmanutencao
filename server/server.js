@@ -446,7 +446,7 @@ app.post('/api/machines', requireAdmin, (req, res) => {
   if (exists) return res.status(400).json({ error: 'Já existe uma máquina com esta TAG/código' });
   const id = 'm-' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '') + '-' + Date.now().toString(36).slice(-4);
   const hCost = Math.max(0, Number(hourlyCost) || 0);
-  const opHours = Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 16));
+  const opHours = Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 8));
 
   const rawList = Array.isArray(defaultChecklist) ? defaultChecklist : (typeof defaultChecklist === 'string' ? defaultChecklist.split('\n') : []);
   const cleanList = rawList.map((s) => String(s).trim()).filter(Boolean);
@@ -470,7 +470,7 @@ app.put('/api/machines/:id', requireAdmin, (req, res) => {
   const secId = sectorId || target.sector_id;
   const crit = criticality || target.criticality;
   const hCost = hourlyCost !== undefined ? Math.max(0, Number(hourlyCost) || 0) : target.hourly_cost;
-  const opHours = operatingHoursPerDay !== undefined ? Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 16)) : target.operating_hours_per_day;
+  const opHours = operatingHoursPerDay !== undefined ? Math.max(1, Math.min(24, Number(operatingHoursPerDay) || 8)) : target.operating_hours_per_day;
   const img = imageUrl !== undefined ? imageUrl : target.image_url;
   const act = active !== undefined ? (active ? 1 : 0) : target.active;
 

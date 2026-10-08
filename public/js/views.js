@@ -1664,7 +1664,7 @@ export function cadastrosView(root, params = {}) {
                       💰 R$ ${Number(m.hourly_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/hora
                     </span>
                     <span class="badge" style="background:var(--surface-2);font-size:11px" title="Horas de funcionamento diário">
-                      ⏱️ ${m.operating_hours_per_day || 16}h/dia
+                      ⏱️ ${m.operating_hours_per_day || 8}h/dia
                     </span>
                     <span class="badge" style="background:var(--surface-2);font-size:11px" title="Ficha de preventiva padrão">
                       📋 ${(() => {
@@ -2058,7 +2058,7 @@ export function cadastrosView(root, params = {}) {
 
         <label class="field">
           <span>Horas de Funcionamento por Dia (h/dia) *</span>
-          <input class="input" id="m-op-hours" type="number" step="0.5" min="1" max="24" required value="${target?.operating_hours_per_day ?? 16}" placeholder="Ex: 16" />
+          <input class="input" id="m-op-hours" type="number" step="0.5" min="1" max="24" required value="${target?.operating_hours_per_day ?? 8}" placeholder="Ex: 8" />
           <span class="muted xs" style="margin-top:2px;display:block">Horas que a máquina opera por dia (cálculo de horas de manutenção e MTBF)</span>
         </label>
 

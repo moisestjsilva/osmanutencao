@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS machines (
   \`criticality\` VARCHAR(32) NOT NULL DEFAULT 'media',
   \`active\` TINYINT(1) NOT NULL DEFAULT 1,
   \`hourly_cost\` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-  \`operating_hours_per_day\` DECIMAL(6,2) NOT NULL DEFAULT 16.00,
+  \`operating_hours_per_day\` DECIMAL(6,2) NOT NULL DEFAULT 8.00,
   \`image_url\` LONGTEXT,
   \`default_checklist_json\` LONGTEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

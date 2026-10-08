@@ -181,7 +181,7 @@ function migrate(db) {
     db.exec(`ALTER TABLE machines ADD COLUMN hourly_cost REAL NOT NULL DEFAULT 0.0`);
   }
   if (!machCols.includes('operating_hours_per_day')) {
-    db.exec(`ALTER TABLE machines ADD COLUMN operating_hours_per_day REAL NOT NULL DEFAULT 16.0`);
+    db.exec(`ALTER TABLE machines ADD COLUMN operating_hours_per_day REAL NOT NULL DEFAULT 8.0`);
   }
   if (!machCols.includes('image_url')) {
     db.exec(`ALTER TABLE machines ADD COLUMN image_url TEXT`);
