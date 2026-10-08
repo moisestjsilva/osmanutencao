@@ -1,6 +1,6 @@
 // Telas do app. Cada tela recebe o elemento raiz e devolve uma função de limpeza opcional.
 import {
-  state, on, api, enqueue, sync, workOrders, fetchDetail, pendingOps, failedOps, retryOp, discardOp, markRead, loadBoot, kv, uuid, NetError, userName,
+  state, on, api, enqueue, sync, workOrders, fetchDetail, pendingOps, failedOps, retryOp, retryAllFailed, discardOp, discardAllFailed, markRead, loadBoot, kv, uuid, NetError, userName,
   login, logout, changePassword, fetchUsers, createUser, updateUser, deleteUser,
   uploadImage, fetchSectors, createSector, updateSector, deleteSector,
   fetchMachines, createMachine, updateMachine, deleteMachine
@@ -1351,9 +1351,19 @@ export function syncView(root) {
         <div class="part-row small"><div class="grow"><strong>${TYPE[o.type] || o.type}</strong> • ${woNum(o.woId)}<div class="muted xs">${esc(userName(o.userId))} • ${fmtDateTime(o.localTime)}${o.attempts ? ` • ${o.attempts} tentativa(s): ${esc(o.lastError || '')}` : ''}</div></div>
         ${o.type === 'attach' ? `<span class="muted xs">${Math.round((o.payload.dataUrl?.length || 0) / 1365)} KB</span>` : ''}</div>`).join('')}</section>` : '<p class="muted small">Nada pendente. ✓</p>'}
 
-      <div class="section-title"><span>Não aceitos pelo servidor</span><span class="badge late">${fail.length}</span></div>
+      <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>Não aceitos pelo servidor</span><span class="badge late">${fail.length}</span>
+        </div>
+        ${fail.length ? `
+          <div style="display:flex;gap:8px">
+            <button class="btn sm" id="btn-retry-all">${icon('refresh', 14)} Reenviar todos</button>
+            <button class="btn ghost sm danger" id="btn-discard-all">${icon('trash', 14)} Descartar todos</button>
+          </div>
+        ` : ''}
+      </div>
       ${fail.length ? fail.map((o) => `
-        <div class="card tight"><div class="row"><div class="grow small"><strong>${TYPE[o.type] || o.type}</strong> • ${woNum(o.woId)}<div class="muted xs">${fmtDateTime(o.localTime)}</div>
+        <div class="card tight"><div class="row"><div class="grow small"><strong>${TYPE[o.type] || o.type}</strong> • ${woNum(o.woId)}<div class="muted xs">${esc(userName(o.userId))} • ${fmtDateTime(o.localTime)}</div>
           <div style="color:var(--danger);margin-top:4px">${esc(o.message || 'Rejeitado')}</div></div></div>
           <div class="row" style="margin-top:10px"><button class="btn sm" data-retry="${o.opId}">Reenviar</button><button class="btn ghost sm" data-discard="${o.opId}">Descartar</button></div></div>`).join('') : '<p class="muted small">Nenhuma falha.</p>'}
 
@@ -1368,11 +1378,45 @@ export function syncView(root) {
           ${!c.resolved_at && isManager() ? `<button class="btn sm" style="margin-top:8px" data-resolve="${c.id}">Registrar resolução</button>` : ''}
         </div>`).join('') : '<p class="muted small">Nenhum conflito.</p>'}`;
     $('#btn-sync-now', root).onclick = async () => {
-      const r = await sync();
-      if (r.network) toast('Sem conexão — tentaremos de novo automaticamente', 'warn');
-      else toast(r.failed.length ? `${r.failed.length} registro(s) não aceito(s)` : 'Tudo sincronizado', r.failed.length ? 'err' : 'ok');
+      const btn = $('#btn-sync-now', root);
+      if (btn) btn.disabled = true;
+      let r;
+      if (!pend.length && fail.length) {
+        toast('Reenviando registros não aceitos...', 'info');
+        r = await retryAllFailed();
+      } else {
+        r = await sync();
+      }
+      if (r?.network) toast('Sem conexão — tentaremos de novo automaticamente', 'warn');
+      else toast(r?.failed?.length ? `${r.failed.length} registro(s) não aceito(s)` : 'Tudo sincronizado', r?.failed?.length ? 'err' : 'ok');
       loadConflicts();
     };
+    const retryAllBtn = $('#btn-retry-all', root);
+    if (retryAllBtn) {
+      retryAllBtn.onclick = async () => {
+        retryAllBtn.disabled = true;
+        toast('Reenviando todos os registros...', 'info');
+        const r = await retryAllFailed();
+        if (r?.network) toast('Sem conexão — tentaremos de novo automaticamente', 'warn');
+        else toast(r?.failed?.length ? `${r.failed.length} registro(s) não aceito(s)` : 'Tudo sincronizado com sucesso!', r?.failed?.length ? 'err' : 'ok');
+        loadConflicts();
+      };
+    }
+    const discardAllBtn = $('#btn-discard-all', root);
+    if (discardAllBtn) {
+      discardAllBtn.onclick = async () => {
+        if (await confirmDialog({
+          title: 'Descartar todos os registros não aceitos?',
+          body: 'As tentativas rejeitadas serão removidas deste dispositivo.',
+          confirm: 'Descartar todos',
+          danger: true
+        })) {
+          await discardAllFailed();
+          toast('Registros descartados', 'ok');
+          loadConflicts();
+        }
+      };
+    }
     $$('[data-retry]', root).forEach((b) => (b.onclick = () => retryOp(b.dataset.retry).then(loadConflicts)));
     $$('[data-discard]', root).forEach((b) => (b.onclick = async () => {
       if (await confirmDialog({ title: 'Descartar registro?', body: 'O registro local será removido do aparelho. No servidor, rejeições ficam guardadas para revisão.', confirm: 'Descartar', danger: true })) discardOp(b.dataset.discard);

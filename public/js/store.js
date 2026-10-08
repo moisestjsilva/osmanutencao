@@ -507,8 +507,20 @@ export async function retryOp(opId) {
   if (!op) return;
   // Nova tentativa precisa de novo ID, pois o servidor já registrou o resultado do anterior
   await qDel(op.opId);
-  Object.assign(op, { opId: uuid(), status: 'pending', message: null, attempts: 0, localTime: op.type === 'attach' ? op.localTime : op.localTime });
+  Object.assign(op, { opId: uuid(), status: 'pending', message: null, attempts: 0 });
   await qPut(op);
+  emit('queue');
+  return sync();
+}
+
+export async function retryAllFailed() {
+  const list = failedOps();
+  if (!list.length) return sync();
+  for (const op of list) {
+    await qDel(op.opId);
+    Object.assign(op, { opId: uuid(), status: 'pending', message: null, attempts: 0 });
+    await qPut(op);
+  }
   emit('queue');
   return sync();
 }
@@ -516,6 +528,15 @@ export async function retryOp(opId) {
 export async function discardOp(opId) {
   await qDel(opId);
   state.queue = state.queue.filter((o) => o.opId !== opId);
+  emit('queue');
+}
+
+export async function discardAllFailed() {
+  const list = failedOps();
+  for (const op of list) {
+    await qDel(op.opId);
+  }
+  state.queue = state.queue.filter((o) => o.status !== 'failed');
   emit('queue');
 }
 

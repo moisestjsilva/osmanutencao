@@ -579,11 +579,25 @@ app.get('/api/workorders/:id', (req, res) => {
 
 // Recebe a fila de operações (online ou offline). Cada operação é confirmada individualmente.
 app.post('/api/sync', requireUser, (req, res) => {
+  const isStaff = ['admin', 'superadmin', 'gerente'].includes(req.user.role);
   const ops = Array.isArray(req.body?.ops) ? req.body.ops.slice(0, 200) : [];
   const results = ops.map((op) => {
-    // O usuário do cabeçalho é a fonte da identidade — impede registrar em nome de outro
-    if (op.userId && op.userId !== req.user.id) return { opId: op.opId, status: 'forbidden', message: 'Operação de outro usuário' };
-    return applyOp(db, { ...op, userId: req.user.id });
+    // Se for administrador ou gestor, permite sincronizar operações de qualquer usuário gravadas no aparelho
+    let targetUserId = req.user.id;
+    if (isStaff && op.userId) {
+      const existingUser = db.prepare('SELECT id, role, active FROM users WHERE id=?').get(op.userId);
+      if (existingUser && existingUser.active) {
+        const techOps = ['assume', 'start', 'join', 'pause', 'finish_part', 'complete', 'update_checklist', 'correct_interval'];
+        if (techOps.includes(op.type) && !['manutentor', 'gerente', 'admin', 'superadmin'].includes(existingUser.role)) {
+          targetUserId = req.user.id;
+        } else {
+          targetUserId = existingUser.id;
+        }
+      }
+    } else if (op.userId && op.userId !== req.user.id) {
+      return { opId: op.opId, status: 'forbidden', message: 'Operação de outro usuário' };
+    }
+    return applyOp(db, { ...op, userId: targetUserId });
   });
   res.json({ serverTime: new Date().toISOString(), results });
 });
@@ -695,10 +709,11 @@ app.get('/api/indicators', requireUser, (req, res) => {
 
 // Conflitos de sincronização (revisão do gerente)
 app.get('/api/conflicts', requireUser, (req, res) => {
-  const where = req.user.role === 'gerente' ? '' : 'WHERE c.user_id = @u';
+  const isManagerLike = ['gerente', 'admin', 'superadmin'].includes(req.user.role);
+  const where = isManagerLike ? '' : 'WHERE c.user_id = @u';
   const rows = db.prepare(`SELECT c.*, u.name user_name, w.number FROM conflicts c LEFT JOIN users u ON u.id=c.user_id
                            LEFT JOIN work_orders w ON w.id=c.wo_id ${where} ORDER BY c.resolved_at IS NOT NULL, c.created_at DESC LIMIT 200`)
-    .all(req.user.role === 'gerente' ? {} : { u: req.user.id });
+    .all(isManagerLike ? {} : { u: req.user.id });
   res.json({ conflicts: rows.map((r) => ({ ...r, payload: JSON.parse(r.payload_json || '{}') })) });
 });
 app.post('/api/conflicts/:id/resolve', requireUser, requireManager, (req, res) => {

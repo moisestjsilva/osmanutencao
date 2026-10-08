@@ -29,8 +29,8 @@ export function setSetting(db, key, value) {
 }
 const getUser = (db, id) => db.prepare('SELECT * FROM users WHERE id=?').get(id);
 const getWoRow = (db, id) => db.prepare('SELECT * FROM work_orders WHERE id=?').get(id);
-const isTech = (u) => u && (u.role === 'manutentor' || u.role === 'gerente');
-const isManager = (u) => u && u.role === 'gerente';
+const isTech = (u) => u && ['manutentor', 'gerente', 'admin', 'superadmin'].includes(u.role);
+const isManager = (u) => u && ['gerente', 'admin', 'superadmin'].includes(u.role);
 
 function nextNumber(db) {
   const n = Number(getSetting(db, 'next_wo_number', '1001'));
