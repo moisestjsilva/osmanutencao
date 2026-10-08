@@ -1238,7 +1238,7 @@ export function moreView(root) {
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
     ] : []),
-    ['#/maquinas', 'qr', 'Máquinas e etiquetas QR', 'Cadastro e impressão de QR'],
+    ['#/etiquetas', 'qr', 'Máquinas e etiquetas QR', 'Visualização e impressão de todas as etiquetas QR'],
     ['#/avisos', 'bell', 'Central de avisos', `${state.notifs?.length || 0} avisos registrados`],
     ['#/sync', 'cloud', 'Sincronização offline', `${pendingOps().length} pendente(s) • ${failedOps().length} com falha`],
     ['chpass', 'key', 'Alterar Minha Senha', 'Trocar senha da conta atual'],
@@ -1575,15 +1575,24 @@ export function cadastrosView(root, params = {}) {
           ${activeTab === 'maquinas' ? `
             <div class="row" style="gap:8px">
               <button class="btn sm" id="btn-view-qrs">
-                ${icon('qr', 16)} Etiquetas QR
+                ${icon('qr', 16)} Ver Todas Etiquetas
               </button>
               <button class="btn primary sm" id="btn-new-cad">
                 ${icon('plus', 16)} Nova Máquina
               </button>
             </div>
           ` : activeTab === 'setores' ? `
-            <button class="btn primary sm" id="btn-new-cad">
-              ${icon('plus', 16)} Novo Setor
+            <div class="row" style="gap:8px">
+              <button class="btn sm" id="btn-view-qrs">
+                ${icon('qr', 16)} Ver Todas Etiquetas
+              </button>
+              <button class="btn primary sm" id="btn-new-cad">
+                ${icon('plus', 16)} Novo Setor
+              </button>
+            </div>
+          ` : activeTab === 'etiquetas' ? `
+            <button class="btn primary sm" id="btn-print-all-qrs">
+              ${icon('print', 16)} Imprimir Todas as Etiquetas
             </button>
           ` : `
             <button class="btn primary sm" id="btn-new-cad">
@@ -1600,6 +1609,9 @@ export function cadastrosView(root, params = {}) {
         <button class="cad-tab ${activeTab === 'setores' ? 'active' : ''}" data-tab="setores">
           ${icon('list', 18)} Setores (${sectors.length})
         </button>
+        <button class="cad-tab ${activeTab === 'etiquetas' ? 'active' : ''}" data-tab="etiquetas">
+          ${icon('qr', 18)} Etiquetas QR (${machines.length + sectors.length})
+        </button>
         <button class="cad-tab ${activeTab === 'usuarios' ? 'active' : ''}" data-tab="usuarios">
           ${icon('users', 18)} Manutentores & Usuários (${users.length})
         </button>
@@ -1609,7 +1621,7 @@ export function cadastrosView(root, params = {}) {
       </div>
 
       <div class="input-group" style="margin-bottom:14px">
-        <input class="input" id="search-cad" type="search" placeholder="${activeTab === 'maquinas' ? 'Buscar máquina por TAG, nome ou setor...' : activeTab === 'setores' ? 'Buscar setor por nome ou código...' : 'Buscar colaborador por nome, usuário ou especialidade...'}" value="${esc(q)}" />
+        <input class="input" id="search-cad" type="search" placeholder="${activeTab === 'maquinas' ? 'Buscar máquina por TAG, nome ou setor...' : activeTab === 'setores' ? 'Buscar setor por nome ou código...' : activeTab === 'etiquetas' ? 'Filtrar etiquetas por máquina ou setor...' : 'Buscar colaborador por nome, usuário ou especialidade...'}" value="${esc(q)}" />
       </div>
 
       <div id="cad-content">
@@ -1701,7 +1713,7 @@ export function cadastrosView(root, params = {}) {
           ${filtered.map((s) => `
             <div class="cad-card" data-sid="${s.id}">
               <div class="cad-card-header">
-                <div class="machine-thumb default-badge" style="width:52px;height:52px">
+                <div class="machine-thumb default-badge pointer" data-qr-sector="${s.id}" style="width:52px;height:52px;cursor:pointer" title="Ver QR Code do setor">
                   <span class="badge-tag">${esc(s.code)}</span>
                 </div>
                 <div class="grow">
@@ -1715,6 +1727,7 @@ export function cadastrosView(root, params = {}) {
               <div class="cad-card-footer">
                 <div></div>
                 <div class="row" style="gap:6px">
+                  <button class="btn sm" data-qr-sector="${s.id}" title="Ver e imprimir QR Code do setor">${icon('qr', 14)} QR Code</button>
                   <button class="btn sm" data-edit-sector="${s.id}">${icon('edit', 14)} Editar</button>
                   <button class="icon-btn danger sm" data-del-sector="${s.id}" title="Excluir setor" style="color:var(--danger)">
                     ${icon('trash', 14)}
@@ -1724,6 +1737,43 @@ export function cadastrosView(root, params = {}) {
             </div>
           `).join('')}
         </div>
+      `;
+    }
+
+    if (activeTab === 'etiquetas') {
+      const ql = q.toLowerCase();
+      const secList = sectors.filter((s) => !ql || s.name.toLowerCase().includes(ql) || s.code.toLowerCase().includes(ql) || machines.some(m => m.sector_id === s.id && (`${m.code} ${m.name}`.toLowerCase().includes(ql))));
+      if (!secList.length) {
+        return '<div class="empty"><p class="muted">Nenhuma etiqueta encontrada para a busca.</p></div>';
+      }
+      return `
+        <div class="info-box small" style="margin-bottom:14px">
+          💡 Clique em qualquer etiqueta QR para ampliar e imprimir individualmente ou abrir chamado. O QR do setor filtra as máquinas pertencentes àquele setor.
+        </div>
+        ${secList.map((s) => {
+          const sMachines = machines.filter((m) => m.sector_id === s.id && (!ql || `${m.code} ${m.name} ${s.name} ${s.code}`.toLowerCase().includes(ql)));
+          return `
+            <div class="section-title" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+              <span>Setor: ${esc(s.name)} (${esc(s.code)})</span>
+              <span class="muted xs">${sMachines.length} máquina(s)</span>
+            </div>
+            <div class="qr-grid">
+              <div class="qr-card" data-qr-sector="${s.id}" style="border-color:var(--accent);cursor:pointer;background:var(--surface-2)">
+                <div class="qr"><img src="/api/qr/${encodeURIComponent(s.code)}.svg" alt="QR Setor ${esc(s.name)}" loading="lazy" /></div>
+                <strong>${esc(s.code)}</strong>
+                <div class="muted xs">📍 QR do Setor ${esc(s.name)}</div>
+                <div class="badge" style="background:var(--accent-soft);color:var(--accent);font-size:10px;margin-top:4px">QR SETOR</div>
+              </div>
+              ${sMachines.map((m) => `
+                <div class="qr-card" data-qr-modal="${m.id}" style="cursor:pointer">
+                  <div class="qr"><img src="/api/qr/${encodeURIComponent(m.code)}.svg" alt="QR ${esc(m.name)}" loading="lazy" /></div>
+                  <strong>${esc(m.code)}</strong>
+                  <div class="muted xs"><span class="crit crit-${m.criticality}"></span>${esc(m.name)}</div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }).join('')}
       `;
     }
 
@@ -1807,13 +1857,14 @@ export function cadastrosView(root, params = {}) {
       };
     });
 
-    $('#btn-new-cad', root).onclick = () => {
+    $('#btn-new-cad', root)?.addEventListener('click', () => {
       if (activeTab === 'maquinas') openMachineModal();
       else if (activeTab === 'setores') openSectorModal();
       else openUserModal();
-    };
+    });
 
-    $('#btn-view-qrs', root)?.addEventListener('click', () => go('#/maquinas'));
+    $('#btn-view-qrs', root)?.addEventListener('click', () => setTab('etiquetas'));
+    $('#btn-print-all-qrs', root)?.addEventListener('click', () => window.print());
 
     bindCardActions();
   }
@@ -1825,6 +1876,13 @@ export function cadastrosView(root, params = {}) {
         const el = $('#cad-content', root);
         if (el) el.innerHTML = renderTabContent();
         bindCardActions();
+      };
+    });
+
+    $$('[data-qr-sector]', root).forEach((btn) => {
+      btn.onclick = () => {
+        const s = sectors.find((x) => x.id === btn.dataset.qrSector);
+        if (s) showSectorQRModal(s);
       };
     });
 
@@ -2396,6 +2454,73 @@ export function showMachineQRModal(m) {
                 <img src="${qrUrl}" />
                 <div class="code">TAG: ${esc(m.code)}</div>
                 <div class="name">${esc(m.name)}</div>
+              </div>
+            </body>
+          </html>
+        `);
+        w.document.close();
+      };
+    }
+  });
+}
+
+export function showSectorQRModal(s) {
+  const qrUrl = `/api/qr/${encodeURIComponent(s.code)}.svg`;
+  const boot = state.boot;
+  const sectorMachines = boot?.machines ? boot.machines.filter((m) => m.sector_id === s.id && m.active !== 0) : [];
+  sheet(`
+    <div style="text-align:center;padding:10px 0">
+      <span class="badge" style="background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:11px;text-transform:uppercase">QR Code do Setor</span>
+      <h2 style="margin:6px 0 2px">Setor ${esc(s.name)}</h2>
+      <p class="muted small">Código: <span class="mono" style="font-weight:700">${esc(s.code)}</span> • ${sectorMachines.length} máquina(s) vinculada(s)</p>
+
+      <div class="qr-preview-box" style="margin:16px auto;padding:16px;background:#ffffff;border-radius:12px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.15)">
+        <img src="${qrUrl}" alt="QR Setor ${esc(s.name)}" style="width:200px;height:200px;display:block;margin:0 auto" />
+        <div style="margin-top:10px;font-family:monospace;font-weight:700;font-size:18px;color:#000000">SETOR: ${esc(s.code)}</div>
+        <div style="font-size:13px;font-weight:600;color:#333333;margin-top:2px">${esc(s.name)}</div>
+        <div style="font-size:11px;color:#666666;margin-top:2px">${sectorMachines.length} máquina(s) vinculada(s)</div>
+      </div>
+
+      <p class="muted xs" style="max-width:360px;margin:0 auto 16px">
+        Ao escanear esta etiqueta com o celular, a tela de abertura de OS abrirá exibindo <strong>somente as máquinas vinculadas a este setor</strong> para o operador ou solicitante selecionar.
+      </p>
+
+      <div class="row wrap" style="gap:8px;justify-content:center">
+        <button class="btn primary sm" id="btn-print-sector-qr">${icon('print', 16)} Imprimir Etiqueta</button>
+        <button class="btn sm" id="btn-test-sector-qr">${icon('external', 16)} Testar Abertura de OS</button>
+        <button class="btn sm" data-close>Fechar</button>
+      </div>
+    </div>
+  `, {
+    onMount(el, modal) {
+      $('#btn-test-sector-qr', el).onclick = () => {
+        modal.close();
+        go(`#/nova?qr=${encodeURIComponent(s.code)}`);
+      };
+      $('#btn-print-sector-qr', el).onclick = () => {
+        const w = window.open('', '_blank');
+        w.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Etiqueta QR Setor - ${esc(s.name)}</title>
+              <style>
+                body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                .tag { border: 2.5px solid #000; padding: 22px; border-radius: 12px; width: 260px; background: #fff; }
+                img { width: 190px; height: 190px; display: block; margin: 0 auto; }
+                .badge { display: inline-block; background: #eee; padding: 3px 8px; font-size: 11px; font-weight: bold; border-radius: 4px; text-transform: uppercase; margin-bottom: 6px; }
+                .code { font-family: monospace; font-size: 20px; font-weight: bold; margin-top: 10px; color: #000; }
+                .name { font-size: 15px; font-weight: bold; color: #222; margin-top: 4px; }
+                .desc { font-size: 12px; color: #666; margin-top: 4px; }
+              </style>
+            </head>
+            <body onload="window.print();window.close()">
+              <div class="tag">
+                <div class="badge">QR Code do Setor</div>
+                <img src="${qrUrl}" />
+                <div class="code">SETOR: ${esc(s.code)}</div>
+                <div class="name">${esc(s.name)}</div>
+                <div class="desc">${sectorMachines.length} máquina(s) vinculada(s)</div>
               </div>
             </body>
           </html>

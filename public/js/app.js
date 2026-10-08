@@ -82,7 +82,9 @@ function router() {
   } else if (path === '/usuarios') {
     currentCleanup = cadastrosView(root, { ...params, tab: 'usuarios' });
   } else if (path === '/maquinas') {
-    currentCleanup = cadastrosView(root, { ...params, tab: 'maquinas' });
+    currentCleanup = cadastrosView(root, { ...params, tab: params.tab || 'maquinas' });
+  } else if (path === '/etiquetas' || path === '/qr') {
+    currentCleanup = machinesView(root);
   } else if (path === '/preventivas') {
     currentCleanup = plansView(root);
   } else if (path === '/indicadores') {
