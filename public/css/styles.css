@@ -621,13 +621,131 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .progress-ring::after { content: attr(data-label); width: 34px; height: 34px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; font-size: 10.5px; font-weight: 700; color: var(--text); }
 
 /* ---------- Máquinas / QR ---------- */
-.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-.qr-card { padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); text-align: center; box-shadow: var(--shadow-sm); }
-.qr-card .qr { background: #ffffff; border-radius: 8px; padding: 6px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--border); }
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px; }
+.qr-card {
+  position: relative;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  user-select: none;
+}
+.qr-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--border-strong);
+}
+.qr-card.selected {
+  border-color: var(--accent) !important;
+  background: var(--accent-soft) !important;
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow);
+}
+.qr-card-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: all .15s ease;
+  color: #ffffff;
+}
+.qr-card.selected .qr-card-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.qr-card-print-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: all .15s ease;
+  padding: 0;
+}
+.qr-card-print-btn:hover {
+  background: var(--surface-3);
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+.qr-card .qr {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 6px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  margin-top: 22px;
+}
 .qr-card .qr img { width: 100%; height: 100%; }
-.qr-card strong { display: block; margin-top: 8px; font-family: var(--font-display); font-size: 13.5px; }
+.qr-card strong { display: block; margin-top: 8px; font-family: var(--font-display); font-size: 13.5px; word-break: break-all; }
 .crit { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
 .crit-alta { background: var(--danger); } .crit-media { background: var(--accent); } .crit-baixa { background: var(--ok); }
+
+/* Barra flutuante de seleção de QR */
+.qr-select-bar {
+  position: fixed;
+  bottom: calc(76px + var(--safe-b, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-solid);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 8px 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+  animation: sheetUp .2s var(--ease);
+}
+@media (max-width: 640px) {
+  .qr-select-bar {
+    width: calc(100% - 24px);
+    border-radius: 14px;
+    justify-content: space-between;
+    bottom: calc(70px + var(--safe-b, 0px));
+    padding: 10px 14px;
+  }
+}
+.sector-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.sector-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 /* ---------- Notificações ---------- */
 .notif { display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; cursor: pointer; transition: background .15s; }

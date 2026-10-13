@@ -1297,24 +1297,568 @@ export function moreView(root) {
   });
 }
 
+// ======================================================================
+// UTILITÁRIO DE IMPRESSÃO PROFISSIONAL DE ETIQUETAS QR
+// ======================================================================
+export function printQrLabels(items, options = {}) {
+  if (!items || !items.length) {
+    toast('Nenhuma etiqueta selecionada para impressão', 'warn');
+    return;
+  }
+  const title = options.title || (items.length === 1 ? `Etiqueta QR - ${items[0].code}` : `Etiquetas QR (${items.length} itens)`);
+  const isSingle = items.length === 1;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    toast('Permita pop-ups no navegador para abrir a janela de impressão', 'warn');
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(title)}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      padding: 16px;
+    }
+    .print-bar {
+      position: sticky;
+      top: 0;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 12px 18px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      z-index: 100;
+    }
+    .print-bar-info strong {
+      font-size: 16px;
+      display: block;
+      color: #0f172a;
+    }
+    .print-bar-info span {
+      font-size: 13px;
+      color: #64748b;
+    }
+    .print-bar-btns {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      appearance: none;
+      border: none;
+      background: #d97706;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #334155;
+    }
+    
+    .tags-grid {
+      display: grid;
+      grid-template-columns: ${isSingle ? '1fr' : 'repeat(auto-fill, minmax(230px, 1fr))'};
+      gap: 14px;
+      max-width: ${isSingle ? '320px' : '1080px'};
+      margin: 0 auto;
+    }
+
+    .tag-item {
+      background: #ffffff;
+      border: 2px solid #0f172a;
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .tag-top {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1.5px solid #e2e8f0;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #334155;
+    }
+    .tag-kind {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .kind-sector { background: #fef3c7; color: #b45309; }
+    .kind-machine { background: #e0f2fe; color: #0369a1; }
+
+    .tag-qr {
+      width: ${isSingle ? '180px' : '150px'};
+      height: ${isSingle ? '180px' : '150px'};
+      margin: 4px auto;
+      display: block;
+    }
+    .tag-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 19px;
+      font-weight: 800;
+      color: #000000;
+      letter-spacing: 0.5px;
+      margin-top: 6px;
+      word-break: break-all;
+    }
+    .tag-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 2px;
+      line-height: 1.25;
+    }
+    .tag-sector-name {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+    .tag-crit-badge {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .crit-alta { background: #fee2e2; color: #991b1b; }
+    .crit-media { background: #fef3c7; color: #92400e; }
+    .crit-baixa { background: #dcfce7; color: #166534; }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 0 !important;
+      }
+      .print-bar { display: none !important; }
+      .tags-grid {
+        display: grid !important;
+        grid-template-columns: ${isSingle ? '1fr' : 'repeat(3, 1fr)'} !important;
+        gap: 10px !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+      }
+      .tag-item {
+        border: 2px solid #000000 !important;
+        box-shadow: none !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        padding: 10px !important;
+      }
+      .tag-qr {
+        width: 140px !important;
+        height: 140px !important;
+      }
+      .tag-code {
+        font-size: 17px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <div class="print-bar-info">
+      <strong>${esc(title)}</strong>
+      <span>${items.length} etiqueta(s) pronta(s) • Pronto para imprimir</span>
+    </div>
+    <div class="print-bar-btns">
+      <button class="btn btn-secondary" onclick="window.close()">Fechar</button>
+      <button class="btn" onclick="window.print()">🖨️ Imprimir Agora</button>
+    </div>
+  </div>
+
+  <div class="tags-grid">
+    ${items.map((it) => `
+      <div class="tag-item">
+        <div class="tag-top">
+          <span>RUFATO MANUTENÇÃO</span>
+          <span class="tag-kind ${it.isSector ? 'kind-sector' : 'kind-machine'}">
+            ${it.isSector ? 'QR SETOR' : 'MÁQUINA'}
+          </span>
+        </div>
+        <img class="tag-qr" src="/api/qr/${encodeURIComponent(it.code)}.svg" alt="QR ${esc(it.code)}" />
+        <div class="tag-code">${esc(it.code)}</div>
+        <div class="tag-title">${esc(it.name || it.code)}</div>
+        ${it.sectorName ? `<div class="tag-sector-name">📍 Setor: ${esc(it.sectorName)}</div>` : ''}
+        ${!it.isSector && it.criticality ? `
+          <div class="tag-crit-badge crit-${esc(it.criticality)}">Criticidade: ${esc(it.criticality)}</div>
+        ` : ''}
+      </div>
+    `).join('')}
+  </div>
+
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        window.print();
+      }, 350);
+    });
+  <\/script>
+</body>
+</html>`;
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
 export function machinesView(root) {
   const boot = state.boot;
-  root.innerHTML = `
-    <div class="page-head"><div><h1>Máquinas e QR</h1><p>${boot.machines.length} máquinas • ${boot.sectors.length} setores</p></div>
-      <button class="btn sm no-print" id="btn-print">${icon('print', 16)} Imprimir</button></div>
-    <p class="muted small no-print">O QR da máquina abre o chamado já preenchido. O QR do setor pede a escolha da máquina. Leitura também funciona pela câmera nativa do celular.</p>
-    ${boot.sectors.map((s) => `
-      <div class="section-title"><span>${esc(s.name)}</span></div>
-      <div class="qr-grid">
-        <div class="qr-card" data-qr="${esc(s.code)}" style="border-color:hsl(36 100% 56% / 0.4);cursor:pointer"><div class="qr"><img src="/api/qr/${encodeURIComponent(s.code)}.svg" alt="QR do setor ${esc(s.name)}" loading="lazy" /></div>
-          <strong>${esc(s.code)}</strong><div class="muted xs">📍 QR do Setor ${esc(s.name)}</div></div>
-        ${boot.machines.filter((m) => m.sector_id === s.id).map((m) => `
-        <div class="qr-card" data-qr="${esc(m.code)}" style="cursor:pointer"><div class="qr"><img src="/api/qr/${encodeURIComponent(m.code)}.svg" alt="QR ${esc(m.name)}" loading="lazy" /></div>
-          <strong>${esc(m.code)}</strong><div class="muted xs"><span class="crit crit-${m.criticality}"></span>${esc(m.name)}</div></div>`).join('')}
-      </div>`).join('')}`;
-  $('#btn-print', root).onclick = () => window.print();
-  $$('[data-qr]', root).forEach((c) => (c.onclick = () => go(`#/nova?qr=${encodeURIComponent(c.dataset.qr)}`)));
+  const selectedCodes = new Set();
+  let searchQ = '';
+  let selectedSectorFilter = '';
+
+  function getAllItems() {
+    const items = [];
+    (boot.sectors || []).forEach((s) => {
+      items.push({
+        id: s.id,
+        code: s.code,
+        name: `Setor ${s.name}`,
+        sectorId: s.id,
+        sectorName: s.name,
+        isSector: true,
+      });
+      const sMachines = (boot.machines || []).filter((m) => m.sector_id === s.id && m.active !== 0);
+      sMachines.forEach((m) => {
+        items.push({
+          id: m.id,
+          code: m.code,
+          name: m.name,
+          sectorId: s.id,
+          sectorName: s.name,
+          criticality: m.criticality,
+          isSector: false,
+        });
+      });
+    });
+    return items;
+  }
+
+  function render() {
+    const ql = searchQ.trim().toLowerCase();
+    const allItems = getAllItems();
+
+    const filteredSectors = (boot.sectors || []).filter((s) => {
+      if (selectedSectorFilter && s.id !== selectedSectorFilter) return false;
+      if (!ql) return true;
+      const sMatches = (s.name || '').toLowerCase().includes(ql) || (s.code || '').toLowerCase().includes(ql);
+      const hasMachMatch = (boot.machines || []).some(
+        (m) => m.sector_id === s.id && m.active !== 0 && ((m.code || '').toLowerCase().includes(ql) || (m.name || '').toLowerCase().includes(ql))
+      );
+      return sMatches || hasMachMatch;
+    });
+
+    const activeMachinesCount = (boot.machines || []).filter((m) => m.active !== 0).length;
+
+    root.innerHTML = `
+      <div class="page-head no-print" style="margin-bottom:12px">
+        <div>
+          <h1>Máquinas e QR Codes</h1>
+          <p class="muted small">${activeMachinesCount} máquinas ativas • ${(boot.sectors || []).length} setores</p>
+        </div>
+        <div class="row wrap" style="gap:8px">
+          <button class="btn sm" id="btn-toggle-select-all" title="Selecionar ou desmarcar todas as etiquetas">
+            ${icon('check', 16)} ${selectedCodes.size > 0 ? 'Desmarcar Todos' : 'Selecionar Todos'}
+          </button>
+          <button class="btn sm primary" id="btn-print-all" title="Imprimir todas as etiquetas visíveis">
+            ${icon('print', 16)} Imprimir Todas (${allItems.length})
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros e Busca -->
+      <div class="card no-print" style="padding:12px;margin-bottom:16px">
+        <div class="row wrap" style="gap:10px;align-items:center">
+          <div class="grow" style="min-width:200px">
+            <input class="input" id="qr-search" value="${esc(searchQ)}" placeholder="Buscar por código (ex: EQ-COZ-104), máquina ou setor..." />
+          </div>
+          <div style="min-width:180px">
+            <select class="input select" id="qr-sector-filter">
+              <option value="">Todos os Setores (${(boot.sectors || []).length})</option>
+              ${(boot.sectors || []).map((s) => {
+                const count = (boot.machines || []).filter((m) => m.sector_id === s.id && m.active !== 0).length;
+                return `<option value="${s.id}" ${selectedSectorFilter === s.id ? 'selected' : ''}>${esc(s.name)} (${count} máq.)</option>`;
+              }).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="row wrap" style="gap:12px;margin-top:8px;font-size:12px;color:var(--text-3);align-items:center">
+          <span>💡 <strong>Dica:</strong> Clique na caixinha do QR para selecionar múltiplos itens, ou use <strong>"Imprimir este Setor"</strong> e o botão <strong>"🖨️"</strong> em qualquer etiqueta para imprimir individualmente.</span>
+        </div>
+      </div>
+
+      <!-- Barra Flutuante de Seleção Ativa -->
+      ${selectedCodes.size > 0 ? `
+        <div class="qr-select-bar no-print">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge" style="background:var(--accent);color:#fff;font-weight:700">${selectedCodes.size}</span>
+            <strong style="font-size:13.5px">${selectedCodes.size === 1 ? '1 selecionado' : `${selectedCodes.size} selecionados`}</strong>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn sm primary" id="btn-print-selected">
+              ${icon('print', 16)} Imprimir Selecionados (${selectedCodes.size})
+            </button>
+            <button class="btn sm" id="btn-clear-selection">Limpar</button>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Lista por Setor -->
+      ${!filteredSectors.length ? `
+        <div class="empty"><div class="ico">${icon('search', 28)}</div><strong>Nenhum setor ou máquina encontrada</strong></div>
+      ` : filteredSectors.map((s) => {
+        const sMachines = (boot.machines || []).filter((m) => {
+          if (m.sector_id !== s.id || m.active === 0) return false;
+          if (ql && !(m.code || '').toLowerCase().includes(ql) && !(m.name || '').toLowerCase().includes(ql) && !(s.name || '').toLowerCase().includes(ql)) return false;
+          return true;
+        });
+
+        const sectorItem = {
+          id: s.id,
+          code: s.code,
+          name: `Setor ${s.name}`,
+          sectorId: s.id,
+          sectorName: s.name,
+          isSector: true
+        };
+        const allSectorItems = [
+          sectorItem,
+          ...sMachines.map((m) => ({
+            id: m.id,
+            code: m.code,
+            name: m.name,
+            sectorId: s.id,
+            sectorName: s.name,
+            criticality: m.criticality,
+            isSector: false
+          }))
+        ];
+
+        const isSectorAllSelected = allSectorItems.length > 0 && allSectorItems.every((it) => selectedCodes.has(it.code));
+
+        return `
+          <div class="sector-header-row no-print">
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong style="font-size:15.5px;text-transform:uppercase;color:var(--text)">${esc(s.name)}</strong>
+              <span class="badge" style="background:var(--surface-3);color:var(--text-2);font-size:11px">${esc(s.code)}</span>
+              <span class="muted xs">• ${sMachines.length} máquina(s)</span>
+            </div>
+            <div class="sector-header-actions">
+              <button class="btn sm" data-action="toggle-sector" data-sector="${s.id}" style="font-size:12px;padding:4px 10px">
+                ${icon('check', 14)} ${isSectorAllSelected ? 'Desmarcar Setor' : 'Marcar Setor'}
+              </button>
+              <button class="btn sm primary" data-action="print-sector" data-sector="${s.id}" style="font-size:12px;padding:4px 10px">
+                ${icon('print', 14)} Imprimir este Setor (${allSectorItems.length})
+              </button>
+            </div>
+          </div>
+
+          <div class="qr-grid" style="margin-bottom:24px">
+            <!-- Card QR do Setor -->
+            <div class="qr-card ${selectedCodes.has(s.code) ? 'selected' : ''}" data-qr-code="${esc(s.code)}" data-is-sector="1" style="border-color:hsl(36 100% 56% / 0.5);cursor:pointer">
+              <div class="qr-card-check" data-check-qr="${esc(s.code)}" title="Selecionar para impressão">
+                ${selectedCodes.has(s.code) ? icon('check', 14, 3) : ''}
+              </div>
+              <button class="qr-card-print-btn" data-print-single="${esc(s.code)}" title="Imprimir este QR Code separadamente">
+                ${icon('print', 14)}
+              </button>
+              <div class="qr">
+                <img src="/api/qr/${encodeURIComponent(s.code)}.svg" alt="QR do setor ${esc(s.name)}" loading="lazy" />
+              </div>
+              <strong>${esc(s.code)}</strong>
+              <div class="muted xs" style="margin-top:2px">📍 QR do Setor ${esc(s.name)}</div>
+              <div class="badge" style="background:var(--accent-soft);color:var(--accent);font-size:10px;margin-top:6px;display:inline-block">QR SETOR</div>
+            </div>
+
+            <!-- Cards das Máquinas do Setor -->
+            ${sMachines.map((m) => `
+              <div class="qr-card ${selectedCodes.has(m.code) ? 'selected' : ''}" data-qr-code="${esc(m.code)}" data-is-sector="0" style="cursor:pointer">
+                <div class="qr-card-check" data-check-qr="${esc(m.code)}" title="Selecionar para impressão">
+                  ${selectedCodes.has(m.code) ? icon('check', 14, 3) : ''}
+                </div>
+                <button class="qr-card-print-btn" data-print-single="${esc(m.code)}" title="Imprimir este QR Code separadamente">
+                  ${icon('print', 14)}
+                </button>
+                <div class="qr">
+                  <img src="/api/qr/${encodeURIComponent(m.code)}.svg" alt="QR ${esc(m.name)}" loading="lazy" />
+                </div>
+                <strong>${esc(m.code)}</strong>
+                <div class="muted xs" style="margin-top:2px">
+                  <span class="crit crit-${m.criticality}"></span>${esc(m.name)}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }).join('')}
+    `;
+
+    bindEvents();
+  }
+
+  function bindEvents() {
+    const allItems = getAllItems();
+
+    // Busca com persistência do foco
+    const searchInput = $('#qr-search', root);
+    if (searchInput) {
+      searchInput.oninput = (e) => {
+        searchQ = e.target.value;
+        render();
+        const nextInp = $('#qr-search', root);
+        if (nextInp) {
+          nextInp.focus();
+          nextInp.setSelectionRange(nextInp.value.length, nextInp.value.length);
+        }
+      };
+    }
+
+    // Filtro de setor
+    const sectorFilter = $('#qr-sector-filter', root);
+    if (sectorFilter) {
+      sectorFilter.onchange = (e) => {
+        selectedSectorFilter = e.target.value;
+        render();
+      };
+    }
+
+    // Selecionar/Desmarcar todos
+    const btnToggleAll = $('#btn-toggle-select-all', root);
+    if (btnToggleAll) {
+      btnToggleAll.onclick = () => {
+        if (selectedCodes.size > 0) {
+          selectedCodes.clear();
+        } else {
+          allItems.forEach((it) => selectedCodes.add(it.code));
+        }
+        render();
+      };
+    }
+
+    // Imprimir Todos
+    const btnPrintAll = $('#btn-print-all', root);
+    if (btnPrintAll) {
+      btnPrintAll.onclick = () => {
+        printQrLabels(allItems, { title: 'Todas as Etiquetas QR - Rufato' });
+      };
+    }
+
+    // Imprimir Selecionados
+    const btnPrintSelected = $('#btn-print-selected', root);
+    if (btnPrintSelected) {
+      btnPrintSelected.onclick = () => {
+        const selectedList = allItems.filter((it) => selectedCodes.has(it.code));
+        printQrLabels(selectedList, { title: `Etiquetas Selecionadas (${selectedList.length})` });
+      };
+    }
+
+    // Limpar Seleção
+    const btnClearSel = $('#btn-clear-selection', root);
+    if (btnClearSel) {
+      btnClearSel.onclick = () => {
+        selectedCodes.clear();
+        render();
+      };
+    }
+
+    // Botões de Ação por Setor
+    $$('[data-action="print-sector"]', root).forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const secId = btn.dataset.sector;
+        const sec = (boot.sectors || []).find((s) => s.id === secId);
+        if (!sec) return;
+        const secItems = allItems.filter((it) => it.sectorId === secId);
+        printQrLabels(secItems, { title: `Etiquetas do Setor ${sec.name}` });
+      };
+    });
+
+    $$('[data-action="toggle-sector"]', root).forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const secId = btn.dataset.sector;
+        const secItems = allItems.filter((it) => it.sectorId === secId);
+        const allChecked = secItems.every((it) => selectedCodes.has(it.code));
+        if (allChecked) {
+          secItems.forEach((it) => selectedCodes.delete(it.code));
+        } else {
+          secItems.forEach((it) => selectedCodes.add(it.code));
+        }
+        render();
+      };
+    });
+
+    // Impressão individual avulsa em cada card
+    $$('[data-print-single]', root).forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const code = btn.dataset.printSingle;
+        const it = allItems.find((x) => x.code === code);
+        if (it) {
+          printQrLabels([it], { title: `Etiqueta QR - ${it.code}` });
+        }
+      };
+    });
+
+    // Clique no card ou no checkbox para alternar seleção
+    $$('[data-qr-code]', root).forEach((card) => {
+      card.onclick = (e) => {
+        // Se clicou no botão de imprimir avulso, já foi tratado acima
+        if (e.target.closest('[data-print-single]')) return;
+        const code = card.dataset.qrCode;
+        if (selectedCodes.has(code)) {
+          selectedCodes.delete(code);
+        } else {
+          selectedCodes.add(code);
+        }
+        render();
+      };
+    });
+  }
+
+  render();
 }
+
 
 export function notifsView(root) {
   function render() {
@@ -1846,17 +2390,25 @@ export function cadastrosView(root, params = {}) {
       }
       return `
         <div class="info-box small" style="margin-bottom:14px">
-          💡 Clique em qualquer etiqueta QR para ampliar e imprimir individualmente ou abrir chamado. O QR do setor filtra as máquinas pertencentes àquele setor.
+          💡 Clique em qualquer etiqueta QR para ampliar ou usar o botão <strong>"🖨️"</strong> para imprimir individualmente. Use <strong>"Imprimir este Setor"</strong> para gerar todas as etiquetas daquele setor.
         </div>
         ${secList.map((s) => {
           const sMachines = machines.filter((m) => m.sector_id === s.id && (!ql || `${m.code} ${m.name} ${s.name} ${s.code}`.toLowerCase().includes(ql)));
           return `
-            <div class="section-title" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
-              <span>Setor: ${esc(s.name)} (${esc(s.code)})</span>
-              <span class="muted xs">${sMachines.length} máquina(s)</span>
+            <div class="section-title" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div>
+                <span>Setor: ${esc(s.name)} (${esc(s.code)})</span>
+                <span class="muted xs">• ${sMachines.length} máquina(s)</span>
+              </div>
+              <button class="btn sm primary" data-cad-print-sector="${s.id}" style="font-size:11.5px;padding:3px 10px">
+                ${icon('print', 13)} Imprimir este Setor (${sMachines.length + 1})
+              </button>
             </div>
             <div class="qr-grid">
               <div class="qr-card" data-qr-sector="${s.id}" style="border-color:var(--accent);cursor:pointer;background:var(--surface-2)">
+                <button class="qr-card-print-btn" data-cad-print-single="${esc(s.code)}" title="Imprimir este QR Code">
+                  ${icon('print', 14)}
+                </button>
                 <div class="qr"><img src="/api/qr/${encodeURIComponent(s.code)}.svg" alt="QR Setor ${esc(s.name)}" loading="lazy" /></div>
                 <strong>${esc(s.code)}</strong>
                 <div class="muted xs">📍 QR do Setor ${esc(s.name)}</div>
@@ -1864,6 +2416,9 @@ export function cadastrosView(root, params = {}) {
               </div>
               ${sMachines.map((m) => `
                 <div class="qr-card" data-qr-modal="${m.id}" style="cursor:pointer">
+                  <button class="qr-card-print-btn" data-cad-print-single="${esc(m.code)}" title="Imprimir este QR Code">
+                    ${icon('print', 14)}
+                  </button>
                   <div class="qr"><img src="/api/qr/${encodeURIComponent(m.code)}.svg" alt="QR ${esc(m.name)}" loading="lazy" /></div>
                   <strong>${esc(m.code)}</strong>
                   <div class="muted xs"><span class="crit crit-${m.criticality}"></span>${esc(m.name)}</div>
@@ -1977,15 +2532,55 @@ export function cadastrosView(root, params = {}) {
       };
     });
 
+    $$('[data-cad-print-sector]', root).forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const secId = btn.dataset.cadPrintSector;
+        const sec = sectors.find((s) => s.id === secId);
+        if (!sec) return;
+        const sMachines = machines.filter((m) => m.sector_id === secId && m.active !== 0);
+        const items = [
+          { code: sec.code, name: `Setor ${sec.name}`, sectorName: sec.name, isSector: true },
+          ...sMachines.map((m) => ({
+            code: m.code,
+            name: m.name,
+            sectorName: sec.name,
+            criticality: m.criticality,
+            isSector: false
+          }))
+        ];
+        printQrLabels(items, { title: `Etiquetas do Setor ${sec.name}` });
+      };
+    });
+
+    $$('[data-cad-print-single]', root).forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const code = btn.dataset.cadPrintSingle;
+        const sec = sectors.find((s) => s.code === code);
+        if (sec) {
+          printQrLabels([{ code: sec.code, name: `Setor ${sec.name}`, sectorName: sec.name, isSector: true }]);
+          return;
+        }
+        const m = machines.find((x) => x.code === code);
+        if (m) {
+          const s = sectors.find((x) => x.id === m.sector_id);
+          printQrLabels([{ code: m.code, name: m.name, sectorName: s?.name || '', criticality: m.criticality, isSector: false }]);
+        }
+      };
+    });
+
     $$('[data-qr-sector]', root).forEach((btn) => {
-      btn.onclick = () => {
+      btn.onclick = (e) => {
+        if (e.target.closest('[data-cad-print-single]')) return;
         const s = sectors.find((x) => x.id === btn.dataset.qrSector);
         if (s) showSectorQRModal(s);
       };
     });
 
     $$('[data-qr-modal]', root).forEach((btn) => {
-      btn.onclick = () => {
+      btn.onclick = (e) => {
+        if (e.target.closest('[data-cad-print-single]')) return;
         const m = machines.find((x) => x.id === btn.dataset.qrModal);
         if (m) showMachineQRModal(m);
       };
@@ -2533,30 +3128,13 @@ export function showMachineQRModal(m) {
   `, {
     onMount(el) {
       $('#btn-print-single-qr', el).onclick = () => {
-        const w = window.open('', '_blank');
-        w.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Etiqueta QR - ${esc(m.code)}</title>
-              <style>
-                body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-                .tag { border: 2px solid #000; padding: 20px; border-radius: 12px; width: 240px; background: #fff; }
-                img { width: 180px; height: 180px; display: block; margin: 0 auto; }
-                .code { font-family: monospace; font-size: 20px; font-weight: bold; margin-top: 10px; color: #000; }
-                .name { font-size: 13px; color: #333; margin-top: 4px; }
-              </style>
-            </head>
-            <body onload="window.print();window.close()">
-              <div class="tag">
-                <img src="${qrUrl}" />
-                <div class="code">TAG: ${esc(m.code)}</div>
-                <div class="name">${esc(m.name)}</div>
-              </div>
-            </body>
-          </html>
-        `);
-        w.document.close();
+        printQrLabels([{
+          code: m.code,
+          name: m.name,
+          sectorName: m.sector_name || '',
+          criticality: m.criticality,
+          isSector: false
+        }]);
       };
     }
   });
@@ -2584,8 +3162,9 @@ export function showSectorQRModal(s) {
       </p>
 
       <div class="row wrap" style="gap:8px;justify-content:center">
-        <button class="btn primary sm" id="btn-print-sector-qr">${icon('print', 16)} Imprimir Etiqueta</button>
-        <button class="btn sm" id="btn-test-sector-qr">${icon('external', 16)} Testar Abertura de OS</button>
+        <button class="btn primary sm" id="btn-print-sector-qr">${icon('print', 16)} Imprimir Apenas Este QR</button>
+        <button class="btn sm" id="btn-print-sector-all" style="background:var(--surface-3);color:var(--text)">${icon('print', 16)} Imprimir Setor Completo (${sectorMachines.length + 1})</button>
+        <button class="btn sm" id="btn-test-sector-qr">${icon('external', 16)} Testar Abertura</button>
         <button class="btn sm" data-close>Fechar</button>
       </div>
     </div>
@@ -2596,34 +3175,25 @@ export function showSectorQRModal(s) {
         go(`#/nova?qr=${encodeURIComponent(s.code)}`);
       };
       $('#btn-print-sector-qr', el).onclick = () => {
-        const w = window.open('', '_blank');
-        w.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Etiqueta QR Setor - ${esc(s.name)}</title>
-              <style>
-                body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-                .tag { border: 2.5px solid #000; padding: 22px; border-radius: 12px; width: 260px; background: #fff; }
-                img { width: 190px; height: 190px; display: block; margin: 0 auto; }
-                .badge { display: inline-block; background: #eee; padding: 3px 8px; font-size: 11px; font-weight: bold; border-radius: 4px; text-transform: uppercase; margin-bottom: 6px; }
-                .code { font-family: monospace; font-size: 20px; font-weight: bold; margin-top: 10px; color: #000; }
-                .name { font-size: 15px; font-weight: bold; color: #222; margin-top: 4px; }
-                .desc { font-size: 12px; color: #666; margin-top: 4px; }
-              </style>
-            </head>
-            <body onload="window.print();window.close()">
-              <div class="tag">
-                <div class="badge">QR Code do Setor</div>
-                <img src="${qrUrl}" />
-                <div class="code">SETOR: ${esc(s.code)}</div>
-                <div class="name">${esc(s.name)}</div>
-                <div class="desc">${sectorMachines.length} máquina(s) vinculada(s)</div>
-              </div>
-            </body>
-          </html>
-        `);
-        w.document.close();
+        printQrLabels([{
+          code: s.code,
+          name: `Setor ${s.name}`,
+          sectorName: s.name,
+          isSector: true
+        }]);
+      };
+      $('#btn-print-sector-all', el).onclick = () => {
+        const items = [
+          { code: s.code, name: `Setor ${s.name}`, sectorName: s.name, isSector: true },
+          ...sectorMachines.map((m) => ({
+            code: m.code,
+            name: m.name,
+            sectorName: s.name,
+            criticality: m.criticality,
+            isSector: false
+          }))
+        ];
+        printQrLabels(items, { title: `Etiquetas do Setor ${s.name}` });
       };
     }
   });
