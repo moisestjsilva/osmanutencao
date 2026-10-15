@@ -215,7 +215,7 @@ export function getSessionUser(db, token) {
   if (!token) return null;
   const now = new Date().toISOString();
   const row = db.prepare(`
-    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.active, s.expires_at
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.avatar_url, u.active, s.expires_at
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > ? AND u.active = 1
@@ -230,6 +230,7 @@ export function getSessionUser(db, token) {
     role: row.role,
     teamId: row.team_id,
     specialty: row.specialty,
+    avatar_url: row.avatar_url,
     active: !!row.active
   };
 }

@@ -63,7 +63,7 @@ function identify(req, res, next) {
   // Fallback opcional por X-User-Id para suporte à fila offline/legado
   const id = req.get('X-User-Id');
   if (id) {
-    const row = db.prepare('SELECT id, name, email, username, role, team_id, specialty, active FROM users WHERE id=? AND active=1').get(id);
+    const row = db.prepare('SELECT id, name, email, username, role, team_id, specialty, avatar_url, active FROM users WHERE id=? AND active=1').get(id);
     if (row) {
       req.user = {
         id: row.id,
@@ -73,6 +73,7 @@ function identify(req, res, next) {
         role: row.role,
         teamId: row.team_id,
         specialty: row.specialty,
+        avatar_url: row.avatar_url,
         active: !!row.active
       };
       return next();
@@ -187,6 +188,7 @@ app.post('/api/auth/login', (req, res) => {
       role: user.role,
       teamId: user.team_id,
       specialty: user.specialty,
+      avatar_url: user.avatar_url,
     }
   });
 });

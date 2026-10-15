@@ -1,7 +1,7 @@
 // Orquestrador do aplicativo Nova OS
 // Roteador por hash, controle de autenticação e permissões, atualização de relógios em tempo real
 import { state, init, on, sync, pendingOps, failedOps, resetNotifTracking, logout } from './store.js';
-import { $, $$, sheet, avatar, esc, icon, toast, clock, stoppedClock, ROLE, roleBadge } from './ui.js';
+import { $, $$, sheet, avatar, esc, icon, toast, clock, stoppedClock, ROLE, roleBadge, initials, hue } from './ui.js';
 import {
   listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView,
   loginView, usersView, cadastrosView, changePasswordModal
@@ -306,11 +306,21 @@ function updateHeader() {
   const notifBtn = $('#btn-notifs');
 
   if (state.user) {
-    av.textContent = state.user.name.slice(0, 2).toUpperCase();
+    if (state.user.avatar_url) {
+      av.classList.add('has-img');
+      av.style.removeProperty('--h');
+      av.innerHTML = `<img src="${esc(state.user.avatar_url)}" alt="${esc(state.user.name)}" class="avatar-photo" onerror="this.parentElement.classList.remove('has-img');this.parentElement.textContent='${esc(initials(state.user.name))}'" />`;
+    } else {
+      av.classList.remove('has-img');
+      av.style.setProperty('--h', hue(state.user.name));
+      av.textContent = initials(state.user.name);
+    }
     av.title = `${state.user.name} (${ROLE[state.user.role] || state.user.role})`;
     if (syncPill) syncPill.style.display = '';
     if (notifBtn) notifBtn.style.display = '';
   } else {
+    av.classList.remove('has-img');
+    av.style.removeProperty('--h');
     av.innerHTML = icon('user', 18);
     av.title = 'Fazer Login';
     if (syncPill) syncPill.style.display = 'none';

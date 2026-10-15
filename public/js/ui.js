@@ -131,10 +131,13 @@ export function timeAgo(iso) {
 export const initials = (name = '?') => name.replace(/\(.*\)/, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 export const hue = (str = '') => [...str].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 export const avatar = (name, cls = '', imgUrl = null) => {
+  const isNum = typeof cls === 'number' || /^\d+$/.test(cls);
+  const sizeStyle = isNum ? `style="width:${cls}px;height:${cls}px;font-size:${Math.round(cls * 0.36)}px;--h:${hue(name)}"` : `style="--h:${hue(name)}"`;
+  const classNames = `avatar ${isNum ? '' : cls}`.trim();
   if (imgUrl) {
-    return `<span class="avatar ${cls} has-img" title="${esc(name)}"><img src="${esc(imgUrl)}" alt="${esc(name)}" class="avatar-photo" onerror="this.parentElement.innerHTML='${esc(initials(name))}'" /></span>`;
+    return `<span class="${classNames} has-img" ${sizeStyle} title="${esc(name)}"><img src="${esc(imgUrl)}" alt="${esc(name)}" class="avatar-photo" onerror="this.parentElement.classList.remove('has-img');this.parentElement.textContent='${esc(initials(name))}'" /></span>`;
   }
-  return `<span class="avatar ${cls}" style="--h:${hue(name)}" title="${esc(name)}">${esc(initials(name))}</span>`;
+  return `<span class="${classNames}" ${sizeStyle} title="${esc(name)}">${esc(initials(name))}</span>`;
 };
 
 export const machineBadge = (m, cls = '') => {

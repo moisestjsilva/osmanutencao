@@ -171,10 +171,20 @@ export async function createUser(userData) {
 }
 
 export async function updateUser(id, userData) {
-  return await api(`/api/users/${encodeURIComponent(id)}`, {
+  const r = await api(`/api/users/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: userData
   });
+  if (state.user && state.user.id === id) {
+    if (r?.user) {
+      state.user = { ...state.user, ...r.user };
+    } else {
+      if (userData.name) state.user.name = userData.name;
+      if (userData.avatarUrl !== undefined) state.user.avatar_url = userData.avatarUrl;
+    }
+    emit('user');
+  }
+  return r;
 }
 
 export async function deleteUser(id) {
@@ -266,7 +276,13 @@ export async function loadBoot() {
   const b = await api('/api/bootstrap');
   state.boot = b;
   if (b.currentUser) {
-    state.user = b.currentUser;
+    state.user = { ...state.user, ...b.currentUser };
+  }
+  if (state.user && Array.isArray(b.users)) {
+    const fresh = b.users.find((u) => u.id === state.user.id);
+    if (fresh) {
+      state.user = { ...state.user, ...fresh };
+    }
   }
   await kv.set('boot', b);
   emit();
