@@ -959,7 +959,6 @@ export function newPlanSheet(onSuccess) {
             checklist: el.querySelector('#p-c').value.split('\n'),
           } });
           sh.close(); toast('Plano preventivo criado com sucesso'); sync();
-          if (onSuccess) onSuccess();
         } catch (e) {
           const b = el.querySelector('#p-err'); b.textContent = e instanceof NetError ? 'Sem conexão — planos exigem internet' : e.message; b.classList.remove('hidden');
         }
@@ -978,6 +977,15 @@ export function kpiView(root) {
   const storageKey = isTech ? 'nova-os:kpi-tech' : 'nova-os:kpi';
   const f = JSON.parse(sessionStorage.getItem(storageKey) || '{"days":"30"}');
   let alive = true;
+  let lastData = null;
+
+  const periodOptions = [
+    ['7', '7 dias'],
+    ['30', '30 dias'],
+    ['90', '90 dias'],
+    ['365', '12 meses'],
+    ['tudo', 'Todo Histórico'],
+  ];
 
   if (isTech) {
     root.innerHTML = `
@@ -987,19 +995,19 @@ export function kpiView(root) {
           <p id="kpi-period">Atendimentos de ${esc(user?.name || '')}</p>
         </div>
       </div>
-      <div class="chips" id="kpi-days">${[['7', '7 dias'], ['30', '30 dias'], ['90', '90 dias'], ['365', '12 meses']].map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
+      <div class="chips" id="kpi-days">${periodOptions.map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
       <div class="filters" style="margin:8px 0 6px">
         <select class="input" id="f-sector"><option value="">Todos os setores</option>${boot.sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
-        <select class="input" id="f-machine"><option value="">Todas as máquinas</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
+        <select class="input" id="f-machine"><option value="">Todas as máquinas (Visão Fábrica)</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
       </div>
       <div id="kpi-body"><div class="skeleton"></div></div>`;
   } else {
     root.innerHTML = `
       <div class="page-head"><div><h1>Indicadores</h1><p id="kpi-period"></p></div></div>
-      <div class="chips" id="kpi-days">${[['7', '7 dias'], ['30', '30 dias'], ['90', '90 dias'], ['365', '12 meses']].map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
+      <div class="chips" id="kpi-days">${periodOptions.map(([d, l]) => `<button class="chip ${f.days === d ? 'active' : ''}" data-days="${d}">${l}</button>`).join('')}</div>
       <div class="filters" style="margin:8px 0 6px">
         <select class="input" id="f-sector"><option value="">Todos os setores</option>${boot.sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
-        <select class="input" id="f-machine"><option value="">Todas as máquinas</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
+        <select class="input" id="f-machine"><option value="">Todas as máquinas (Visão Fábrica)</option>${boot.machines.map((m) => `<option value="${m.id}">${esc(m.code)} ${esc(m.name)}</option>`).join('')}</select>
         <select class="input" id="f-team"><option value="">Todas as equipes</option>${boot.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
         <select class="input" id="f-user"><option value="">Todos os manutentores</option>${boot.users.filter((u) => u.role === 'manutentor').map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
       </div>
@@ -1018,12 +1026,21 @@ export function kpiView(root) {
   async function load() {
     sessionStorage.setItem(storageKey, JSON.stringify(f));
     const to = new Date();
-    const from = new Date(Date.now() - (Number(f.days) - 1) * 86400000);
+    const from = f.days === 'tudo' ? 'tudo' : new Date(Date.now() - (Number(f.days || 30) - 1) * 86400000).toISOString().slice(0, 10);
     const filterKeys = isTech ? ['sectorId', 'machineId'] : ['sectorId', 'machineId', 'teamId', 'userId'];
-    const qs = new URLSearchParams({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), ...Object.fromEntries(filterKeys.filter((k) => f[k]).map((k) => [k, f[k]])) });
+    const qs = new URLSearchParams({ from, to: to.toISOString().slice(0, 10), ...Object.fromEntries(filterKeys.filter((k) => f[k]).map((k) => [k, f[k]])) });
     let d;
-    try { d = await api(`/api/indicators?${qs}`); kv.set(storageKey, d); }
-    catch { d = await kv.get(storageKey); if (!d) { $('#kpi-body', root).innerHTML = '<div class="empty">Indicadores exigem conexão.</div>'; return; } toast('Sem conexão — últimos indicadores salvos', 'warn'); }
+    try {
+      d = await api(`/api/indicators?${qs}`);
+      kv.set(storageKey, d);
+    } catch {
+      d = await kv.get(storageKey);
+      if (!d) {
+        $('#kpi-body', root).innerHTML = '<div class="empty">Indicadores exigem conexão.</div>';
+        return;
+      }
+      toast('Sem conexão — últimos indicadores salvos', 'warn');
+    }
     if (alive) render(d);
   }
 
@@ -1046,7 +1063,7 @@ export function kpiView(root) {
           const rankTextColor = rank <= 3 ? '#000000' : 'var(--text-2)';
 
           return `
-            <div class="rank-item" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--surface-2);border-radius:10px;border:1px solid var(--border-color, rgba(255,255,255,0.06))">
+            <div class="rank-item" data-machine-id="${m.machineId}" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--surface-2);border-radius:10px;border:1px solid var(--border);cursor:pointer;transition:border-color .15s" title="Clique para ver o histórico e diagnóstico completo desta máquina">
               <div class="row wrap" style="align-items:center;justify-content:space-between;gap:8px">
                 <div class="row" style="align-items:center;gap:10px;min-width:0;flex:1">
                   <span class="rank-badge" style="min-width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;font-size:12px;background:${rankColor};color:${rankTextColor}">
@@ -1061,7 +1078,7 @@ export function kpiView(root) {
                   </div>
                 </div>
                 <div class="row wrap" style="gap:6px;align-items:center">
-                  <span class="badge" style="background:var(--accent-glow);color:var(--accent);font-weight:600;font-size:12px">
+                  <span class="badge" style="background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:12px">
                     ${m.corrective} OS
                   </span>
                   ${m.stoppedMin > 0 ? `
@@ -1069,6 +1086,9 @@ export function kpiView(root) {
                       ⚠️ ${fmtMin(m.stoppedMin)} parada
                     </span>
                   ` : ''}
+                  <span class="badge" style="background:var(--surface-3);color:var(--accent);font-size:11px;font-weight:600">
+                    Ver Histórico →
+                  </span>
                 </div>
               </div>
               <div class="progress-bar-bg" style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
@@ -1093,7 +1113,257 @@ export function kpiView(root) {
     return html;
   }
 
+  function renderMachineDetailView(md, d) {
+    const kpi = (k, v, unit, s, color, na) => `<div class="kpi ${na ? 'na' : ''}" style="--kc:${color || 'var(--text)'}"><div class="k">${k}</div><div class="v">${v}${unit ? `<small>${unit}</small>` : ''}</div><div class="s">${s || ''}</div></div>`;
+    const split = (min) => { if (min == null) return ['—', '']; if (min < 60) return [Math.round(min), 'min']; return [(min / 60).toFixed(1).replace('.', ','), 'h']; };
+
+    const [rv, ru] = split(d.responseTime?.avgMin);
+    const [mv, mu] = split(d.mttr?.avgMin);
+    const [sv, su] = split(md.stats.stoppedMin);
+
+    $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • Histórico de ${esc(md.machine.code)} — ${esc(md.machine.name)}`;
+
+    let histFilter = 'todos';
+    let histSearch = '';
+
+    $('#kpi-body', root).innerHTML = `
+      <!-- Cabeçalho do Dossiê da Máquina -->
+      <section class="card" style="padding:16px;margin-bottom:14px;border:1.5px solid var(--accent);background:var(--surface)">
+        <div class="row wrap" style="justify-content:space-between;align-items:center;gap:14px">
+          <div class="row" style="align-items:center;gap:14px;min-width:0">
+            <div class="machine-thumb lg" style="width:58px;height:58px;border-radius:14px;background:var(--accent-soft);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:var(--accent);flex-shrink:0">
+              ${md.machine.imageUrl ? `<img src="${esc(md.machine.imageUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" />` : esc(md.machine.code)}
+            </div>
+            <div>
+              <div class="row wrap" style="gap:6px;align-items:center">
+                <span class="mono" style="font-size:13px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--surface-3);color:var(--accent)">TAG ${esc(md.machine.code)}</span>
+                <span class="badge" style="background:var(--surface-3);color:var(--text-2)">Setor: ${esc(md.machine.sectorName || 'Geral')}</span>
+                <span class="badge" style="background:${md.machine.criticality === 'alta' ? 'var(--danger-soft);color:var(--danger)' : 'var(--surface-3);color:var(--text-3)'}">Criticidade ${esc(md.machine.criticality)}</span>
+              </div>
+              <h2 style="margin:4px 0 0;font-size:20px">${esc(md.machine.name)}</h2>
+              <div class="muted xs" style="margin-top:2px">
+                ${md.machine.hourlyCost > 0 ? `Custo parada: <strong>R$ ${md.machine.hourlyCost.toFixed(2)}/hora</strong> • ` : ''}
+                Horas operacionais: <strong>${md.machine.operatingHoursPerDay}h/dia</strong>
+              </div>
+            </div>
+          </div>
+          <div>
+            <button class="btn sm" id="btn-clear-machine-filter" style="gap:6px">
+              ${icon('x', 14)} Voltar à Visão Geral da Fábrica
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Indicadores de Desempenho no Período -->
+      <div class="section-title"><span>Indicadores no Período Selecionado</span></div>
+      <div class="kpis">
+        ${kpi('Total de OS', md.stats.totalWos, '', `${md.stats.corrective} corretivas • ${md.stats.preventive} preventivas (${md.stats.lifetimeWos} em todo o histórico)`, 'var(--accent)')}
+        ${kpi('Tempo Parada', sv, su, md.stats.stoppedCost > 0 ? `Custo est.: R$ ${md.stats.stoppedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : `${md.stats.withStop} ocorrência(s) com parada`, md.stats.stoppedMin > 0 ? 'var(--danger)' : 'var(--ok)')}
+        ${kpi('MTTR (Reparo Médio)', mv, mu, `tempo até liberação da máquina (${d.mttr?.n || 0} reparos)`, 'var(--violet)')}
+        ${kpi('Tempo de 1º Início', rv, ru, `abertura → início efetivo (${d.responseTime?.n || 0} OS)`, 'var(--info)')}
+      </div>
+
+      <!-- Diagnóstico de Problemas e Causas Raiz -->
+      <div class="section-title">
+        <span>Diagnóstico: Principais Tipos de Problema</span>
+        <span class="muted xs">${md.topProblems.length} tipos identificados</span>
+      </div>
+      <div class="row wrap" style="gap:14px;align-items:stretch;margin-bottom:16px">
+        <!-- Sintomas Mais Frequentes -->
+        <section class="card" style="flex:1;min-width:290px;padding:16px">
+          <strong style="font-size:15px;display:flex;align-items:center;gap:6px;margin-bottom:12px">
+            ${icon('alert', 16)} Sintomas & Queixas Mais Recorrentes
+          </strong>
+          ${md.topProblems.length ? `
+            <div style="display:flex;flex-direction:column;gap:10px">
+              ${md.topProblems.map((p, i) => `
+                <div>
+                  <div class="row wrap" style="justify-content:space-between;gap:6px;font-size:13px;margin-bottom:4px">
+                    <span style="font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${esc(p.problem)}">
+                      ${i + 1}. ${esc(p.problem)}
+                    </span>
+                    <strong style="color:var(--accent);white-space:nowrap">${p.count}x <span class="muted xs">(${p.pct}%)</span></strong>
+                  </div>
+                  <div style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+                    <div style="height:100%;width:${p.pct}%;background:var(--accent);border-radius:3px"></div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="muted small" style="margin:0">Nenhum problema registrado no período.</p>'}
+        </section>
+
+        <!-- Especialidades e Causas Identificadas -->
+        <section class="card" style="flex:1;min-width:290px;padding:16px">
+          <strong style="font-size:15px;display:flex;align-items:center;gap:6px;margin-bottom:12px">
+            ${icon('wrench', 16)} Especialidades & Causas Identificadas
+          </strong>
+          <div style="margin-bottom:14px">
+            <span class="muted xs" style="display:block;margin-bottom:6px">Distribuição por Especialidade:</span>
+            <div class="row wrap" style="gap:6px">
+              ${Object.entries(md.specialtyCounts).map(([spec, count]) => `
+                <span class="badge" style="background:var(--surface-3);color:var(--text-2);padding:4px 10px;font-size:12px">
+                  <strong>${esc(spec)}</strong>: ${count} OS
+                </span>
+              `).join('')}
+            </div>
+          </div>
+
+          <span class="muted xs" style="display:block;margin-bottom:6px">Causas Apontadas nas Intervenções:</span>
+          ${md.topCauses.length ? `
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${md.topCauses.map((c) => `
+                <div class="row" style="justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface-2);border-radius:8px;font-size:12.5px">
+                  <span>${esc(c.cause)}</span>
+                  <strong style="color:var(--accent)">${c.count}x <span class="muted xs">(${c.pct}%)</span></strong>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="muted small" style="margin:0">Nenhuma causa raiz formal informada nas OS do período.</p>'}
+        </section>
+      </div>
+
+      <!-- Histórico Completo de Ordens de Serviço -->
+      <div class="section-title">
+        <span>Histórico de Ordens de Serviço da Máquina</span>
+        <span class="muted xs" id="wos-count-label">${md.wos.length} OS no período</span>
+      </div>
+      <section class="card" style="padding:16px">
+        <div class="row wrap" style="gap:10px;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="chips" id="hist-chips" style="padding:0">
+            <button class="chip active" data-type="todos">Todas (${md.wos.length})</button>
+            <button class="chip" data-type="corretiva">Corretivas (${md.stats.corrective})</button>
+            <button class="chip" data-type="preventiva">Preventivas (${md.stats.preventive})</button>
+            ${md.stats.withStop ? `<button class="chip" data-type="parada">Com Parada (${md.stats.withStop})</button>` : ''}
+          </div>
+          <div style="flex:1;max-width:320px;min-width:200px">
+            <input class="input" id="search-machine-wos" placeholder="Buscar no histórico desta máquina..." style="height:34px;font-size:13px" />
+          </div>
+        </div>
+
+        <div id="machine-wos-list" style="display:flex;flex-direction:column;gap:10px">
+        </div>
+      </section>
+    `;
+
+    function renderWosList() {
+      const container = $('#machine-wos-list', root);
+      if (!container) return;
+      const q = histSearch.toLowerCase().trim();
+      const filtered = md.wos.filter((w) => {
+        if (histFilter === 'corretiva' && w.type !== 'corretiva') return false;
+        if (histFilter === 'preventiva' && w.type !== 'preventiva') return false;
+        if (histFilter === 'parada' && !w.machineStopped) return false;
+        if (!q) return true;
+        return (
+          (w.number || '').toLowerCase().includes(q) ||
+          (w.description || '').toLowerCase().includes(q) ||
+          (w.cause || '').toLowerCase().includes(q) ||
+          (w.solution || '').toLowerCase().includes(q) ||
+          (w.serviceDone || '').toLowerCase().includes(q) ||
+          (w.materialsUsed || '').toLowerCase().includes(q) ||
+          (w.responsibleName || '').toLowerCase().includes(q) ||
+          (w.requesterName || '').toLowerCase().includes(q)
+        );
+      });
+
+      const countLabel = $('#wos-count-label', root);
+      if (countLabel) countLabel.textContent = `${filtered.length} de ${md.wos.length} OS`;
+
+      if (!filtered.length) {
+        container.innerHTML = '<p class="muted small" style="text-align:center;padding:16px;margin:0">Nenhuma ordem de serviço encontrada com os filtros selecionados.</p>';
+        return;
+      }
+
+      container.innerHTML = filtered.map((w) => `
+        <div class="card" style="padding:14px;background:var(--surface-2);border-radius:12px;border:1px solid var(--border)">
+          <div class="row wrap" style="justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+            <div class="row wrap" style="gap:6px;align-items:center">
+              <strong style="font-size:15px">OS ${esc(w.number || w.id)}</strong>
+              ${statusBadge(w.status)}
+              ${prioBadge(w.priority)}
+              <span class="badge" style="background:var(--surface-3);color:var(--text-2);text-transform:capitalize">${esc(w.type)}</span>
+              ${w.machineStopped ? '<span class="badge stopped">⚠️ Parada</span>' : ''}
+            </div>
+            <div class="muted xs" style="white-space:nowrap">
+              ${fmtDateTime(w.createdAt)} ${w.closedAt ? `• Concl.: ${fmtDateTime(w.closedAt)}` : ''}
+            </div>
+          </div>
+
+          <div style="font-size:14px;margin-bottom:8px">
+            <span class="muted small">Problema:</span> <strong>${esc(w.description || w.title || 'Sem descrição')}</strong>
+          </div>
+
+          ${w.cause || w.serviceDone || w.solution ? `
+            <div style="background:var(--surface);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;border-left:3px solid var(--accent)">
+              ${w.cause ? `<div><span class="muted">Causa:</span> <strong>${esc(w.cause)}</strong></div>` : ''}
+              ${w.serviceDone || w.solution ? `<div><span class="muted">Serviço/Solução:</span> ${esc(w.serviceDone || w.solution)}</div>` : ''}
+            </div>
+          ` : ''}
+
+          ${w.materialsUsed ? `
+            <div class="muted small" style="margin-bottom:6px">
+              ${icon('wrench', 13)} Peças/Materiais: <em>${esc(w.materialsUsed)}</em>
+            </div>
+          ` : ''}
+
+          <div class="row wrap" style="justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+            <div class="muted xs">
+              ${w.responsibleName ? `Responsável: <strong>${esc(w.responsibleName)}</strong>` : 'Sem responsável'}
+              ${w.requesterName ? ` • Solicitante: ${esc(w.requesterName)}` : ''}
+              ${w.workMin ? ` • Intervenção: ${fmtMin(w.workMin)}` : ''}
+            </div>
+            <button class="btn sm ghost" data-open-wo="${w.id}" style="padding:4px 10px;height:28px">
+              Abrir OS ${icon('chev', 14)}
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      $$('[data-open-wo]', container).forEach((btn) => {
+        btn.onclick = () => {
+          location.hash = `#/os/${btn.dataset.openWo}`;
+        };
+      });
+    }
+
+    renderWosList();
+
+    $$('#hist-chips button', root).forEach((btn) => {
+      btn.onclick = () => {
+        histFilter = btn.dataset.type;
+        $$('#hist-chips button', root).forEach((b) => b.classList.toggle('active', b === btn));
+        renderWosList();
+      };
+    });
+
+    const searchInp = $('#search-machine-wos', root);
+    if (searchInp) {
+      searchInp.oninput = (e) => {
+        histSearch = e.target.value;
+        renderWosList();
+      };
+    }
+
+    const btnClear = $('#btn-clear-machine-filter', root);
+    if (btnClear) {
+      btnClear.onclick = () => {
+        f.machineId = '';
+        const sel = $('#f-machine', root);
+        if (sel) sel.value = '';
+        load();
+      };
+    }
+  }
+
   function render(d) {
+    lastData = d;
+    if (d.machineDetail) {
+      renderMachineDetailView(d.machineDetail, d);
+      return;
+    }
+
     const kpi = (k, v, unit, s, color, na) => `<div class="kpi ${na ? 'na' : ''}" style="--kc:${color || 'var(--text)'}"><div class="k">${k}</div><div class="v">${v}${unit ? `<small>${unit}</small>` : ''}</div><div class="s">${s || ''}</div></div>`;
     const split = (min) => { if (min == null) return ['—', '']; if (min < 60) return [Math.round(min), 'min']; return [(min / 60).toFixed(1).replace('.', ','), 'h']; };
 
@@ -1128,7 +1398,10 @@ export function kpiView(root) {
           ${kpi('Retrabalhos', myStats.rework || 0, '', myStats.rework ? 'reabertura registrada' : 'nenhum retrabalho', myStats.rework ? 'var(--warn)' : 'var(--ok)')}
         </div>
 
-        <div class="section-title"><span>Máquinas Onde Mais Atuei</span></div>
+        <div class="section-title">
+          <span>Máquinas Onde Mais Atuei</span>
+          <span class="muted xs">Clique em uma máquina para ver o histórico completo</span>
+        </div>
         <section class="card" id="card-by-machine">
           ${renderMachineRankList(d.byMachine, expandedMachines)}
         </section>
@@ -1178,13 +1451,13 @@ export function kpiView(root) {
         ${kpi('Duração corretivas', cv, cu, `abertura → conclusão (${d.correctiveDuration.n})`, 'var(--text)')}
         ${kpi('Tempo parado', sv, su, `${d.stoppedTime.intervals} parada(s), sem dupla contagem`, 'var(--danger)')}
         ${kpi('Retrabalho', d.rework.pct == null ? '—' : d.rework.pct, d.rework.pct == null ? '' : '%', `${d.rework.reopened + d.rework.linked} de ${d.rework.completed} concluídas`, 'var(--warn)')}
-        ${kpi('MTBF', 'Não calculated', '', d.mtbf.reason, null, true)}
+        ${kpi('MTBF', 'Não calculado', '', d.mtbf.reason, null, true)}
         ${kpi('Disponibilidade', 'Não calculada', '', d.availability.reason, null, true)}
       </div>
 
       <div class="section-title">
         <span>Ocorrências corretivas por máquina</span>
-        ${d.byMachine.length ? `<span class="muted xs">${d.byMachine.length} máquinas com registros</span>` : ''}
+        <span class="muted xs">Clique em uma máquina para ver o histórico completo</span>
       </div>
       <section class="card" id="card-by-machine">
         ${renderMachineRankList(d.byMachine, expandedMachines)}
@@ -1219,13 +1492,23 @@ export function kpiView(root) {
       btn.onclick = () => {
         expandedMachines = !expandedMachines;
         const container = $('#card-by-machine', root);
-        if (container) {
-          container.innerHTML = renderMachineRankList(d.byMachine, expandedMachines);
+        if (container && lastData) {
+          container.innerHTML = renderMachineRankList(lastData.byMachine, expandedMachines);
           bindRankToggle();
         }
       };
     }
+
+    $$('.rank-item[data-machine-id]', root).forEach((el) => {
+      el.onclick = () => {
+        f.machineId = el.dataset.machineId;
+        const sel = $('#f-machine', root);
+        if (sel) sel.value = f.machineId;
+        load();
+      };
+    });
   }
+
   load();
   return () => { alive = false; };
 }

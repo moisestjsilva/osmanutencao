@@ -7,7 +7,14 @@ const round = (x, d = 1) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** 
 
 export function computeIndicators(db, q = {}) {
   const to = q.to ? new Date(q.to + 'T23:59:59') : new Date();
-  const from = q.from ? new Date(q.from + 'T00:00:00') : new Date(to.getTime() - 30 * 24 * 60 * MIN);
+  let from;
+  if (q.from === 'tudo' || q.from === 'all') {
+    from = new Date('2020-01-01T00:00:00');
+  } else if (q.from) {
+    from = new Date(q.from + 'T00:00:00');
+  } else {
+    from = new Date(to.getTime() - 30 * 24 * 60 * MIN);
+  }
   const F = from.toISOString();
   const T = to.toISOString();
 
@@ -156,6 +163,143 @@ export function computeIndicators(db, q = {}) {
   const events = db.prepare('SELECT COUNT(*) n FROM wo_events WHERE local_time BETWEEN ? AND ?').get(F, T).n;
   const missingCause = correctiveDone.filter((w) => !w.cause).length;
 
+  // Dossiê / Histórico Detalhado da Máquina selecionada
+  let machineDetail = null;
+  if (q.machineId && mById[q.machineId]) {
+    const m = mById[q.machineId];
+    const allMachineWos = db.prepare(`
+      SELECT w.*, 
+        u_req.name as requester_name,
+        u_resp.name as responsible_name
+      FROM work_orders w
+      LEFT JOIN users u_req ON u_req.id = w.requester_id
+      LEFT JOIN users u_resp ON u_resp.id = w.responsible_id
+      WHERE w.machine_id = ?
+      ORDER BY w.created_at DESC
+    `).all(q.machineId);
+
+    const wosInSelectedPeriod = allMachineWos.filter((w) => (
+      (w.created_at >= F && w.created_at <= T) ||
+      (w.closed_at && w.closed_at >= F && w.closed_at <= T)
+    ));
+
+    const corrWos = wosInSelectedPeriod.filter((w) => w.type === 'corretiva');
+    const prevWos = wosInSelectedPeriod.filter((w) => w.type === 'preventiva');
+    const stoppedWos = wosInSelectedPeriod.filter((w) => w.machine_stopped);
+    const stoppedMinVal = round(stoppedByMachine[m.id] || 0, 0);
+    const hourlyCost = Number(m.hourly_cost || 0);
+    const stoppedCost = round(((stoppedMinVal / 60) * hourlyCost), 2);
+
+    const statusCounts = {};
+    for (const w of wosInSelectedPeriod) {
+      statusCounts[w.status] = (statusCounts[w.status] || 0) + 1;
+    }
+
+    const specialtyCounts = {};
+    for (const w of wosInSelectedPeriod) {
+      const spec = w.specialty ? w.specialty.trim() : 'Geral';
+      specialtyCounts[spec] = (specialtyCounts[spec] || 0) + 1;
+    }
+
+    const problemCounts = {};
+    for (const w of wosInSelectedPeriod) {
+      const raw = (w.description || w.title || '').trim();
+      if (!raw) continue;
+      const clean = raw.replace(/\s+/g, ' ');
+      const key = clean.charAt(0).toUpperCase() + clean.slice(1);
+      problemCounts[key] = (problemCounts[key] || 0) + 1;
+    }
+
+    const topProblems = Object.entries(problemCounts)
+      .map(([problem, count]) => ({
+        problem,
+        count,
+        pct: round((count / Math.max(1, wosInSelectedPeriod.length)) * 100, 1),
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+
+    const causeCounts = {};
+    for (const w of wosInSelectedPeriod) {
+      if (w.cause && w.cause.trim()) {
+        const c = w.cause.trim().replace(/\s+/g, ' ');
+        const key = c.charAt(0).toUpperCase() + c.slice(1);
+        causeCounts[key] = (causeCounts[key] || 0) + 1;
+      }
+    }
+    const topCauses = Object.entries(causeCounts)
+      .map(([cause, count]) => ({
+        cause,
+        count,
+        pct: round((count / Math.max(1, wosInSelectedPeriod.length)) * 100, 1),
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const wosList = wosInSelectedPeriod.map((w) => {
+      const ivs = ivByWo[w.id] || [];
+      let totalWorkMinutes = 0;
+      for (const iv of ivs) {
+        if (iv.started_at && iv.ended_at) {
+          totalWorkMinutes += mins(iv.started_at, iv.ended_at);
+        }
+      }
+      return {
+        id: w.id,
+        number: w.number,
+        type: w.type,
+        priority: w.priority,
+        status: w.status,
+        machineStopped: !!w.machine_stopped,
+        title: w.title,
+        description: w.description,
+        specialty: w.specialty,
+        cause: w.cause,
+        solution: w.solution,
+        serviceDone: w.service_done,
+        materialsUsed: w.materials_used,
+        toolsUsed: w.tools_used,
+        notes: w.notes,
+        requesterName: w.requester_name,
+        responsibleName: w.responsible_name,
+        createdAt: w.created_at,
+        closedAt: w.closed_at,
+        returnedAt: w.returned_at,
+        workMin: round(totalWorkMinutes, 0),
+        durationMin: w.closed_at ? round(mins(w.created_at, w.closed_at), 0) : null,
+      };
+    });
+
+    machineDetail = {
+      machine: {
+        id: m.id,
+        code: m.code,
+        name: m.name,
+        sectorId: m.sector_id,
+        sectorName: m.sector_name,
+        criticality: m.criticality,
+        hourlyCost,
+        operatingHoursPerDay: m.operating_hours_per_day || 8,
+        imageUrl: m.image_url || null,
+      },
+      stats: {
+        totalWos: wosInSelectedPeriod.length,
+        lifetimeWos: allMachineWos.length,
+        corrective: corrWos.length,
+        preventive: prevWos.length,
+        withStop: stoppedWos.length,
+        stoppedMin: stoppedMinVal,
+        stoppedCost,
+        openNow: allMachineWos.filter((w) => !['Concluída', 'Cancelada'].includes(w.status)).length,
+      },
+      statusCounts,
+      specialtyCounts,
+      topProblems,
+      topCauses,
+      wos: wosList,
+    };
+  }
+
   return {
     period: { from: F, to: T },
     current: {
@@ -173,6 +317,7 @@ export function computeIndicators(db, q = {}) {
       pct: completedInPeriod.length ? round(((reworkEvents.length + reworkLinked.length) / completedInPeriod.length) * 100, 0) : null },
     byMachine,
     people,
+    machineDetail,
     dataQuality: { wosInPeriod: inPeriod.length, events, completed: completedInPeriod.length, missingCause,
       withoutStart: inPeriod.filter((w) => !(ivByWo[w.id]?.length)).length },
   };
