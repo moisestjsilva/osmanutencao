@@ -151,7 +151,11 @@ export const machineBadge = (m, cls = '') => {
 export const PRIORITY = { baixa: 'Baixa', media: 'Média', alta: 'Alta', urgente: 'Urgente' };
 export const PRIO_COLOR = { urgente: 'var(--danger)', alta: 'hsl(355 70% 55%)', media: 'var(--accent)', baixa: 'var(--text-3)' };
 export const ROLE = { superadmin: 'Super Admin', admin: 'Admin', manutentor: 'Manutentor', solicitante: 'Solicitante', gerente: 'Admin' };
-export const statusBadge = (s) => `<span class="badge st-${esc(s)}"><span class="dot"></span>${esc(s)}</span>`;
+export const statusBadge = (s) => {
+  const raw = String(s || '');
+  const norm = raw.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
+  return `<span class="badge st-${norm} st-${esc(raw)}"><span class="dot"></span>${esc(raw)}</span>`;
+};
 export const prioBadge = (p) => `<span class="badge pr-${esc(p)}">${esc(PRIORITY[p] || p)}</span>`;
 export const roleBadge = (r) => {
   const lbl = ROLE[r] || r;

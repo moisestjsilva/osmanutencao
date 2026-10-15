@@ -371,13 +371,53 @@ main#view {
 }
 .badge .dot { width: 5.5px; height: 5.5px; border-radius: 50%; background: currentColor; }
 
-.st-Aberta { background: var(--info-soft); color: var(--info-text); }
-.st-Assumida { background: var(--violet-soft); color: var(--violet-text); }
-.st-Em\ atendimento { background: var(--accent-soft); color: var(--accent-text); }
-.st-Em\ atendimento .dot { animation: pulse 1.4s infinite; }
-.st-Pausada { background: rgba(217, 119, 6, 0.12); color: var(--warn); }
-.st-Concluída { background: var(--ok-soft); color: var(--ok-text); }
-.st-Cancelada { background: var(--surface-3); color: var(--text-3); }
+.st-Aberta, .st-aberta { background: var(--info-soft); color: var(--info-text); border: 1px solid rgba(2, 132, 199, 0.28); }
+.st-Aberta .dot, .st-aberta .dot { background: var(--info); }
+
+.st-Aguardando, .st-aguardando {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.3);
+}
+.st-Aguardando .dot, .st-aguardando .dot { background: #0284c7; }
+
+.st-Assumida, .st-assumida {
+  background: var(--violet-soft);
+  color: var(--violet-text);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+.st-Assumida .dot, .st-assumida .dot { background: var(--violet); }
+
+.st-em-atendimento, .st-Em.atendimento, .st-Em-atendimento, .st-Em\ atendimento {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+}
+.st-em-atendimento .dot, .st-Em.atendimento .dot, .st-Em-atendimento .dot, .st-Em\ atendimento .dot {
+  background: #d97706;
+  animation: pulse 1.4s infinite;
+}
+
+.st-Pausada, .st-pausada {
+  background: rgba(234, 88, 12, 0.12);
+  color: #ea580c;
+  border: 1px solid rgba(234, 88, 12, 0.3);
+}
+.st-Pausada .dot, .st-pausada .dot { background: #ea580c; }
+
+.st-Concluída, .st-concluida {
+  background: var(--ok-soft);
+  color: var(--ok-text);
+  border: 1px solid rgba(16, 185, 129, 0.32);
+}
+.st-Concluída .dot, .st-concluida .dot { background: var(--ok); }
+
+.st-Cancelada, .st-cancelada {
+  background: var(--surface-3);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+.st-Cancelada .dot, .st-cancelada .dot { background: var(--text-3); }
 
 .pr-urgente { background: var(--danger); color: #ffffff; }
 .pr-alta { background: var(--danger-soft); color: var(--danger-text); }
@@ -895,6 +935,32 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   background: rgba(167, 139, 250, 0.15);
   color: #c4b5fd;
   border-color: rgba(167, 139, 250, 0.35);
+}
+
+[data-theme="dark"] .st-Aguardando,
+[data-theme="dark"] .st-aguardando {
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+[data-theme="dark"] .st-Aguardando .dot,
+[data-theme="dark"] .st-aguardando .dot {
+  background: #38bdf8;
+}
+
+[data-theme="dark"] .st-em-atendimento,
+[data-theme="dark"] .st-Em.atendimento,
+[data-theme="dark"] .st-Em-atendimento,
+[data-theme="dark"] .st-Em\ atendimento {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+[data-theme="dark"] .st-em-atendimento .dot,
+[data-theme="dark"] .st-Em.atendimento .dot,
+[data-theme="dark"] .st-Em-atendimento .dot,
+[data-theme="dark"] .st-Em\ atendimento .dot {
+  background: #fbbf24;
 }
 
 /* ---------- Tela de Login Moderna ---------- */
