@@ -821,7 +821,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .user-option.active { border-color: var(--accent); background: var(--accent-soft); }
 .role-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 5px; background: var(--surface-3); color: var(--text-2); }
 .role-gerente { background: var(--violet-soft); color: var(--violet-text); }
-.role-manutentor { background: var(--accent-soft); color: var(--accent-text); }
+.role-manutentor { background: rgba(16, 185, 129, 0.15); color: #059669; }
 .role-solicitante { background: var(--info-soft); color: var(--info-text); }
 
 .menu-list .menu-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; cursor: pointer; width: 100%; background: none; border: 0; text-align: left; color: var(--text); font-size: 14.5px; font-weight: 500; }
@@ -838,11 +838,64 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .offline-banner { background: #e11d48; color: white; font-size: 12.5px; font-weight: 600; padding: 7px 14px; text-align: center; }
 
 /* ---------- Roles & Badges ---------- */
-.badge.role-super { background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2)); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 700; }
-.badge.role-admin { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600; }
-.badge.role-tech { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600; }
-.role-superadmin { background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2)); color: #f59e0b; }
-.role-admin { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.badge.role-super, .role-superadmin {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2));
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-weight: 700;
+}
+.badge.role-admin, .role-admin {
+  background: rgba(99, 102, 241, 0.14);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  font-weight: 600;
+}
+.badge.role-gerente, .role-gerente {
+  background: rgba(124, 58, 237, 0.14);
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  font-weight: 600;
+}
+.badge.role-tech, .badge.role-manutentor, .role-manutentor {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.32);
+  font-weight: 600;
+}
+.badge.role-solicitante, .role-solicitante {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.3);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .badge.role-tech,
+[data-theme="dark"] .badge.role-manutentor,
+[data-theme="dark"] .role-manutentor {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+[data-theme="dark"] .badge.role-solicitante,
+[data-theme="dark"] .role-solicitante {
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+[data-theme="dark"] .badge.role-admin,
+[data-theme="dark"] .role-admin {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+[data-theme="dark"] .badge.role-gerente,
+[data-theme="dark"] .role-gerente {
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.35);
+}
 
 /* ---------- Tela de Login Moderna ---------- */
 .login-wrap {

@@ -152,7 +152,13 @@ export const statusBadge = (s) => `<span class="badge st-${esc(s)}"><span class=
 export const prioBadge = (p) => `<span class="badge pr-${esc(p)}">${esc(PRIORITY[p] || p)}</span>`;
 export const roleBadge = (r) => {
   const lbl = ROLE[r] || r;
-  const cls = r === 'superadmin' ? 'role-super' : (r === 'admin' ? 'role-admin' : 'role-tech');
+  const role = String(r || '').toLowerCase();
+  let cls = 'role-tech';
+  if (role === 'superadmin') cls = 'role-super';
+  else if (role === 'admin') cls = 'role-admin';
+  else if (role === 'gerente') cls = 'role-gerente';
+  else if (role === 'manutentor') cls = 'role-manutentor';
+  else if (role === 'solicitante') cls = 'role-solicitante';
   return `<span class="badge ${cls}">${esc(lbl)}</span>`;
 };
 
