@@ -101,25 +101,38 @@ const requireManager = requireAdmin;
 app.use('/api', identify);
 
 // ---------- Serialização ----------
-const nameOf = (id) => (id ? db.prepare('SELECT name FROM users WHERE id=?').get(id)?.name : null);
+const userProfileOf = (id) => (id ? db.prepare('SELECT id, name, avatar_url FROM users WHERE id=?').get(id) : null);
+const nameOf = (id) => (id ? userProfileOf(id)?.name : null);
 
 function serializeWo(w, full = false) {
   const m = db.prepare('SELECT m.id, m.code, m.name, m.criticality, m.hourly_cost, m.operating_hours_per_day, m.image_url, s.id sector_id, s.name sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(w.machine_id);
-  const parts = db.prepare(`SELECT p.*, u.name FROM wo_participants p JOIN users u ON u.id=p.user_id WHERE p.wo_id=? ORDER BY p.role DESC, p.joined_at`).all(w.id);
+  const parts = db.prepare(`SELECT p.*, u.name, u.avatar_url FROM wo_participants p JOIN users u ON u.id=p.user_id WHERE p.wo_id=? ORDER BY p.role DESC, p.joined_at`).all(w.id);
   const ivs = db.prepare('SELECT * FROM work_intervals WHERE wo_id=? ORDER BY started_at').all(w.id);
   const now = Date.now();
   const participants = parts.map((p) => {
     const mine = ivs.filter((i) => i.user_id === p.user_id);
     const open = mine.find((i) => !i.ended_at);
     const minutes = mine.reduce((s, i) => s + ((i.ended_at ? new Date(i.ended_at) : now) - new Date(i.started_at)) / 60000, 0);
-    return { userId: p.user_id, name: p.name, role: p.role, state: p.state, minutes: Math.round(minutes), activeSince: open?.started_at || null };
+    return {
+      userId: p.user_id,
+      name: p.name,
+      avatar_url: p.avatar_url || null,
+      avatarUrl: p.avatar_url || null,
+      role: p.role,
+      state: p.state,
+      minutes: Math.round(minutes),
+      activeSince: open?.started_at || null,
+    };
   });
   const today = new Date().toISOString().slice(0, 10);
+  const reqUser = userProfileOf(w.requester_id);
+  const respUser = userProfileOf(w.responsible_id);
   const out = {
     id: w.id, number: w.number, type: w.type, priority: w.priority, machineStopped: !!w.machine_stopped,
     status: w.status, title: w.title, description: w.description,
-    machine: m, requester: { id: w.requester_id, name: nameOf(w.requester_id) || 'Agendador' },
-    responsible: w.responsible_id ? { id: w.responsible_id, name: nameOf(w.responsible_id) } : null,
+    machine: m,
+    requester: { id: w.requester_id, name: reqUser?.name || 'Agendador', avatar_url: reqUser?.avatar_url || null },
+    responsible: respUser ? { id: respUser.id, name: respUser.name, avatar_url: respUser.avatar_url || null } : null,
     participants, recipientsMode: w.recipients_mode, recipients: JSON.parse(w.recipients_json || '[]'),
     createdAt: w.created_at, closedAt: w.closed_at, dueDate: w.due_date, planId: w.plan_id,
     overdue: !!(w.due_date && w.due_date < today && !CLOSED.includes(w.status)),
@@ -136,12 +149,18 @@ function serializeWo(w, full = false) {
     Object.assign(out, {
       serviceDone: w.service_done, cause: w.cause, solution: w.solution, cancelledReason: w.cancelled_reason,
       materialsUsed: w.materials_used || null, toolsUsed: w.tools_used || null, notes: w.notes || null,
-      intervals: ivs.map((i) => ({ ...i, userName: nameOf(i.user_id) })),
-      events: db.prepare(`SELECT e.*, u.name user_name FROM wo_events e LEFT JOIN users u ON u.id=e.user_id WHERE e.wo_id=? ORDER BY e.local_time, e.received_at`).all(w.id)
+      intervals: ivs.map((i) => {
+        const u = userProfileOf(i.user_id);
+        return { ...i, userName: u?.name || '—', avatar_url: u?.avatar_url || null };
+      }),
+      events: db.prepare(`SELECT e.*, u.name user_name, u.avatar_url FROM wo_events e LEFT JOIN users u ON u.id=e.user_id WHERE e.wo_id=? ORDER BY e.local_time, e.received_at`).all(w.id)
         .map((e) => ({ id: e.id, action: e.action, reason: e.reason, data: e.data_json ? JSON.parse(e.data_json) : null, userId: e.user_id, userName: e.user_name || 'Sistema',
-          localTime: e.local_time, receivedAt: e.received_at, origin: e.origin })),
+          avatar_url: e.avatar_url || null, localTime: e.local_time, receivedAt: e.received_at, origin: e.origin })),
       attachments: db.prepare('SELECT * FROM attachments WHERE wo_id=? ORDER BY created_at').all(w.id)
-        .map((a) => ({ id: a.id, url: `/uploads/${a.file}`, size: a.size, createdAt: a.created_at, userName: nameOf(a.user_id) })),
+        .map((a) => {
+          const u = userProfileOf(a.user_id);
+          return { id: a.id, url: `/uploads/${a.file}`, size: a.size, createdAt: a.created_at, userName: u?.name || '—', avatar_url: u?.avatar_url || null };
+        }),
       conflicts: db.prepare('SELECT * FROM conflicts WHERE wo_id=? ORDER BY created_at DESC').all(w.id),
       audit: db.prepare(`SELECT a.*, u.name user_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id
                          WHERE a.entity_id IN (SELECT id FROM work_intervals WHERE wo_id=?) ORDER BY a.created_at`).all(w.id),

@@ -24,6 +24,23 @@ const isStoppedNow = (w) => w.machineStopped && !isClosed(w) && w.machineRecover
 const go = (h) => (location.hash = h);
 const savedMsg = () => (state.online ? 'Registrado' : 'Salvo no aparelho — será enviado ao reconectar');
 
+export const userAvatarUrl = (userOrId, directUrl = null) => {
+  if (directUrl) return directUrl;
+  const id = typeof userOrId === 'object' ? (userOrId?.userId || userOrId?.id) : userOrId;
+  const name = typeof userOrId === 'object' ? userOrId?.name : (typeof userOrId === 'string' && !userOrId?.startsWith('u-') ? userOrId : null);
+  if (id) {
+    if (state.user?.id === id && state.user?.avatar_url) return state.user.avatar_url;
+    const found = state.boot?.users?.find((u) => u.id === id);
+    if (found?.avatar_url) return found.avatar_url;
+  }
+  if (name) {
+    if (state.user?.name === name && state.user?.avatar_url) return state.user.avatar_url;
+    const found = state.boot?.users?.find((u) => u.name && u.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (found?.avatar_url) return found.avatar_url;
+  }
+  return null;
+};
+
 // ======================================================================
 // LISTA DE OS
 // ======================================================================
@@ -162,7 +179,7 @@ function woCard(w, i = 0) {
       </div>
     </div>
     <div class="meta">
-      ${parts.length ? `<span class="avatar-stack">${parts.slice(0, 4).map((p) => avatar(p.name, 'sm', p.avatar_url)).join('')}</span>` : `<span>${icon('user', 14)} sem responsável</span>`}
+      ${parts.length ? `<span class="avatar-stack">${parts.slice(0, 4).map((p) => avatar(p.name, 'sm', userAvatarUrl(p, p.avatar_url || p.avatarUrl))).join('')}</span>` : (w.responsible ? `<span class="avatar-stack">${avatar(w.responsible.name, 'sm', userAvatarUrl(w.responsible, w.responsible.avatar_url))}</span>` : `<span>${icon('user', 14)} sem responsável</span>`)}
       ${working.length ? `<span style="color:var(--accent)">● ${working.length} em atendimento</span>` : ''}
       <span style="margin-left:auto">${w.dueDate && !isClosed(w) ? `vence ${fmtDate(w.dueDate)}` : timeAgo(w.createdAt)}</span>
     </div>
@@ -213,9 +230,21 @@ export function detailView(root, { id }) {
         <div class="muted small">${wo.machine?.code ? `TAG: <strong>${esc(wo.machine.code)}</strong> • ` : ''}${esc(wo.machine?.sector || '')}</div>
         <p style="margin:12px 0 0;white-space:pre-wrap">${esc(wo.description)}</p>
         <div class="kv">
-          <div><span>Solicitante</span><strong>${esc(wo.requester?.name || '—')}</strong></div>
+          <div>
+            <span>Solicitante</span>
+            <div class="row" style="gap:6px;align-items:center;margin-top:2px">
+              ${wo.requester?.name ? avatar(wo.requester.name, 22, userAvatarUrl(wo.requester, wo.requester.avatar_url)) : ''}
+              <strong>${esc(wo.requester?.name || '—')}</strong>
+            </div>
+          </div>
           <div><span>Aberta em</span><strong>${fmtDateTime(wo.createdAt)}</strong></div>
-          <div><span>Responsável</span><strong>${esc(wo.responsible?.name || 'Ninguém assumiu')}</strong></div>
+          <div>
+            <span>Responsável</span>
+            <div class="row" style="gap:6px;align-items:center;margin-top:2px">
+              ${wo.responsible?.name ? avatar(wo.responsible.name, 22, userAvatarUrl(wo.responsible, wo.responsible.avatar_url)) : ''}
+              <strong>${esc(wo.responsible?.name || 'Ninguém assumiu')}</strong>
+            </div>
+          </div>
           <div><span>${wo.dueDate ? 'Vencimento' : 'Avisados'}</span><strong>${wo.dueDate ? fmtDate(wo.dueDate) : recipientsLabel(wo)}</strong></div>
           ${wo.closedAt ? `<div><span>${wo.status === 'Cancelada' ? 'Cancelada em' : 'Concluída em'}</span><strong>${fmtDateTime(wo.closedAt)}</strong></div>` : ''}
           ${wo.reopenedCount ? `<div><span>Reaberturas</span><strong>${wo.reopenedCount}</strong></div>` : ''}
@@ -240,7 +269,7 @@ export function detailView(root, { id }) {
       <section class="card tight">
         ${wo.participants?.length ? wo.participants.map((p) => `
           <div class="part-row">
-            ${avatar(p.name)}
+            ${avatar(p.name, '', userAvatarUrl(p, p.avatar_url || p.avatarUrl))}
             <div class="grow">
               <div style="font-weight:600">${esc(p.name)} ${p.role === 'responsavel' ? '<span class="badge" style="height:20px">Responsável</span>' : ''}</div>
               <div class="small muted"><span class="state-dot state-${p.state}"></span>${{ trabalhando: 'Trabalhando', pausado: 'Pausado', concluido: 'Parte encerrada', aguardando: 'Aguardando início' }[p.state] || p.state}</div>
@@ -451,7 +480,7 @@ export function detailView(root, { id }) {
     const techs = state.boot.users.filter((u) => ['manutentor', 'gerente'].includes(u.role) && u.id !== wo.responsible?.id);
     let to = null;
     sheet(`<h2>Transferir responsável</h2>
-      <div style="margin-top:12px">${techs.map((u) => `<button class="user-option" data-to="${u.id}">${avatar(u.name)}<span class="grow"><strong>${esc(u.name)}</strong><div class="muted xs">${esc(u.specialty || ROLE[u.role])}</div></span></button>`).join('')}</div>
+      <div style="margin-top:12px">${techs.map((u) => `<button class="user-option" data-to="${u.id}">${avatar(u.name, '', userAvatarUrl(u, u.avatar_url))}<span class="grow"><strong>${esc(u.name)}</strong><div class="muted xs">${esc(u.specialty || ROLE[u.role])}</div></span></button>`).join('')}</div>
       <label class="field" style="margin-top:12px"><span>Motivo *</span><input class="input" id="t-reason" placeholder="Ex.: fim de turno, especialidade elétrica" /></label>
       <div class="error-box hidden" id="t-err" style="margin-top:10px"></div>
       <div class="sheet-actions"><button class="btn" data-close>Voltar</button><button class="btn primary" id="t-ok">Transferir</button></div>`, {
@@ -1467,7 +1496,7 @@ export function kpiView(root) {
       <section class="card">
         <div class="table-wrap"><table class="data">
           <thead><tr><th>Manutentor</th><th class="num">Horas ativas</th><th class="num">OS trabalhadas</th><th class="num">Concl. resp.</th><th class="num">Colaborou</th><th class="num">Prev.</th><th class="num">Retrab.</th></tr></thead>
-          <tbody>${d.people.map((p) => `<tr><td><div class="row">${avatar(p.name, 'sm')}<span><strong>${esc(p.name)}</strong><div class="muted xs">${esc(p.specialty || '')}</div></span></div></td>
+          <tbody>${d.people.map((p) => `<tr><td><div class="row" style="align-items:center;gap:8px">${avatar(p.name, 'sm', userAvatarUrl(p.userId || p.id, p.avatar_url))}<span><strong>${esc(p.name)}</strong><div class="muted xs">${esc(p.specialty || '')}</div></span></div></td>
             <td class="num">${fmtMin(p.workMin)}</td><td class="num">${p.wosWorked}</td><td class="num">${p.completedAsResponsible}</td><td class="num">${p.completedAsCollaborator}</td><td class="num">${p.preventiveDone}</td><td class="num">${p.rework}</td></tr>`).join('')}</tbody>
         </table></div>
         <p class="muted xs" style="margin:10px 0 0">Ordem alfabética, sem ranking automático. Horas-pessoa somam intervalos individuais (excluem pausas) e não equivalem a tempo de máquina parada. Compare considerando especialidade, complexidade e disponibilidade.</p>

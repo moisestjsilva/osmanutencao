@@ -154,6 +154,7 @@ export function computeIndicators(db, q = {}) {
     const reworkOnMine = reworkEvents.filter((e) => allWos.find((w) => w.id === e.wo_id)?.responsible_id === u.id).length;
     return {
       userId: u.id, name: u.name, team: u.team_id, specialty: u.specialty,
+      avatar_url: u.avatar_url || null,
       workMin: round(workMin, 0), wosWorked: wosTouched.size,
       completedAsResponsible: asResp.length, completedAsCollaborator: asCollab.length,
       preventiveDone: prevDone.length, rework: reworkOnMine,

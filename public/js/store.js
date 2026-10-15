@@ -379,10 +379,14 @@ function applyLocal(list, op) {
   const wo = list.find((w) => w.id === op.woId);
   if (!wo) return;
   wo._pending = (wo._pending || 0) + 1;
-  const me = { id: op.userId, name: userName(op.userId) };
+  const meUser = state.boot?.users?.find((u) => u.id === op.userId) || (state.user?.id === op.userId ? state.user : null);
+  const me = { id: op.userId, name: userName(op.userId), avatar_url: meUser?.avatar_url || null };
   const part = () => {
     let x = wo.participants.find((q) => q.userId === op.userId);
-    if (!x) { x = { userId: op.userId, name: me.name, role: 'colaborador', state: 'aguardando', minutes: 0, activeSince: null }; wo.participants.push(x); }
+    if (!x) {
+      x = { userId: op.userId, name: me.name, avatar_url: me.avatar_url, role: 'colaborador', state: 'aguardando', minutes: 0, activeSince: null };
+      wo.participants.push(x);
+    }
     return x;
   };
   const stop = (st) => {
@@ -400,11 +404,16 @@ function applyLocal(list, op) {
     case 'pause': stop('pausado'); break;
     case 'finish_part': stop('concluido'); break;
     case 'transfer': {
-      const to = state.boot.users.find((u) => u.id === p.toUserId);
+      const to = state.boot?.users?.find((u) => u.id === p.toUserId) || { id: p.toUserId, name: userName(p.toUserId) };
       wo.participants.forEach((q) => { if (q.role === 'responsavel') q.role = 'colaborador'; });
-      wo.responsible = { id: to.id, name: to.name };
+      wo.responsible = { id: to.id, name: to.name, avatar_url: to.avatar_url || null };
       const x = wo.participants.find((q) => q.userId === to.id);
-      if (x) x.role = 'responsavel'; else wo.participants.push({ userId: to.id, name: to.name, role: 'responsavel', state: 'aguardando', minutes: 0 });
+      if (x) {
+        x.role = 'responsavel';
+        if (!x.avatar_url && to.avatar_url) x.avatar_url = to.avatar_url;
+      } else {
+        wo.participants.push({ userId: to.id, name: to.name, avatar_url: to.avatar_url || null, role: 'responsavel', state: 'aguardando', minutes: 0 });
+      }
       break;
     }
     case 'update_checklist': wo.checklist = p.checklist; break;
