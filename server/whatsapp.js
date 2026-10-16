@@ -3,15 +3,25 @@
  * MÓDULO DE INTEGRAÇÃO WHATSAPP (PADRÃO ADAPTER / PROVIDER)
  * ===================================================================
  * Suporta múltiplos provedores:
+ *  - 'baileys': Conexão nativa direta Baileys (zero Docker, integrado no Node.js)
  *  - 'wapi': API gerenciada W-API (https://docs.w-api.app/)
  *  - 'evolution': Evolution API v2 (auto-hospedada no Docker/CloudPanel)
  *
  * Configuração via variáveis de ambiente (.env):
  *  - WHATSAPP_ENABLED: 'true' para ativar, 'false' para desativar
- *  - WHATSAPP_PROVIDER: 'wapi' ou 'evolution'
+ *  - WHATSAPP_PROVIDER: 'baileys', 'wapi' ou 'evolution'
  *  - WHATSAPP_GROUP_ID: JID do grupo (ex: 120363000000000000@g.us)
  * ===================================================================
  */
+
+import {
+  initBaileys,
+  getBaileysStatus,
+  sendBaileysMessage,
+  joinGroupByInvite,
+  listParticipatingGroups,
+  disconnectBaileys,
+} from './baileys.js';
 
 export function isWhatsAppEnabled() {
   return String(process.env.WHATSAPP_ENABLED || 'false').trim().toLowerCase() === 'true';
@@ -194,7 +204,9 @@ export async function sendWhatsAppMessage({ to, text }) {
 
   try {
     let result;
-    if (provider === 'evolution') {
+    if (provider === 'baileys') {
+      result = await sendBaileysMessage({ to: target, text });
+    } else if (provider === 'evolution') {
       result = await sendViaEvolution({ to: target, text });
     } else {
       result = await sendViaWApi({ to: target, text });
@@ -245,3 +257,11 @@ export async function testWhatsAppConnection(target) {
 
   return sendWhatsAppMessage({ to: testRecipient, text });
 }
+
+export {
+  initBaileys,
+  getBaileysStatus,
+  joinGroupByInvite,
+  listParticipatingGroups,
+  disconnectBaileys,
+};

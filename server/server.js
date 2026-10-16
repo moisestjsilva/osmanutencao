@@ -27,6 +27,11 @@ import {
   testWhatsAppConnection,
   isWhatsAppEnabled,
   getWhatsAppProvider,
+  initBaileys,
+  getBaileysStatus,
+  joinGroupByInvite,
+  listParticipatingGroups,
+  disconnectBaileys,
 } from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -758,18 +763,61 @@ app.post('/api/push/test', requireUser, async (req, res) => {
   }
 });
 
-// WhatsApp Diagnostics e Teste
-app.get('/api/whatsapp/status', requireUser, (req, res) => {
+// WhatsApp Diagnostics, QR Code e Gerenciamento
+app.get('/whatsapp', (req, res) => {
+  res.sendFile(path.join(ROOT, 'public', 'whatsapp.html'));
+});
+
+app.get('/api/whatsapp/status', (req, res) => {
+  const baileysState = getBaileysStatus();
   res.json({
     enabled: isWhatsAppEnabled(),
     provider: getWhatsAppProvider(),
-    hasGroup: !!process.env.WHATSAPP_GROUP_ID,
-    hasWApiKey: !!process.env.WAPI_API_KEY,
-    hasEvolutionKey: !!process.env.EVOLUTION_API_KEY,
+    recipient: process.env.WHATSAPP_GROUP_ID || '',
+    hasRecipient: !!process.env.WHATSAPP_GROUP_ID,
+    ...baileysState,
   });
 });
 
-app.post('/api/whatsapp/test', requireUser, async (req, res) => {
+app.post('/api/whatsapp/init', async (req, res) => {
+  try {
+    const result = await initBaileys(true);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/disconnect', async (req, res) => {
+  try {
+    const result = await disconnectBaileys();
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/whatsapp/groups', async (req, res) => {
+  try {
+    const groups = await listParticipatingGroups();
+    res.json({ ok: true, groups });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/join-group', async (req, res) => {
+  try {
+    const { invite } = req.body || {};
+    if (!invite) return res.status(400).json({ error: 'Link ou código de convite é obrigatório' });
+    const result = await joinGroupByInvite(invite);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/test', async (req, res) => {
   try {
     const { target } = req.body || {};
     const result = await testWhatsAppConnection(target);
@@ -884,4 +932,11 @@ const sched = runScheduler(db);
 console.log(`Agendador: ${sched.generated} preventiva(s) gerada(s), ${sched.overdueNotified} aviso(s) de atraso`);
 setInterval(() => runScheduler(db), 5 * 60000);
 
-app.listen(PORT, () => console.log(`Nova OS rodando em http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Nova OS rodando em http://localhost:${PORT}`);
+  if (isWhatsAppEnabled() && getWhatsAppProvider() === 'baileys') {
+    initBaileys().catch((err) => {
+      console.warn('[WhatsApp] Erro ao iniciar Baileys automaticamente:', err.message);
+    });
+  }
+});

@@ -1557,6 +1557,7 @@ export function moreView(root) {
     ...(isAdm ? [
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
+      ['/whatsapp', 'message', 'Conexão WhatsApp', 'Configurar grupo de alertas, pareamento QR Code e testes'],
     ] : []),
     ['#/etiquetas', 'qr', 'Máquinas e etiquetas QR', 'Visualização e impressão de todas as etiquetas QR'],
     ['#/avisos', 'bell', 'Central de avisos', `${state.notifs?.length || 0} avisos registrados`],
@@ -1588,7 +1589,9 @@ export function moreView(root) {
   root.addEventListener('click', (e) => {
     const b = e.target.closest('[data-go]');
     if (!b) return;
-    if (b.dataset.go === 'chpass') {
+    if (b.dataset.go === '/whatsapp') {
+      window.location.href = '/whatsapp';
+    } else if (b.dataset.go === 'chpass') {
       changePasswordModal();
     } else if (b.dataset.go === 'logout') {
       confirmDialog({
