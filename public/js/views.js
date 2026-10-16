@@ -2744,11 +2744,13 @@ export function cadastrosView(root, params = {}) {
 
     // Aba: Usuários & Manutentores
     const techs = users.filter((u) => u.role === 'manutentor');
-    const admins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin');
+    const admins = users.filter((u) => ['admin', 'superadmin', 'gerente'].includes(u.role));
     const sols = users.filter((u) => u.role === 'solicitante');
 
     const filtered = users.filter((u) => {
-      if (filterRole !== 'todos' && u.role !== filterRole) return false;
+      if (filterRole === 'manutentor' && u.role !== 'manutentor') return false;
+      if (filterRole === 'admin' && !['admin', 'superadmin', 'gerente'].includes(u.role)) return false;
+      if (filterRole === 'solicitante' && u.role !== 'solicitante') return false;
       if (!ql) return true;
       return (
         u.name.toLowerCase().includes(ql) ||
@@ -2768,7 +2770,7 @@ export function cadastrosView(root, params = {}) {
       <div class="cad-grid">
         ${filtered.map((u) => `
           <div class="user-card-item ${u.active ? '' : 'inactive'}" data-uid="${u.id}">
-            ${avatar(u.name, '', u.avatar_url)}
+            ${avatar(u.name, '', userAvatarUrl(u, u.avatar_url))}
             <div class="grow" style="min-width:0">
               <div class="row wrap" style="gap:6px;align-items:center">
                 <strong style="font-size:15px">${esc(u.name)}</strong>
