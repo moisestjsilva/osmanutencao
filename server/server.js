@@ -23,9 +23,27 @@ import {
   removeSubscription,
   sendPushToUsers,
 } from './push.js';
+import {
+  testWhatsAppConnection,
+  isWhatsAppEnabled,
+  getWhatsAppProvider,
+} from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
+
+// Carregamento automático de variáveis do .env (Node.js nativo)
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    const envPath = path.join(ROOT, '.env');
+    if (fs.existsSync(envPath)) {
+      process.loadEnvFile(envPath);
+    }
+  } catch (err) {
+    console.warn('[Env] Aviso ao carregar .env:', err.message);
+  }
+}
+
 const PORT = Number(process.env.PORT || 3000);
 
 let db = openDb();
@@ -737,6 +755,27 @@ app.post('/api/push/test', requireUser, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: 'Falha ao disparar push de teste: ' + e.message });
+  }
+});
+
+// WhatsApp Diagnostics e Teste
+app.get('/api/whatsapp/status', requireUser, (req, res) => {
+  res.json({
+    enabled: isWhatsAppEnabled(),
+    provider: getWhatsAppProvider(),
+    hasGroup: !!process.env.WHATSAPP_GROUP_ID,
+    hasWApiKey: !!process.env.WAPI_API_KEY,
+    hasEvolutionKey: !!process.env.EVOLUTION_API_KEY,
+  });
+});
+
+app.post('/api/whatsapp/test', requireUser, async (req, res) => {
+  try {
+    const { target } = req.body || {};
+    const result = await testWhatsAppConnection(target);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: 'Falha no teste de WhatsApp: ' + e.message });
   }
 });
 

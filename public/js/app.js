@@ -1,6 +1,6 @@
 // Orquestrador do aplicativo Nova OS
 // Roteador por hash, controle de autenticação e permissões, atualização de relógios em tempo real
-import { state, init, on, sync, pendingOps, failedOps, resetNotifTracking, logout } from './store.js';
+import { state, init, on, sync, pendingOps, failedOps, resetNotifTracking, logout, api } from './store.js';
 import { $, $$, sheet, avatar, esc, icon, toast, clock, stoppedClock, ROLE, roleBadge, initials, hue } from './ui.js';
 import {
   listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView,

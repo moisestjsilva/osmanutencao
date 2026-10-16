@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UPLOAD_DIR } from './db.js';
 import { sendPushToUsers } from './push.js';
+import { notifyNewOrderWhatsApp } from './whatsapp.js';
 
 export const CLOSED = ['Concluída', 'Cancelada'];
 const nowIso = () => new Date().toISOString();
@@ -220,6 +221,24 @@ const handlers = {
         body: `TAG: ${machine.code} • ${lbl.machine} (${lbl.sector}) aguarda atendimento!`,
       });
     }
+
+    // Disparo assíncrono para o WhatsApp (Grupo de Manutenção)
+    const respUser = responsibleId ? getUser(db, responsibleId) : null;
+    notifyNewOrderWhatsApp({
+      number,
+      type,
+      priority,
+      machineStopped: stopped,
+      machine: lbl.machine,
+      sector: lbl.sector,
+      tag: machine.code,
+      description: desc,
+      requesterName: user.name,
+      responsibleName: respUser?.name || null,
+    }).catch((err) => {
+      console.warn('[WhatsApp] Falha ao despachar notificação:', err.message);
+    });
+
     return { woId: id, number };
   },
 
