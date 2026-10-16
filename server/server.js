@@ -315,8 +315,13 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-  // Regra: Admin/Gerente comum não pode alterar Super Admin nem outros Admins
-  if ((req.user.role === 'admin' || req.user.role === 'gerente') && (target.role === 'superadmin' || target.role === 'admin')) {
+  // Regra: Somente o Super Admin pode alterar a conta do Super Admin
+  if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Você não tem permissão para alterar o usuário Super Admin' });
+  }
+
+  // Gerente só pode alterar manutentores e solicitantes (ou sua própria conta)
+  if (req.user.role === 'gerente' && ['admin', 'superadmin', 'gerente'].includes(target.role)) {
     if (target.id !== req.user.id) {
       return res.status(403).json({ error: 'Você só pode gerenciar manutentores e solicitantes' });
     }
@@ -325,6 +330,25 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   const { name, email, username, password, role, teamId, sectorId, sector_id, specialty, active, avatarUrl, avatar_url } = req.body || {};
   if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name.trim(), target.id);
   if (email) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.trim().toLowerCase(), target.id);
+
+  if (username !== undefined && username !== null) {
+    const cleanUser = String(username).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    if (!cleanUser) {
+      return res.status(400).json({ error: 'O login / nome de usuário não pode ficar vazio' });
+    }
+    if (cleanUser !== target.username) {
+      // Regra de segurança: Não é permitido alterar o login do superadmin se não for o superadmin
+      if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: 'Não é permitido alterar o login do Super Admin' });
+      }
+      const exists = db.prepare('SELECT id FROM users WHERE LOWER(username) = ? AND id != ?').get(cleanUser, target.id);
+      if (exists) {
+        return res.status(400).json({ error: 'Este login / nome de usuário já está em uso por outro colaborador' });
+      }
+      db.prepare('UPDATE users SET username = ? WHERE id = ?').run(cleanUser, target.id);
+    }
+  }
+
   if (role && (req.user.role === 'superadmin' || !['admin', 'superadmin'].includes(role))) {
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, target.id);
   }

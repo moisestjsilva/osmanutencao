@@ -3250,7 +3250,8 @@ export function cadastrosView(root, params = {}) {
 
         <label class="field">
           <span>Login / Nome de Usuário *</span>
-          <input class="input" id="u-username" required ${isEdit ? 'disabled' : ''} value="${esc(target?.username || '')}" placeholder="Ex: reinilson" />
+          <input class="input" id="u-username" required ${target?.role === 'superadmin' && !isSuperAdmin() ? 'disabled title="O login do Super Admin não pode ser alterado"' : ''} value="${esc(target?.username || '')}" placeholder="Ex: reinilson" />
+          ${target?.role === 'superadmin' && !isSuperAdmin() ? '<span class="muted xs" style="color:var(--warn)">O login do Super Admin não pode ser alterado</span>' : ''}
         </label>
 
         <label class="field">
@@ -3345,7 +3346,7 @@ export function cadastrosView(root, params = {}) {
           try {
             if (isEdit) {
               await updateUser(target.id, {
-                name, email, role, sectorId, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
+                name, username, email, role, sectorId, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
               });
               toast('Usuário atualizado com sucesso!');
             } else {
