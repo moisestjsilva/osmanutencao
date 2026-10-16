@@ -41,6 +41,27 @@ function mergeUsers() {
       pickPrimary: (list) => list.find((u) => /^talis/i.test(u.name)) || list[0],
       finalName: 'Talis',
       finalUsername: 'talis'
+    },
+    {
+      name: 'Ranieri / Raliele',
+      matcher: (u) => /^(raliele|ranieri)/i.test(u.name) || /^(raliele|ranieri)/i.test(u.username),
+      pickPrimary: (list) => list.find((u) => /^ranieri/i.test(u.name)) || list[0],
+      finalName: 'Ranieri',
+      finalUsername: 'ranieri'
+    },
+    {
+      name: 'Rherisson / Rhe',
+      matcher: (u) => /^(rhe$|rherisson)/i.test(u.name) || /^(rhe_-|rherisson)/i.test(u.username),
+      pickPrimary: (list) => list.find((u) => /^rherisson/i.test(u.name)) || list[0],
+      finalName: 'Rherisson',
+      finalUsername: 'rherisson'
+    },
+    {
+      name: 'Ronielly / Ronielliy',
+      matcher: (u) => /^roniell/i.test(u.name) || /^roniell/i.test(u.username),
+      pickPrimary: (list) => list.find((u) => /^ronielly$/i.test(u.name)) || list[0],
+      finalName: 'Ronielly',
+      finalUsername: 'ronielly'
     }
   ];
 
