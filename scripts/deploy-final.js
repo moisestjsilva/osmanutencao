@@ -1,4 +1,10 @@
 import { Client } from 'ssh2';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
 
 const HOST = '186.225.65.17';
 const PORT = 22;
@@ -116,6 +122,14 @@ async function main() {
       ls -la data/
     `;
     await runRemote(conn, buildScript);
+
+    // 3.5 Sincronizar variáveis de ambiente (.env) no servidor
+    console.log('[Deploy 3.5/5] Sincronizando arquivo .env no servidor...');
+    const envPath = path.join(ROOT, '.env');
+    if (fs.existsSync(envPath)) {
+      const envBase64 = Buffer.from(fs.readFileSync(envPath, 'utf-8')).toString('base64');
+      await runRemote(conn, `echo "${envBase64}" | base64 -d > "${SITE_DIR}/.env" && chmod 600 "${SITE_DIR}/.env"`);
+    }
 
     // 4. Iniciar/Reiniciar aplicação na porta 3033
     console.log('[Deploy 4/5] Gerenciando processo da aplicação (PM2)...');
