@@ -225,12 +225,12 @@ export async function sendWhatsAppMessage({ to, text }) {
  * garantindo que falhas de rede ou saldo na API do WhatsApp nunca impeçam ou atrasem
  * a abertura da OS no banco de dados.
  */
-export async function notifyNewOrderWhatsApp(orderData) {
+export async function notifyNewOrderWhatsApp(orderData, recipient = null) {
   if (!isWhatsAppEnabled()) return;
 
   try {
     const text = formatNewOrderMessage(orderData);
-    await sendWhatsAppMessage({ text });
+    await sendWhatsAppMessage({ to: recipient, text });
   } catch (err) {
     // Registra o alerta no console sem propagar o erro
     console.warn('[WhatsApp] Notificação de nova OS não pôde ser enviada:', err.message);

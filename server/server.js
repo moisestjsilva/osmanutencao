@@ -770,13 +770,41 @@ app.get('/whatsapp', (req, res) => {
 
 app.get('/api/whatsapp/status', (req, res) => {
   const baileysState = getBaileysStatus();
+  const currentRecipient = getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID || '');
   res.json({
     enabled: isWhatsAppEnabled(),
     provider: getWhatsAppProvider(),
-    recipient: process.env.WHATSAPP_GROUP_ID || '',
-    hasRecipient: !!process.env.WHATSAPP_GROUP_ID,
+    recipient: currentRecipient,
+    hasRecipient: !!currentRecipient,
     ...baileysState,
   });
+});
+
+app.post('/api/whatsapp/recipient', (req, res) => {
+  try {
+    const { recipient } = req.body || {};
+    if (!recipient) return res.status(400).json({ error: 'Destinatário/JID é obrigatório' });
+    const cleanRecipient = recipient.trim();
+    process.env.WHATSAPP_GROUP_ID = cleanRecipient;
+    setSetting(db, 'whatsapp_group_id', cleanRecipient);
+
+    try {
+      const envFile = path.join(ROOT, '.env');
+      if (fs.existsSync(envFile)) {
+        let content = fs.readFileSync(envFile, 'utf-8');
+        if (content.includes('WHATSAPP_GROUP_ID=')) {
+          content = content.replace(/WHATSAPP_GROUP_ID=.*/, `WHATSAPP_GROUP_ID=${cleanRecipient}`);
+        } else {
+          content += `\nWHATSAPP_GROUP_ID=${cleanRecipient}\n`;
+        }
+        fs.writeFileSync(envFile, content, 'utf-8');
+      }
+    } catch (_) {}
+
+    res.json({ ok: true, recipient: cleanRecipient });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/whatsapp/init', async (req, res) => {

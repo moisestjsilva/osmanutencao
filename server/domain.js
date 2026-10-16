@@ -224,6 +224,7 @@ const handlers = {
 
     // Disparo assíncrono para o WhatsApp (Grupo de Manutenção)
     const respUser = responsibleId ? getUser(db, responsibleId) : null;
+    const configuredRecipient = getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID);
     notifyNewOrderWhatsApp({
       number,
       type,
@@ -235,7 +236,7 @@ const handlers = {
       description: desc,
       requesterName: user.name,
       responsibleName: respUser?.name || null,
-    }).catch((err) => {
+    }, configuredRecipient).catch((err) => {
       console.warn('[WhatsApp] Falha ao despachar notificação:', err.message);
     });
 

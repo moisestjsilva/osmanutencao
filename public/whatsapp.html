@@ -389,9 +389,14 @@
 
     <!-- Card Link de Grupo / JID -->
     <div class="card">
-      <span class="card-title">👥 Grupo de Manutenção do WhatsApp</span>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="card-title">👥 Grupo de Manutenção do WhatsApp</span>
+        <div id="activeRecipientBadge" style="display: none; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #34d399; font-size: 0.78rem; font-weight: 600; padding: 0.3rem 0.75rem; border-radius: 8px;">
+          🎯 Ativo: <span id="activeRecipientLabel">...</span>
+        </div>
+      </div>
       <p style="font-size: 0.85rem; color: var(--text-muted);">
-        Para receber as notificações no seu grupo, você pode colar o <strong>link de convite</strong> ou listar os grupos em que este número já está inserido.
+        Para que a equipe receba as ordens de serviço, defina o grupo clicando em <strong>"Definir como Grupo da OS"</strong> abaixo ou entre via <strong>link de convite</strong>.
       </p>
 
       <div class="input-group">
@@ -419,11 +424,27 @@
       </div>
     </div>
 
+    <!-- Card Explicativo de Fluxo -->
+    <div class="card" style="border-left: 4px solid var(--primary);">
+      <span class="card-title">🚀 Como Funciona no Aplicativo da OS?</span>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.88rem; line-height: 1.5; color: #d1d5db;">
+        <div>
+          <strong style="color: #fff;">1. Escolha o Grupo Acima:</strong> Localize o grupo da sua equipe (ex: <em>GRUPO RUFATO AVISOS</em>) e clique em <strong>"Definir como Grupo da OS"</strong>.
+        </div>
+        <div>
+          <strong style="color: #fff;">2. Abertura Automática:</strong> Quando qualquer pessoa abrir um chamado no aplicativo (no botão <strong>[+] Nova OS</strong>), o sistema salva no banco de dados e dispara instantaneamente uma notificação formatada para o WhatsApp do grupo.
+        </div>
+        <div>
+          <strong style="color: #fff;">3. Dados Enviados no Alerta:</strong> Número da OS, Prioridade, se a <strong>Máquina está parada</strong> 🛑, Setor, TAG da Máquina, Solicitante e a Descrição do problema.
+        </div>
+      </div>
+    </div>
+
     <!-- Card Disparo de Teste -->
     <div class="card">
       <span class="card-title">🧪 Disparo de Teste</span>
       <p style="font-size: 0.85rem; color: var(--text-muted);">
-        Envie uma notificação de teste para verificar se as mensagens estão chegando normalmente.
+        Envie uma notificação de teste para verificar se o grupo selecionado está recebendo as mensagens.
       </p>
 
       <div class="input-group">
@@ -442,6 +463,7 @@
 
   <script>
     let pollInterval = null;
+    let currentActiveRecipient = '';
 
     async function loadStatus() {
       try {
@@ -455,9 +477,18 @@
         const startArea = document.getElementById('startArea');
         const connectedUserText = document.getElementById('connectedUserText');
         const targetInput = document.getElementById('targetInput');
+        const activeRecipientBadge = document.getElementById('activeRecipientBadge');
+        const activeRecipientLabel = document.getElementById('activeRecipientLabel');
 
-        if (data.recipient && !targetInput.value) {
-          targetInput.value = data.recipient;
+        currentActiveRecipient = data.recipient || '';
+        if (currentActiveRecipient) {
+          activeRecipientBadge.style.display = 'block';
+          activeRecipientLabel.textContent = currentActiveRecipient;
+          if (!targetInput.value) {
+            targetInput.value = currentActiveRecipient;
+          }
+        } else {
+          activeRecipientBadge.style.display = 'none';
         }
 
         badge.className = 'status-badge ' + data.status;
@@ -498,27 +529,56 @@
           return;
         }
 
-        listEl.innerHTML = data.groups.map(g => `
-          <div class="group-item">
-            <div>
-              <div class="group-name">${g.subject}</div>
-              <div class="group-jid">${g.id} (${g.participantsCount} membros)</div>
+        listEl.innerHTML = data.groups.map(g => {
+          const isActive = g.id === currentActiveRecipient;
+          return `
+            <div class="group-item" style="${isActive ? 'border-color: #10b981; background: rgba(16,185,129,0.06);' : ''}">
+              <div>
+                <div class="group-name">
+                  ${g.subject}
+                  ${isActive ? '<span style="margin-left: 0.5rem; font-size: 0.72rem; color: #34d399; background: rgba(16,185,129,0.2); padding: 0.15rem 0.45rem; border-radius: 4px;">⭐ Ativo</span>' : ''}
+                </div>
+                <div class="group-jid">${g.id} (${g.participantsCount} membros)</div>
+              </div>
+              <button 
+                class="btn ${isActive ? 'btn-primary' : 'btn-accent'}" 
+                style="padding: 0.35rem 0.75rem; font-size: 0.78rem;" 
+                onclick="selectGroup('${g.id}', '${encodeURIComponent(g.subject)}')"
+              >
+                ${isActive ? '✓ Grupo da OS' : 'Definir como Grupo da OS'}
+              </button>
             </div>
-            <button class="btn btn-accent" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="selectGroup('${g.id}')">
-              Usar para Notificações
-            </button>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       } catch (err) {
         console.error('Falha ao carregar grupos:', err);
       }
     }
 
-    function selectGroup(jid) {
-      document.getElementById('targetInput').value = jid;
-      const testAlert = document.getElementById('testAlert');
-      testAlert.className = 'alert success';
-      testAlert.textContent = 'Grupo selecionado: ' + jid + '. Clique em "Enviar Teste Agora" para testar.';
+    async function selectGroup(jid, encodedName) {
+      const name = decodeURIComponent(encodedName || jid);
+      try {
+        const res = await fetch('/api/whatsapp/recipient', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipient: jid })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.ok) {
+          currentActiveRecipient = jid;
+          document.getElementById('targetInput').value = jid;
+          const testAlert = document.getElementById('testAlert');
+          testAlert.className = 'alert success';
+          testAlert.textContent = `✅ O grupo "${name}" foi definido como destino oficial das Ordens de Serviço!`;
+          await loadStatus();
+          await loadGroups();
+        } else {
+          alert('Erro ao salvar grupo: ' + (data.error || 'Erro desconhecido'));
+        }
+      } catch (err) {
+        alert('Erro ao salvar grupo: ' + err.message);
+      }
     }
 
     document.getElementById('btnInit').addEventListener('click', async () => {
@@ -567,10 +627,11 @@
         const data = await res.json();
 
         if (res.ok && data.ok) {
+          const groupJid = data.result?.groupJid;
           alertEl.className = 'alert success';
-          alertEl.textContent = 'Sucesso! WhatsApp entrou no grupo. ID: ' + (data.result?.groupJid || '');
-          if (data.result?.groupJid) {
-            document.getElementById('targetInput').value = data.result.groupJid;
+          alertEl.textContent = 'Sucesso! WhatsApp entrou no grupo. ID: ' + (groupJid || '');
+          if (groupJid) {
+            await selectGroup(groupJid, 'Grupo Recém Entrado');
           }
           await loadGroups();
         } else {
@@ -623,9 +684,8 @@
     document.getElementById('btnRefreshGroups').addEventListener('click', loadGroups);
 
     // Início
-    loadStatus();
-    loadGroups();
-    pollInterval = setInterval(loadStatus, 3000);
+    loadStatus().then(loadGroups);
+    pollInterval = setInterval(loadStatus, 4000);
   </script>
 </body>
 </html>
