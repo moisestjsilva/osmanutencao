@@ -224,11 +224,25 @@ function showUserProfile() {
       </button>
 
       ${(u.role === 'admin' || u.role === 'superadmin') ? `
+      <button class="btn" id="btn-prof-whatsapp" style="justify-content:flex-start">
+        <span style="color:#25d366">${icon('message', 18)}</span>
+        <span class="grow" style="text-align:left">Configuração do WhatsApp</span>
+        <span class="badge ${u.role === 'superadmin' ? 'role-super' : 'role-admin'} xs">${u.role === 'superadmin' ? 'Super Admin' : 'Admin'}</span>
+      </button>
+      <button class="btn" id="btn-prof-config" style="justify-content:flex-start">
+        ${icon('cog', 18)}
+        <span class="grow" style="text-align:left">Configurações do Sistema</span>
+      </button>
       <button class="btn" id="btn-prof-cadastros" style="justify-content:flex-start">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><path d="M19 11v6M22 14h-6"/></svg>
         <span class="grow" style="text-align:left">Central de Cadastros (Máquinas, Setores, Equipe)</span>
       </button>
-      ` : ''}
+      ` : `
+      <button class="btn" id="btn-prof-config" style="justify-content:flex-start">
+        ${icon('cog', 18)}
+        <span class="grow" style="text-align:left">Configurações</span>
+      </button>
+      `}
 
       <button class="btn danger" id="btn-prof-logout" style="justify-content:flex-start;margin-top:8px">
         ${icon('logOut', 18)} <span class="grow" style="text-align:left">Sair da Conta (Logout)</span>
@@ -246,6 +260,14 @@ function showUserProfile() {
       $('#btn-prof-chpass', el)?.addEventListener('click', () => {
         modal.close();
         changePasswordModal();
+      });
+      $('#btn-prof-whatsapp', el)?.addEventListener('click', () => {
+        modal.close();
+        window.open('https://os.moveisrufato.com.br/whatsapp', '_blank');
+      });
+      $('#btn-prof-config', el)?.addEventListener('click', () => {
+        modal.close();
+        location.hash = '#/config';
       });
       $('#btn-prof-cadastros', el)?.addEventListener('click', () => {
         modal.close();

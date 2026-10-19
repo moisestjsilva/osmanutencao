@@ -1586,8 +1586,9 @@ export function moreView(root) {
     ...(isAdm ? [
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
-      ['/whatsapp', 'message', 'Conexão WhatsApp', 'Configurar grupo de alertas, pareamento QR Code e testes'],
+      ['https://os.moveisrufato.com.br/whatsapp', 'message', 'Conexão WhatsApp', 'Configurar grupo de alertas, pareamento QR Code e testes'],
     ] : []),
+    ['#/config', 'cog', 'Configurações do Sistema', isSuper ? 'Aparência, notificações push, WhatsApp e preferências' : 'Aparência e notificações push no aparelho'],
     ['#/etiquetas', 'qr', 'Máquinas e etiquetas QR', 'Visualização e impressão de todas as etiquetas QR'],
     ['#/avisos', 'bell', 'Central de avisos', `${state.notifs?.length || 0} avisos registrados`],
     ['#/sync', 'cloud', 'Sincronização offline', `${pendingOps().length} pendente(s) • ${failedOps().length} com falha`],
@@ -1618,8 +1619,8 @@ export function moreView(root) {
   root.addEventListener('click', (e) => {
     const b = e.target.closest('[data-go]');
     if (!b) return;
-    if (b.dataset.go === '/whatsapp') {
-      window.location.href = '/whatsapp';
+    if (b.dataset.go === '/whatsapp' || b.dataset.go === 'https://os.moveisrufato.com.br/whatsapp') {
+      window.open('https://os.moveisrufato.com.br/whatsapp', '_blank');
     } else if (b.dataset.go === 'chpass') {
       changePasswordModal();
     } else if (b.dataset.go === 'logout') {
@@ -2329,11 +2330,43 @@ export function syncView(root) {
 
 export function configView(root) {
   function render() {
-    const mode = state.boot.settings.defaultRecipientsMode;
+    const mode = state.boot?.settings?.defaultRecipientsMode || 'todos';
     const perm = 'Notification' in window ? Notification.permission : 'unsupported';
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const isSuper = isSuperAdmin();
+    const isAdm = isAdmin();
+
     root.innerHTML = `
       <div class="page-head"><div><h1>Configurações</h1></div></div>
+
+      ${isAdm ? `
+      <section class="card" style="border: 1.5px solid #25d366; background: linear-gradient(135deg, rgba(37,211,102,0.08) 0%, rgba(37,211,102,0.02) 100%); position: relative; overflow: hidden; margin-bottom: 14px;">
+        <div style="position:absolute; right:-12px; bottom:-12px; opacity:0.07; color:#25d366; pointer-events:none;">
+          ${icon('message', 96)}
+        </div>
+        <div class="row" style="align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+              <span class="ico" style="color:#25d366;display:inline-flex">${icon('message', 22)}</span>
+              <strong style="font-size:16px">Configuração do WhatsApp</strong>
+              <span class="badge ${isSuper ? 'role-super' : 'role-admin'}" style="font-size:11px;padding:3px 8px">
+                ${isSuper ? 'Super Admin' : 'Admin'}
+              </span>
+            </div>
+            <p class="muted small" style="margin:0 0 12px;line-height:1.45">
+              Conecte o bot via QR Code, selecione o grupo de manutenção da Móveis Rufato e teste os disparos automáticos de chamados e máquinas paradas.
+            </p>
+            <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+              <a href="https://os.moveisrufato.com.br/whatsapp" target="_blank" rel="noopener noreferrer" class="btn primary sm" id="btn-open-whatsapp" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#25d366;border-color:#25d366;color:#ffffff;font-weight:600;box-shadow:0 2px 8px rgba(37,211,102,0.3)">
+                ${icon('message', 18)} Abrir Painel do WhatsApp ↗
+              </a>
+              <span class="muted xs" style="font-family:monospace;opacity:0.8">https://os.moveisrufato.com.br/whatsapp</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      ` : ''}
+
       <section class="card">
         <strong>Aparência do aplicativo</strong>
         <p class="muted small">Alterne entre o tema claro clean e o tema escuro industrial.</p>
