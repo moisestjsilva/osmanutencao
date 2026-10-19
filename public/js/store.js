@@ -50,6 +50,8 @@ async function store(name, mode, fn) {
 export const kv = {
   get: async (key) => (await store('cache', 'readonly', (s) => s.get(key)))?.value,
   set: (key, value) => store('cache', 'readwrite', (s) => s.put({ key, value })),
+  del: (key) => store('cache', 'readwrite', (s) => s.delete(key)),
+  delete: (key) => store('cache', 'readwrite', (s) => s.delete(key)),
 };
 const qAll = () => store('queue', 'readonly', (s) => s.getAll());
 const qPut = (op) => store('queue', 'readwrite', (s) => s.put(op));
@@ -328,12 +330,30 @@ export async function fetchDetail(id) {
 }
 
 export async function deleteWorkOrder(id) {
-  const r = await api(`/api/workorders/${encodeURIComponent(id)}`, {
-    method: 'DELETE'
-  });
-  await kv.del(`wo:${id}`);
+  let r = null;
+  try {
+    r = await api(`/api/workorders/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  } catch (err) {
+    // Se o registro já foi apagado no servidor (ex: tentativa anterior), prossegue com a limpeza local
+    if (err?.message?.includes('não encontrada') || err?.message?.includes('404')) {
+      r = { success: true, alreadyDeleted: true };
+    } else {
+      throw err;
+    }
+  }
+
+  try {
+    await kv.del?.(`wo:${id}`);
+  } catch (_) {}
+
   state.serverWos = (state.serverWos || []).filter((w) => w.id !== id);
-  await kv.set('wos', state.serverWos);
+
+  try {
+    await kv.set('wos', state.serverWos);
+  } catch (_) {}
+
   emit('wos');
   return r;
 }
