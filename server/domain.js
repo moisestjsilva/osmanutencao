@@ -446,7 +446,85 @@ const handlers = {
     bump(db, wo.id);
     return { woId: wo.id };
   },
+
+  delete_wo(db, op, user, wo) {
+    return deleteWorkOrderRecord(db, wo.id, user, op.localTime);
+  },
 };
+
+export function deleteWorkOrderRecord(db, woId, user, localTime = null) {
+  if (!user || !['admin', 'superadmin'].includes(user.role)) {
+    throw new OpError('forbidden', 'Apenas Administrador e Super Administrador podem excluir uma Ordem de Serviço');
+  }
+
+  const wo = getWoRow(db, woId);
+  if (!wo) {
+    throw new OpError('invalid', 'Ordem de Serviço não encontrada');
+  }
+
+  const at = localTime ? validTime(localTime) : nowIso();
+
+  // 1. Trata parada de máquina se houver
+  if (wo.machine_id) {
+    const stops = db.prepare('SELECT id, wo_ids_json FROM machine_stops WHERE machine_id = ?').all(wo.machine_id);
+    for (const st of stops) {
+      try {
+        let ids = JSON.parse(st.wo_ids_json || '[]');
+        if (ids.includes(woId)) {
+          ids = ids.filter((x) => x !== woId);
+          db.prepare('UPDATE machine_stops SET wo_ids_json = ? WHERE id = ?').run(JSON.stringify(ids), st.id);
+        }
+      } catch (_) {}
+    }
+    maybeCloseMachineStop(db, wo.machine_id, at);
+  }
+
+  // 2. Remove vínculos de retrabalho que apontavam para esta OS
+  db.prepare('UPDATE work_orders SET rework_of = NULL WHERE rework_of = ?').run(woId);
+
+  // 3. Remove anexos e fotos do disco
+  const attachments = db.prepare('SELECT file FROM attachments WHERE wo_id = ?').all(woId);
+  for (const att of attachments) {
+    try {
+      const filePath = path.join(UPLOAD_DIR, path.basename(att.file));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (_) {}
+  }
+  db.prepare('DELETE FROM attachments WHERE wo_id = ?').run(woId);
+
+  // 4. Remove apontamentos, intervalos e eventos
+  db.prepare('DELETE FROM wo_participants WHERE wo_id = ?').run(woId);
+  db.prepare('DELETE FROM work_intervals WHERE wo_id = ?').run(woId);
+  db.prepare('DELETE FROM wo_events WHERE wo_id = ?').run(woId);
+
+  // 5. Remove notificações e conflitos
+  db.prepare('DELETE FROM notifications WHERE wo_id = ?').run(woId);
+  db.prepare('DELETE FROM conflicts WHERE wo_id = ?').run(woId);
+
+  // 6. Registra no log de auditoria
+  try {
+    const auditCols = db.prepare('PRAGMA table_info(audit_log)').all().map((c) => c.name);
+    const details = JSON.stringify({ number: wo.number, description: wo.description, machine_id: wo.machine_id, status: wo.status });
+    if (auditCols.includes('entity_type')) {
+      db.prepare(`
+        INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details, created_at)
+        VALUES (?, ?, 'exclusao', 'work_orders', ?, ?, ?)
+      `).run(randomUUID(), user.id, woId, details, at);
+    } else if (auditCols.includes('entity')) {
+      db.prepare(`
+        INSERT INTO audit_log (id, entity, entity_id, field, old_value, new_value, reason, user_id, created_at)
+        VALUES (?, 'work_orders', ?, 'exclusao', ?, NULL, 'Exclusão definitiva de OS por administrador', ?, ?)
+      `).run(randomUUID(), woId, details, user.id, at);
+    }
+  } catch (errAudit) {
+    console.warn('[AuditLog] Não foi possível gravar log de auditoria:', errAudit.message);
+  }
+
+  // 7. Remove a OS
+  db.prepare('DELETE FROM work_orders WHERE id = ?').run(woId);
+
+  return { woId, deleted: true, number: wo.number };
+}
 
 function stopWork(db, op, user, wo, action, state, reason) {
   const iv = openInterval(db, wo.id, user.id);

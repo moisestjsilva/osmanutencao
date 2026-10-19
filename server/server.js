@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
 import { openDb, resetDb, UPLOAD_DIR } from './db.js';
-import { applyOp, getSetting, setSetting, CLOSED } from './domain.js';
+import { applyOp, getSetting, setSetting, CLOSED, deleteWorkOrderRecord } from './domain.js';
 import { generateCycle, runScheduler } from './preventive.js';
 import { computeIndicators } from './indicators.js';
 import {
@@ -653,6 +653,16 @@ app.get('/api/workorders/:id', (req, res) => {
   const w = db.prepare('SELECT * FROM work_orders WHERE id=?').get(req.params.id);
   if (!w) return res.status(404).json({ error: 'OS não encontrada' });
   res.json(serializeWo(w, true));
+});
+
+app.delete('/api/workorders/:id', requireUser, (req, res) => {
+  try {
+    const result = deleteWorkOrderRecord(db, req.params.id, req.user);
+    res.json(result);
+  } catch (err) {
+    const status = err.kind === 'forbidden' ? 403 : (err.kind === 'invalid' ? 404 : 500);
+    res.status(status).json({ error: err.message });
+  }
 });
 
 // Recebe a fila de operações (online ou offline). Cada operação é confirmada individualmente.

@@ -1,6 +1,6 @@
 // Telas do app. Cada tela recebe o elemento raiz e devolve uma função de limpeza opcional.
 import {
-  state, on, api, enqueue, sync, workOrders, fetchDetail, pendingOps, failedOps, retryOp, retryAllFailed, discardOp, discardAllFailed, markRead, loadBoot, kv, uuid, NetError, userName,
+  state, on, api, enqueue, sync, workOrders, fetchDetail, deleteWorkOrder, pendingOps, failedOps, retryOp, retryAllFailed, discardOp, discardAllFailed, markRead, loadBoot, kv, uuid, NetError, userName,
   login, logout, changePassword, fetchUsers, createUser, updateUser, deleteUser,
   uploadImage, fetchSectors, createSector, updateSector, deleteSector,
   fetchMachines, createMachine, updateMachine, deleteMachine
@@ -17,6 +17,7 @@ const me = () => state.user;
 const isTech = () => ['manutentor', 'gerente', 'admin', 'superadmin'].includes(me()?.role);
 const isAdmin = () => ['admin', 'superadmin', 'gerente'].includes(me()?.role);
 const isSuperAdmin = () => me()?.role === 'superadmin';
+const canDeleteWo = () => ['admin', 'superadmin'].includes(me()?.role);
 const isOnlyTech = () => me()?.role === 'manutentor';
 const isManager = () => isAdmin();
 const PRANK = { urgente: 0, alta: 1, media: 2, baixa: 3 };
@@ -213,6 +214,7 @@ export function detailView(root, { id }) {
         <button class="btn ghost sm" id="btn-back">${icon('back', 18)} Ordens</button>
         <span class="grow"></span>
         ${wo._pending ? `<span class="badge pending">${icon('cloud', 12)} ${wo._pending} pendente(s)</span>` : ''}
+        ${canDeleteWo() ? `<button class="btn danger sm" id="btn-delete-wo" title="Excluir OS permanentemente" style="margin-left:8px">${icon('trash', 16)} Excluir OS</button>` : ''}
       </div>
 
       <section class="card detail-hero ${wo.machineStopped ? 'is-stopped' : ''}">
@@ -345,6 +347,9 @@ export function detailView(root, { id }) {
       btns.push(`<button class="btn lg" data-act="more" id="act-more">Mais ações</button>`);
     } else if (wo.status === 'Concluída' && (isManager() || wo.requester?.id === u?.id)) {
       btns.push(`<button class="btn lg" data-act="reopen" id="act-reopen">${icon('undo', 18)} Reabrir OS</button>`);
+      if (canDeleteWo()) btns.push(`<button class="btn lg danger" data-act="delete" id="act-delete">${icon('trash', 18)} Excluir</button>`);
+    } else if (wo.status === 'Cancelada' && canDeleteWo()) {
+      btns.push(`<button class="btn lg danger" data-act="delete" id="act-delete">${icon('trash', 18)} Excluir OS</button>`);
     }
     $('#action-bar')?.remove();
     document.body.classList.toggle('has-action-bar', btns.length > 0);
@@ -352,6 +357,27 @@ export function detailView(root, { id }) {
       bar.innerHTML = btns.join('');
       document.body.appendChild(bar);
       bar.addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b) act(b.dataset.act); });
+    }
+  }
+
+  async function confirmDelete() {
+    if (!canDeleteWo()) {
+      toast('Apenas Administrador e Super Administrador podem excluir OS', 'warn');
+      return;
+    }
+    const ok = await confirmDialog({
+      title: `Excluir OS #${wo.number || ''}?`,
+      body: `Tem certeza que deseja EXCLUIR DEFINITIVAMENTE esta Ordem de Serviço?\n\nMáquina: ${wo.machine?.name || ''}\nDescrição: ${wo.description || ''}\n\nEsta ação apagará todo o histórico e não poderá ser desfeita.`,
+      confirm: 'Sim, Excluir OS',
+      danger: true
+    });
+    if (!ok) return;
+    try {
+      await deleteWorkOrder(wo.id);
+      toast(`OS #${wo.number || ''} excluída com sucesso`);
+      go('#/');
+    } catch (err) {
+      toast('Erro ao excluir OS: ' + err.message, 'err');
     }
   }
 
@@ -368,6 +394,7 @@ export function detailView(root, { id }) {
 
   async function act(a) {
     const u = me();
+    if (a === 'delete') return confirmDelete();
     if (a === 'assume') return doOp('assume', {}, 'OS assumida');
     if (a === 'join') return doOp('join', {}, 'Você agora participa desta OS');
     if (a === 'start') return doOp('start', {}, 'Atendimento iniciado');
@@ -407,6 +434,7 @@ export function detailView(root, { id }) {
       if (!wo.responsible && isTech()) items.push(['assume', 'hand', 'Assumir OS', '']);
       items.push(['photo', 'camera', 'Adicionar foto', '']);
       if (isManager()) items.push(['cancel', 'x', 'Cancelar OS', 'Somente gerente, com motivo']);
+      if (canDeleteWo()) items.push(['delete', 'trash', 'Excluir OS', 'Exclusão definitiva (Admin / Super Admin)']);
       sheet(`<h2>Ações</h2><div class="menu-list" style="margin-top:8px">${items.map(([k, ic, t, s]) => `
         <button class="menu-item" data-more="${k}"><span class="ico">${icon(ic, 18)}</span><span><strong>${t}</strong>${s ? `<div class="muted xs">${s}</div>` : ''}</span></button>`).join('')}</div>`, {
         onMount(el, sh) {
@@ -524,6 +552,7 @@ export function detailView(root, { id }) {
 
   function bind() {
     $('#btn-back', root)?.addEventListener('click', () => (history.length > 1 ? history.back() : go('#/')));
+    $('#btn-delete-wo', root)?.addEventListener('click', confirmDelete);
     $$('[data-check]', root).forEach((row) => row.addEventListener('click', (e) => {
       e.preventDefault();
       if (!isTech() || isClosed(wo)) return;

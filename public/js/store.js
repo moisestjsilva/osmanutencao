@@ -327,6 +327,17 @@ export async function fetchDetail(id) {
   }
 }
 
+export async function deleteWorkOrder(id) {
+  const r = await api(`/api/workorders/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+  await kv.del(`wo:${id}`);
+  state.serverWos = (state.serverWos || []).filter((w) => w.id !== id);
+  await kv.set('wos', state.serverWos);
+  emit('wos');
+  return r;
+}
+
 export const pendingFor = (woId) => state.queue.filter((o) => o.woId === woId && o.status === 'pending');
 export const failedOps = () => state.queue.filter((o) => o.status === 'failed');
 export const pendingOps = () => state.queue.filter((o) => o.status === 'pending');
@@ -374,6 +385,11 @@ function applyLocal(list, op) {
       requester: { id: op.userId, name: userName(op.userId) }, responsible: null, participants: [], recipientsMode: p.recipientsMode,
       recipients: p.recipients, createdAt: op.localTime, photos: 0, checklist: null, _pending: 1, _local: true,
     });
+    return;
+  }
+  if (op.type === 'delete_wo') {
+    const idx = list.findIndex((w) => w.id === op.woId);
+    if (idx !== -1) list.splice(idx, 1);
     return;
   }
   const wo = list.find((w) => w.id === op.woId);
