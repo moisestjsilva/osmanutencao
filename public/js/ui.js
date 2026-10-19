@@ -141,11 +141,14 @@ export const avatar = (name, cls = '', imgUrl = null) => {
 };
 
 export const machineBadge = (m, cls = '') => {
+  const icoSize = cls === 'lg' ? 38 : 22;
   if (m?.image_url) {
-    return `<div class="machine-thumb ${cls}"><img src="${esc(m.image_url)}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentElement.classList.add('default-badge');this.remove();" /></div>`;
+    return `<div class="machine-thumb ${cls}">
+      <img src="${esc(m.image_url)}" alt="${esc(m.name)}" loading="lazy" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='flex';" />
+      <span class="thumb-ph-ico" style="display:none">${icon('factory', icoSize)}</span>
+    </div>`;
   }
-  const tag = m?.code || 'TAG';
-  return `<div class="machine-thumb default-badge ${cls}"><span class="badge-tag">${esc(tag)}</span></div>`;
+  return `<div class="machine-thumb default-badge ${cls}" title="${esc(m?.name || 'Equipamento')}"><span class="thumb-ph-ico">${icon('factory', icoSize)}</span></div>`;
 };
 
 export const PRIORITY = { baixa: 'Baixa', media: 'Média', alta: 'Alta', urgente: 'Urgente' };
@@ -211,8 +214,9 @@ const P = {
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
   message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 };
-export const icon = (name, size = 20, sw = 2) =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+export function icon(name, size = 20, sw = 2) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+}
 
 // Toasts
 export function toast(msg, kind = 'ok', ms = 3200) {

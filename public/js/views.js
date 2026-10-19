@@ -174,7 +174,11 @@ function woCard(w, i = 0) {
       <div class="card-main">
         ${machineBadge(m, 'sm')}
         <div class="card-content">
-          <h3>${esc(m?.name || 'Equipamento')} <span class="muted small" style="font-weight:500">${m?.code ? `• TAG ${esc(m.code)} ` : ''}• ${esc(m?.sector || '')}</span></h3>
+          <h3 class="card-machine-title">${esc(m?.name || 'Equipamento')}</h3>
+          <div class="card-tags-row">
+            ${m?.code ? `<span class="tag-pill">TAG: ${esc(m.code)}</span>` : ''}
+            ${m?.sector ? `<span class="sector-text">Setor: ${esc(m.sector)}</span>` : ''}
+          </div>
           <div class="desc">${esc(w.description)}</div>
         </div>
       </div>
