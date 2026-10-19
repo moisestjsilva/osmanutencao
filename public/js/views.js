@@ -232,9 +232,27 @@ export function detailView(root, { id }) {
           ${wo.specialty ? `<span class="badge" style="background:var(--accent-glow);color:var(--accent);font-weight:600">${esc(wo.specialty)}</span>` : ''}
           ${wo.overdue ? '<span class="badge late">Atrasada</span>' : ''}
         </div>
-        <h2 style="font-size:18px;margin-top:10px">${esc(wo.machine?.name)}</h2>
-        <div class="muted small">${wo.machine?.code ? `TAG: <strong>${esc(wo.machine.code)}</strong> • ` : ''}${esc(wo.machine?.sector || '')}</div>
-        <p style="margin:12px 0 0;white-space:pre-wrap">${esc(wo.description)}</p>
+
+        <div class="detail-machine-card">
+          ${wo.machine?.image_url ? `
+            <div class="detail-machine-photo" id="btn-zoom-machine" title="Toque para ampliar a foto da máquina">
+              <img src="${esc(wo.machine.image_url)}" alt="${esc(wo.machine.name)}" />
+              <span class="zoom-hint">${icon('search', 11)}</span>
+            </div>
+          ` : `
+            <div class="detail-machine-photo no-img">
+              ${icon('factory', 26)}
+            </div>
+          `}
+          <div class="detail-machine-info">
+            <h2>${esc(wo.machine?.name || 'Equipamento')}</h2>
+            <div class="card-tags-row">
+              ${wo.machine?.code ? `<span class="tag-pill">TAG: ${esc(wo.machine.code)}</span>` : ''}
+              ${wo.machine?.sector ? `<span class="sector-text">Setor: ${esc(wo.machine.sector)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <p style="margin:14px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(wo.description)}</p>
         <div class="kv">
           <div>
             <span>Solicitante</span>
@@ -557,6 +575,18 @@ export function detailView(root, { id }) {
   function bind() {
     $('#btn-back', root)?.addEventListener('click', () => (history.length > 1 ? history.back() : go('#/')));
     $('#btn-delete-wo', root)?.addEventListener('click', confirmDelete);
+    $('#btn-zoom-machine', root)?.addEventListener('click', () => {
+      if (!wo.machine?.image_url) return;
+      sheet(`
+        <div style="text-align:center">
+          <h3 style="margin:0 0 6px;font-size:18px">${esc(wo.machine?.name || 'Máquina')}</h3>
+          ${wo.machine?.code ? `<p class="muted small" style="margin:0 0 12px">TAG: <strong>${esc(wo.machine.code)}</strong>${wo.machine?.sector ? ` • ${esc(wo.machine.sector)}` : ''}</p>` : ''}
+          <div style="max-height:75vh;overflow:hidden;border-radius:12px;border:1px solid var(--border);background:#000;display:flex;align-items:center;justify-content:center">
+            <img src="${esc(wo.machine.image_url)}" alt="${esc(wo.machine.name)}" style="max-width:100%;max-height:75vh;object-fit:contain;display:block" />
+          </div>
+        </div>
+      `);
+    });
     $$('[data-check]', root).forEach((row) => row.addEventListener('click', (e) => {
       e.preventDefault();
       if (!isTech() || isClosed(wo)) return;
