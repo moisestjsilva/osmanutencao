@@ -226,7 +226,7 @@ function showUserProfile() {
       ${(u.role === 'admin' || u.role === 'superadmin') ? `
       <button class="btn" id="btn-prof-whatsapp" style="justify-content:flex-start">
         <span style="color:#25d366">${icon('message', 18)}</span>
-        <span class="grow" style="text-align:left">Configuração do WhatsApp</span>
+        <span class="grow" style="text-align:left">Robô WhatsApp & Templates de OS</span>
         <span class="badge ${u.role === 'superadmin' ? 'role-super' : 'role-admin'} xs">${u.role === 'superadmin' ? 'Super Admin' : 'Admin'}</span>
       </button>
       <button class="btn" id="btn-prof-config" style="justify-content:flex-start">
@@ -263,7 +263,7 @@ function showUserProfile() {
       });
       $('#btn-prof-whatsapp', el)?.addEventListener('click', () => {
         modal.close();
-        window.open('https://os.moveisrufato.com.br/whatsapp', '_blank');
+        window.open('/whatsapp', '_blank');
       });
       $('#btn-prof-config', el)?.addEventListener('click', () => {
         modal.close();

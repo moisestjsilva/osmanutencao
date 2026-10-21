@@ -1620,7 +1620,7 @@ export function moreView(root) {
     ...(isAdm ? [
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
-      ['https://os.moveisrufato.com.br/whatsapp', 'message', 'Conexão WhatsApp', 'Configurar grupo de alertas, pareamento QR Code e testes'],
+      ['/whatsapp', 'message', 'Robô WhatsApp & Templates de OS', 'Ajustar mensagens do bot, testes, pareamento QR e grupo de alertas'],
     ] : []),
     ['#/config', 'cog', 'Configurações do Sistema', isSuper ? 'Aparência, notificações push, WhatsApp e preferências' : 'Aparência e notificações push no aparelho'],
     ['#/etiquetas', 'qr', 'Máquinas e etiquetas QR', 'Visualização e impressão de todas as etiquetas QR'],
@@ -1654,7 +1654,7 @@ export function moreView(root) {
     const b = e.target.closest('[data-go]');
     if (!b) return;
     if (b.dataset.go === '/whatsapp' || b.dataset.go === 'https://os.moveisrufato.com.br/whatsapp') {
-      window.open('https://os.moveisrufato.com.br/whatsapp', '_blank');
+      window.open('/whatsapp', '_blank');
     } else if (b.dataset.go === 'chpass') {
       changePasswordModal();
     } else if (b.dataset.go === 'logout') {
@@ -2391,10 +2391,10 @@ export function configView(root) {
               Conecte o bot via QR Code, selecione o grupo de manutenção da Móveis Rufato e teste os disparos automáticos de chamados e máquinas paradas.
             </p>
             <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
-              <a href="https://os.moveisrufato.com.br/whatsapp" target="_blank" rel="noopener noreferrer" class="btn primary sm" id="btn-open-whatsapp" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#25d366;border-color:#25d366;color:#ffffff;font-weight:600;box-shadow:0 2px 8px rgba(37,211,102,0.3)">
-                ${icon('message', 18)} Abrir Painel do WhatsApp ↗
+              <a href="/whatsapp" target="_blank" rel="noopener noreferrer" class="btn primary sm" id="btn-open-whatsapp" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#25d366;border-color:#25d366;color:#ffffff;font-weight:600;box-shadow:0 2px 8px rgba(37,211,102,0.3)">
+                ${icon('message', 18)} Abrir Robô & Templates WhatsApp ↗
               </a>
-              <span class="muted xs" style="font-family:monospace;opacity:0.8">https://os.moveisrufato.com.br/whatsapp</span>
+              <span class="muted xs" style="font-family:monospace;opacity:0.8">/whatsapp</span>
             </div>
           </div>
         </div>
@@ -3360,6 +3360,15 @@ export function cadastrosView(root, params = {}) {
           <input class="input" id="u-email" type="email" value="${esc(target?.email || '')}" placeholder="Ex: reinilson@rufato.com.br" />
         </label>
 
+        <label class="field">
+          <span>WhatsApp / Celular (Para Abertura de OS via Robô)</span>
+          <div class="row" style="gap:6px">
+            <span style="display:flex;align-items:center;padding:0 10px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;color:#10b981">📱 +55</span>
+            <input class="input" id="u-phone" type="tel" value="${esc(target?.phone || '')}" placeholder="DDD + Número (ex: 32999887766)" style="flex:1" />
+          </div>
+          <span class="muted xs" style="color:#10b981">Com este número cadastrado, o colaborador abre OS pelo WhatsApp sem precisar de login.</span>
+        </label>
+
         ${canChooseRole ? `
         <label class="field">
           <span>Nível de Acesso *</span>
@@ -3442,17 +3451,18 @@ export function cadastrosView(root, params = {}) {
           const sectorId = $('#u-sector', el)?.value || null;
           const teamId = $('#u-team', el)?.value || null;
           const specialty = $('#u-spec', el).value.trim() || null;
+          const phone = $('#u-phone', el).value.trim();
           const password = $('#u-pass', el).value.trim();
 
           try {
             if (isEdit) {
               await updateUser(target.id, {
-                name, username, email, role, sectorId, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
+                name, username, email, phone, role, sectorId, teamId, specialty, password: password || undefined, avatarUrl: currentAvatar
               });
               toast('Usuário atualizado com sucesso!');
             } else {
               await createUser({
-                name, username, email, role, sectorId, teamId, specialty, password, avatarUrl: currentAvatar
+                name, username, email, phone, role, sectorId, teamId, specialty, password, avatarUrl: currentAvatar
               });
               toast('Novo colaborador cadastrado com sucesso!');
             }
