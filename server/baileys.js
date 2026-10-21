@@ -127,7 +127,53 @@ export async function initBaileys(forceNew = false) {
     }
   });
 
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify' && type !== 'append') return;
+    for (const m of messages) {
+      if (!m.message) continue;
+      if (m.key.fromMe) continue;
+
+      const jid = m.key.remoteJid;
+      if (!jid || jid === 'status@broadcast') continue;
+
+      const text =
+        m.message.conversation ||
+        m.message.extendedTextMessage?.text ||
+        m.message.imageMessage?.caption ||
+        '';
+
+      if (!text || !text.trim()) continue;
+
+      const pushName = m.pushName || '';
+      const isGroup = jid.endsWith('@g.us');
+      const sender = isGroup ? (m.key.participant || jid) : jid;
+
+      if (incomingMessageHandler) {
+        try {
+          await incomingMessageHandler({
+            jid,
+            sender,
+            text: text.trim(),
+            pushName,
+            isGroup,
+            reply: async (replyText) => {
+              return await sendBaileysMessage({ to: jid, text: replyText });
+            },
+          });
+        } catch (err) {
+          console.error('[WhatsApp-Baileys] Erro no processamento da mensagem recebida:', err.message);
+        }
+      }
+    }
+  });
+
   return { status: connectionStatus };
+}
+
+let incomingMessageHandler = null;
+
+export function onBaileysMessage(handler) {
+  incomingMessageHandler = handler;
 }
 
 /**

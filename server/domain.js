@@ -236,7 +236,7 @@ const handlers = {
       description: desc,
       requesterName: user.name,
       responsibleName: respUser?.name || null,
-    }, configuredRecipient).catch((err) => {
+    }, configuredRecipient, db).catch((err) => {
       console.warn('[WhatsApp] Falha ao despachar notificação:', err.message);
     });
 

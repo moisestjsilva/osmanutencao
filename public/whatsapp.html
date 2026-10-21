@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conexão WhatsApp - Nova OS</title>
+  <title>Central WhatsApp & Robô de OS - Nova OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #0b0f19;
-      --card-bg: rgba(22, 30, 49, 0.75);
+      --card-bg: rgba(22, 30, 49, 0.78);
       --card-border: rgba(255, 255, 255, 0.08);
       --primary: #10b981;
       --primary-hover: #059669;
@@ -22,6 +22,7 @@
       --text: #f3f4f6;
       --text-muted: #9ca3af;
       --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
     }
 
     * {
@@ -32,21 +33,21 @@
 
     body {
       font-family: var(--font);
-      background: radial-gradient(circle at 50% 0%, #172554 0%, var(--bg) 70%);
+      background: radial-gradient(circle at 50% 0%, #172554 0%, var(--bg) 75%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 2rem 1rem 4rem;
+      padding: 1.5rem 1rem 4rem;
     }
 
     .container {
       width: 100%;
-      max-width: 680px;
+      max-width: 960px;
       display: flex;
       flex-direction: column;
-      gap: 1.5rem;
+      gap: 1.25rem;
     }
 
     .header {
@@ -55,6 +56,8 @@
       justify-content: space-between;
       padding-bottom: 1rem;
       border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+      gap: 1rem;
     }
 
     .header-left {
@@ -64,19 +67,19 @@
     }
 
     .logo-icon {
-      width: 44px;
-      height: 44px;
+      width: 46px;
+      height: 46px;
       background: linear-gradient(135deg, #10b981, #059669);
       border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.5rem;
-      box-shadow: 0 4px 14px var(--primary-glow);
+      font-size: 1.6rem;
+      box-shadow: 0 4px 16px var(--primary-glow);
     }
 
     .header-title h1 {
-      font-size: 1.25rem;
+      font-size: 1.35rem;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
@@ -102,6 +105,65 @@
       color: var(--text);
     }
 
+    /* Tabs Navigation */
+    .tabs-nav {
+      display: flex;
+      gap: 0.5rem;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 0.35rem;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      flex: 1;
+      min-width: 150px;
+      padding: 0.65rem 1rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      background: #10b981;
+      color: #ffffff;
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    .tab-pane {
+      display: none;
+      flex-direction: column;
+      gap: 1.25rem;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    .tab-pane.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards */
     .card {
       background: var(--card-bg);
       backdrop-filter: blur(12px);
@@ -198,10 +260,10 @@
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
-      padding: 0.75rem 1.25rem;
+      padding: 0.7rem 1.2rem;
       border-radius: 10px;
       font-family: inherit;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       font-weight: 600;
       border: none;
       cursor: pointer;
@@ -242,6 +304,16 @@
 
     .btn-danger:hover:not(:disabled) {
       background: rgba(239, 68, 68, 0.25);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.12);
     }
 
     .input-group {
@@ -319,17 +391,278 @@
       font-family: monospace;
     }
 
-    .spinner {
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      border-top-color: currentColor;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    /* Template Editor Styles */
+    .template-selector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.65rem;
+      max-height: 240px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    .tpl-card-btn {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      transition: all 0.2s;
+    }
+
+    .tpl-card-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .tpl-card-btn.active {
+      border-color: var(--primary);
+      background: rgba(16, 185, 129, 0.1);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+
+    .tpl-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .tpl-cat {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .editor-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 768px) {
+      .editor-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .textarea-field {
+      width: 100%;
+      height: 280px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      color: #f3f4f6;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .textarea-field:focus {
+      border-color: var(--accent);
+    }
+
+    .vars-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.5rem;
+    }
+
+    .var-pill {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #60a5fa;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .var-pill:hover {
+      background: rgba(59, 130, 246, 0.3);
+      transform: translateY(-1px);
+    }
+
+    /* WhatsApp Preview Bubble */
+    .whatsapp-preview-box {
+      background: #0b141a;
+      border: 1px solid #202c33;
+      border-radius: 14px;
+      padding: 1rem;
+      height: 100%;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      position: relative;
+      background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0);
+      background-size: 20px 20px;
+    }
+
+    .preview-header {
+      font-size: 0.78rem;
+      color: #8696a0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .whatsapp-bubble {
+      background: #005c4b;
+      color: #e9edef;
+      border-radius: 10px 10px 2px 10px;
+      padding: 0.75rem 0.9rem;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      align-self: flex-end;
+      max-width: 90%;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      font-family: inherit;
+    }
+
+    .whatsapp-bubble.incoming {
+      background: #202c33;
+      align-self: flex-start;
+      border-radius: 10px 10px 10px 2px;
+    }
+
+    .bubble-time {
+      font-size: 0.68rem;
+      color: rgba(255,255,255,0.6);
+      text-align: right;
+      margin-top: 0.25rem;
+    }
+
+    /* Chat Simulator */
+    .chat-sim-container {
+      background: #0b141a;
+      border: 1px solid #202c33;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      height: 480px;
+      overflow: hidden;
+    }
+
+    .chat-sim-header {
+      background: #202c33;
+      padding: 0.85rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .sim-user-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .sim-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .chat-sim-messages {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      background-image: radial-gradient(rgba(255,255,255,0.02) 1px, transparent 0);
+      background-size: 24px 24px;
+    }
+
+    .chat-sim-input-area {
+      background: #202c33;
+      padding: 0.75rem 1rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .sim-shortcuts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      padding: 0.5rem 1rem;
+      background: #111b21;
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .shortcut-chip {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #d1d5db;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .shortcut-chip:hover {
+      background: #10b981;
+      color: #fff;
+    }
+
+    /* Users Table */
+    .users-table-wrapper {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+    }
+
+    .users-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    .users-table th {
+      background: rgba(15, 23, 42, 0.8);
+      padding: 0.75rem 1rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+    }
+
+    .users-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .users-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
     }
   </style>
 </head>
@@ -338,133 +671,291 @@
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <div class="logo-icon">💬</div>
+        <div class="logo-icon">🤖</div>
         <div class="header-title">
-          <h1>Conexão WhatsApp</h1>
-          <p>Notificações automáticas de Ordem de Serviço</p>
+          <h1>Central WhatsApp & Robô de OS</h1>
+          <p>Conexão, Abertura Guiada de Chamados e Editor de Mensagens</p>
         </div>
       </div>
       <a href="/" class="btn-back">← Voltar ao App</a>
     </header>
 
-    <!-- Card Status / QR Code -->
-    <div class="card" id="connectionCard">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title">📡 Estado da Conexão</span>
-        <div id="statusBadge" class="status-badge disconnected">
-          <span class="status-dot"></span>
-          <span id="statusText">Verificando...</span>
+    <!-- Navigation Tabs -->
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-connection">📡 Conexão & Grupo</button>
+      <button class="tab-btn" data-tab="tab-templates">📝 Templates de Mensagens</button>
+      <button class="tab-btn" data-tab="tab-simulator">💬 Simulador do Chatbot</button>
+      <button class="tab-btn" data-tab="tab-users">👥 Vínculo de Usuários</button>
+    </nav>
+
+    <!-- TAB 1: CONEXÃO & GRUPO -->
+    <div id="tab-connection" class="tab-pane active">
+      <!-- Card Status / QR Code -->
+      <div class="card" id="connectionCard">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span class="card-title">📡 Estado da Conexão WhatsApp</span>
+          <div id="statusBadge" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            <span id="statusText">Verificando...</span>
+          </div>
+        </div>
+
+        <!-- Info Conectado -->
+        <div id="connectedInfo" style="display: none;">
+          <p style="font-size: 0.95rem; margin-bottom: 0.5rem;">
+            WhatsApp pareado com sucesso no aparelho: <strong id="connectedUserText" style="color: #34d399;"></strong>
+          </p>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            O sistema está online para escutar mensagens de abertura de OS e disparar alertas no grupo.
+          </p>
+          <button id="btnDisconnect" class="btn btn-danger">Desconectar Aparelho</button>
+        </div>
+
+        <!-- Área de QR Code -->
+        <div id="qrArea" class="qr-container" style="display: none;">
+          <div class="qr-image-wrapper">
+            <img id="qrImage" src="" alt="QR Code WhatsApp">
+          </div>
+          <p class="qr-instructions">
+            Abra o <strong>WhatsApp</strong> no celular &rarr; Toque em <strong>Aparelhos conectados</strong> &rarr; <strong>Conectar um aparelho</strong> e aponte para o QR Code.
+          </p>
+        </div>
+
+        <!-- Botão para gerar conexão se desconectado -->
+        <div id="startArea" style="display: none; text-align: center; padding: 1rem 0;">
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+            Nenhum aparelho conectado no momento.
+          </p>
+          <button id="btnInit" class="btn btn-primary">Gerar QR Code de Conexão</button>
         </div>
       </div>
 
-      <!-- Info Conectado -->
-      <div id="connectedInfo" style="display: none;">
-        <p style="font-size: 0.95rem; margin-bottom: 0.5rem;">
-          WhatsApp pareado com sucesso no aparelho: <strong id="connectedUserText" style="color: #34d399;"></strong>
-        </p>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          O sistema já está apto a enviar as notificações para os grupos e técnicos cadastrados.
-        </p>
-        <button id="btnDisconnect" class="btn btn-danger">Desconectar Aparelho</button>
-      </div>
-
-      <!-- Área de QR Code -->
-      <div id="qrArea" class="qr-container" style="display: none;">
-        <div class="qr-image-wrapper">
-          <img id="qrImage" src="" alt="QR Code WhatsApp">
+      <!-- Card Link de Grupo / JID -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span class="card-title">👥 Grupo Oficial da Manutenção</span>
+          <div id="activeRecipientBadge" style="display: none; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #34d399; font-size: 0.78rem; font-weight: 600; padding: 0.3rem 0.75rem; border-radius: 8px;">
+            🎯 Ativo: <span id="activeRecipientLabel">...</span>
+          </div>
         </div>
-        <p class="qr-instructions">
-          Abra o <strong>WhatsApp</strong> no celular &rarr; Toque em <strong>Mais opções</strong> (ou Configurações) &rarr; <strong>Aparelhos conectados</strong> &rarr; <strong>Conectar um aparelho</strong> e aponte para o QR Code acima.
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+          Defina o grupo oficial onde todos os avisos de novas OS serão disparados automaticamente.
         </p>
+
+        <div class="input-group">
+          <input 
+            type="text" 
+            id="inviteInput" 
+            class="input-field" 
+            placeholder="Cole aqui o link do grupo (ex: https://chat.whatsapp.com/...)" 
+          >
+          <button id="btnJoinGroup" class="btn btn-accent">Entrar no Grupo</button>
+        </div>
+
+        <div id="joinAlert" class="alert"></div>
+
+        <!-- Grupos Participantes -->
+        <div style="margin-top: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Grupos Detectados no Aparelho:</span>
+            <button id="btnRefreshGroups" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">Atualizar Lista</button>
+          </div>
+          <div id="groupsList" class="groups-list">
+            <div style="color: var(--text-muted); font-size: 0.8rem; font-style: italic; padding: 0.5rem;">Conecte o WhatsApp para listar os grupos.</div>
+          </div>
+        </div>
       </div>
 
-      <!-- Botão para gerar conexão se desconectado -->
-      <div id="startArea" style="display: none; text-align: center; padding: 1rem 0;">
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
-          Nenhum aparelho conectado no momento.
+      <!-- Card Disparo de Teste -->
+      <div class="card">
+        <span class="card-title">🧪 Disparo de Teste</span>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+          Envie uma mensagem de teste para confirmar que o grupo ou número selecionado está recebendo notificações.
         </p>
-        <button id="btnInit" class="btn btn-primary">Gerar QR Code de Conexão</button>
+
+        <div class="input-group">
+          <input 
+            type="text" 
+            id="targetInput" 
+            class="input-field" 
+            placeholder="JID do Grupo ou Número de Telefone" 
+          >
+          <button id="btnSendTest" class="btn btn-primary">Enviar Teste Agora</button>
+        </div>
+
+        <div id="testAlert" class="alert"></div>
       </div>
     </div>
 
-    <!-- Card Link de Grupo / JID -->
-    <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title">👥 Grupo de Manutenção do WhatsApp</span>
-        <div id="activeRecipientBadge" style="display: none; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #34d399; font-size: 0.78rem; font-weight: 600; padding: 0.3rem 0.75rem; border-radius: 8px;">
-          🎯 Ativo: <span id="activeRecipientLabel">...</span>
+    <!-- TAB 2: GERENCIADOR DE TEMPLATES DE MENSAGENS -->
+    <div id="tab-templates" class="tab-pane">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span class="card-title">📝 Editor de Mensagens & Padrões do WhatsApp</span>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+              Personalize o texto, emojis e formatação de cada etapa do robô e dos alertas de grupo.
+            </p>
+          </div>
+          <button id="btnRefreshTemplates" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">↻ Recarregar</button>
         </div>
-      </div>
-      <p style="font-size: 0.85rem; color: var(--text-muted);">
-        Para que a equipe receba as ordens de serviço, defina o grupo clicando em <strong>"Definir como Grupo da OS"</strong> abaixo ou entre via <strong>link de convite</strong>.
-      </p>
 
-      <div class="input-group">
-        <input 
-          type="text" 
-          id="inviteInput" 
-          class="input-field" 
-          placeholder="Cole aqui o link do grupo (ex: https://chat.whatsapp.com/HHkKt72...)" 
-          value="https://chat.whatsapp.com/HHkKt72CIvQ9Ez8cnJA5dU"
-        >
-        <button id="btnJoinGroup" class="btn btn-accent">Entrar no Grupo</button>
-      </div>
-
-      <div id="joinAlert" class="alert"></div>
-
-      <!-- Grupos Participantes -->
-      <div style="margin-top: 0.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-          <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Grupos Detectados no Aparelho:</span>
-          <button id="btnRefreshGroups" class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: rgba(255,255,255,0.05); color: var(--text-muted);">Atualizar Lista</button>
+        <!-- Seletor de Mensagem -->
+        <div>
+          <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Selecione a mensagem para editar:</span>
+          <div id="templatesList" class="template-selector-grid">
+            <div style="color: var(--text-muted); font-size: 0.85rem;">Carregando templates...</div>
+          </div>
         </div>
-        <div id="groupsList" class="groups-list">
-          <div style="color: var(--text-muted); font-size: 0.8rem; font-style: italic; padding: 0.5rem;">Conecte o WhatsApp para listar os grupos.</div>
+
+        <!-- Editor & Preview -->
+        <div class="editor-layout" id="templateEditorSection" style="display: none;">
+          <!-- Lado Esquerdo: Editor -->
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div>
+              <strong id="activeTemplateTitle" style="font-size: 0.95rem; color: #fff;"></strong>
+              <p id="activeTemplateDesc" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;"></p>
+            </div>
+
+            <textarea id="templateTextarea" class="textarea-field" spellcheck="false"></textarea>
+
+            <div>
+              <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">Variáveis disponíveis (clique para inserir no texto):</span>
+              <div id="templateVarsContainer" class="vars-pills"></div>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+              <button id="btnSaveTemplate" class="btn btn-primary" style="flex: 1;">💾 Salvar Alterações</button>
+              <button id="btnResetTemplate" class="btn btn-secondary" style="flex: 1;">↺ Restaurar Padrão</button>
+            </div>
+
+            <div id="templateAlert" class="alert"></div>
+          </div>
+
+          <!-- Lado Direito: Preview WhatsApp -->
+          <div>
+            <div class="whatsapp-preview-box">
+              <div class="preview-header">📱 Prévia em Tempo Real (WhatsApp)</div>
+              <div id="whatsappPreviewBubble" class="whatsapp-bubble"></div>
+              <div class="bubble-time">Agora • ✓✓</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Card Explicativo de Fluxo -->
-    <div class="card" style="border-left: 4px solid var(--primary);">
-      <span class="card-title">🚀 Como Funciona no Aplicativo da OS?</span>
-      <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.88rem; line-height: 1.5; color: #d1d5db;">
-        <div>
-          <strong style="color: #fff;">1. Escolha o Grupo Acima:</strong> Localize o grupo da sua equipe (ex: <em>GRUPO RUFATO AVISOS</em>) e clique em <strong>"Definir como Grupo da OS"</strong>.
+    <!-- TAB 3: SIMULADOR DO CHATBOT -->
+    <div id="tab-simulator" class="tab-pane">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span class="card-title">💬 Simulador de Conversa ao Vivo</span>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+              Teste o fluxo de abertura de OS diretamente pelo navegador, sem precisar enviar pelo celular!
+            </p>
+          </div>
+          <button id="btnResetSimSession" class="btn btn-danger" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">🗑️ Reiniciar Conversa</button>
         </div>
-        <div>
-          <strong style="color: #fff;">2. Abertura Automática:</strong> Quando qualquer pessoa abrir um chamado no aplicativo (no botão <strong>[+] Nova OS</strong>), o sistema salva no banco de dados e dispara instantaneamente uma notificação formatada para o WhatsApp do grupo.
+
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <label style="font-size: 0.85rem; color: var(--text-muted);">Simulando como:</label>
+          <select id="simUserSelect" class="input-field" style="max-width: 280px; padding: 0.5rem 0.75rem;">
+            <option value="5532999881234|Franciel Mendes">Franciel Mendes (Solicitante)</option>
+            <option value="5532999889999|Novo Supervisor">Novo Colaborador (Não Vinculado)</option>
+          </select>
         </div>
-        <div>
-          <strong style="color: #fff;">3. Dados Enviados no Alerta:</strong> Número da OS, Prioridade, se a <strong>Máquina está parada</strong> 🛑, Setor, TAG da Máquina, Solicitante e a Descrição do problema.
+
+        <!-- Chat Container -->
+        <div class="chat-sim-container">
+          <div class="chat-sim-header">
+            <div class="sim-user-info">
+              <div class="sim-avatar">🤖</div>
+              <div>
+                <div style="font-weight: 600; font-size: 0.9rem;">Assistente de OS (Nova OS)</div>
+                <div style="font-size: 0.75rem; color: #10b981;">Online • Robô Ativo</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="simMessagesContainer" class="chat-sim-messages">
+            <div class="whatsapp-bubble incoming">
+              👋 Olá! Eu sou o robô de abertura de OS via WhatsApp. Envie <strong>abrir os</strong> ou digite uma <strong>TAG</strong> abaixo para testar!
+            </div>
+          </div>
+
+          <!-- Quick shortcuts -->
+          <div class="sim-shortcuts">
+            <span style="font-size: 0.72rem; color: #8696a0; align-self: center; margin-right: 0.25rem;">Atalhos:</span>
+            <button class="shortcut-chip" onclick="sendSimText('abrir os')">abrir os</button>
+            <button class="shortcut-chip" onclick="sendSimText('2001')">TAG 2001 (Gibeen)</button>
+            <button class="shortcut-chip" onclick="sendSimText('X12')">TAG X12 (Inexistente)</button>
+            <button class="shortcut-chip" onclick="sendSimText('1')">Opção 1</button>
+            <button class="shortcut-chip" onclick="sendSimText('2')">Opção 2</button>
+            <button class="shortcut-chip" onclick="sendSimText('3')">Opção 3</button>
+            <button class="shortcut-chip" onclick="sendSimText('cancelar')">cancelar</button>
+          </div>
+
+          <div class="chat-sim-input-area">
+            <input type="text" id="simInputText" class="input-field" placeholder="Digite uma mensagem..." style="background: #2a3942; border: none;">
+            <button id="btnSimSend" class="btn btn-primary" style="padding: 0.65rem 1rem;">Enviar</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Card Disparo de Teste -->
-    <div class="card">
-      <span class="card-title">🧪 Disparo de Teste</span>
-      <p style="font-size: 0.85rem; color: var(--text-muted);">
-        Envie uma notificação de teste para verificar se o grupo selecionado está recebendo as mensagens.
-      </p>
+    <!-- TAB 4: VÍNCULO DE USUÁRIOS -->
+    <div id="tab-users" class="tab-pane">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span class="card-title">👥 Vínculo de WhatsApp dos Colaboradores</span>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+              Colaboradores com telefone cadastrado aqui são reconhecidos automaticamente sem pedir login.
+            </p>
+          </div>
+          <input type="text" id="userFilterInput" class="input-field" placeholder="🔍 Filtrar por nome..." style="max-width: 240px; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+        </div>
 
-      <div class="input-group">
-        <input 
-          type="text" 
-          id="targetInput" 
-          class="input-field" 
-          placeholder="JID do Grupo ou Número de Telefone" 
-        >
-        <button id="btnSendTest" class="btn btn-primary">Enviar Teste Agora</button>
+        <div class="users-table-wrapper">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th>Função / Setor</th>
+                <th>Número de WhatsApp (DDD + Número)</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Carregando usuários...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-
-      <div id="testAlert" class="alert"></div>
     </div>
   </div>
 
   <script>
-    let pollInterval = null;
     let currentActiveRecipient = '';
+    let currentTemplates = [];
+    let selectedTemplateKey = null;
 
+    // --- TABS LOGIC ---
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const tabId = btn.dataset.tab;
+        const targetPane = document.getElementById(tabId);
+        if (targetPane) targetPane.classList.add('active');
+
+        if (tabId === 'tab-templates') loadTemplates();
+        if (tabId === 'tab-users') loadUsers();
+      });
+    });
+
+    // --- TAB 1: STATUS & GRUPO ---
     async function loadStatus() {
       try {
         const res = await fetch('/api/whatsapp/status');
@@ -484,9 +975,7 @@
         if (currentActiveRecipient) {
           activeRecipientBadge.style.display = 'block';
           activeRecipientLabel.textContent = currentActiveRecipient;
-          if (!targetInput.value) {
-            targetInput.value = currentActiveRecipient;
-          }
+          if (!targetInput.value) targetInput.value = currentActiveRecipient;
         } else {
           activeRecipientBadge.style.display = 'none';
         }
@@ -598,24 +1087,32 @@
 
     document.getElementById('btnDisconnect').addEventListener('click', async () => {
       if (!confirm('Deseja realmente desconectar este WhatsApp?')) return;
+      const btn = document.getElementById('btnDisconnect');
+      btn.disabled = true;
       try {
         await fetch('/api/whatsapp/disconnect', { method: 'POST' });
         await loadStatus();
       } catch (e) {
         alert('Erro ao desconectar: ' + e.message);
+      } finally {
+        btn.disabled = false;
       }
     });
 
+    document.getElementById('btnRefreshGroups').addEventListener('click', loadGroups);
+
     document.getElementById('btnJoinGroup').addEventListener('click', async () => {
-      const btn = document.getElementById('btnJoinGroup');
       const input = document.getElementById('inviteInput');
       const alertEl = document.getElementById('joinAlert');
       const invite = input.value.trim();
 
-      if (!invite) return;
+      if (!invite) {
+        alertEl.className = 'alert error';
+        alertEl.textContent = 'Por favor, cole o link ou código de convite do grupo.';
+        return;
+      }
 
-      btn.disabled = true;
-      btn.textContent = 'Entrando no grupo...';
+      alertEl.className = 'alert';
       alertEl.style.display = 'none';
 
       try {
@@ -627,65 +1124,390 @@
         const data = await res.json();
 
         if (res.ok && data.ok) {
-          const groupJid = data.result?.groupJid;
           alertEl.className = 'alert success';
-          alertEl.textContent = 'Sucesso! WhatsApp entrou no grupo. ID: ' + (groupJid || '');
-          if (groupJid) {
-            await selectGroup(groupJid, 'Grupo Recém Entrado');
-          }
+          alertEl.textContent = `✅ Entrou no grupo com sucesso! JID: ${data.result.groupJid}`;
           await loadGroups();
         } else {
           alertEl.className = 'alert error';
-          alertEl.textContent = data.error || 'Erro ao entrar no grupo';
+          alertEl.textContent = 'Falha: ' + (data.error || 'Erro desconhecido');
         }
       } catch (e) {
         alertEl.className = 'alert error';
-        alertEl.textContent = 'Erro de requisição: ' + e.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Entrar no Grupo';
+        alertEl.textContent = 'Falha de rede: ' + e.message;
       }
     });
 
     document.getElementById('btnSendTest').addEventListener('click', async () => {
-      const btn = document.getElementById('btnSendTest');
       const input = document.getElementById('targetInput');
       const alertEl = document.getElementById('testAlert');
       const target = input.value.trim();
 
+      if (!target) {
+        alertEl.className = 'alert error';
+        alertEl.textContent = 'Por favor, informe o destinatário ou JID de grupo.';
+        return;
+      }
+
+      alertEl.className = 'alert';
+      alertEl.style.display = 'none';
+
+      const btn = document.getElementById('btnSendTest');
       btn.disabled = true;
       btn.textContent = 'Enviando...';
-      alertEl.style.display = 'none';
 
       try {
         const res = await fetch('/api/whatsapp/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target: target || undefined })
+          body: JSON.stringify({ target })
         });
         const data = await res.json();
 
         if (res.ok && data.ok) {
           alertEl.className = 'alert success';
-          alertEl.textContent = '✅ Mensagem de teste enviada com sucesso para o WhatsApp!';
+          alertEl.textContent = '✅ Notificação de teste disparada com sucesso!';
         } else {
           alertEl.className = 'alert error';
-          alertEl.textContent = '❌ ' + (data.error || 'Falha ao enviar mensagem de teste');
+          alertEl.textContent = 'Falha no envio: ' + (data.error || 'Erro desconhecido');
         }
       } catch (e) {
         alertEl.className = 'alert error';
-        alertEl.textContent = 'Erro: ' + e.message;
+        alertEl.textContent = 'Erro ao conectar: ' + e.message;
       } finally {
         btn.disabled = false;
         btn.textContent = 'Enviar Teste Agora';
       }
     });
 
-    document.getElementById('btnRefreshGroups').addEventListener('click', loadGroups);
+    // --- TAB 2: TEMPLATES DE MENSAGENS ---
+    async function loadTemplates() {
+      try {
+        const res = await fetch('/api/whatsapp/templates');
+        const data = await res.json();
+        if (!data.ok || !data.templates) return;
 
-    // Início
-    loadStatus().then(loadGroups);
-    pollInterval = setInterval(loadStatus, 4000);
+        currentTemplates = data.templates;
+        const container = document.getElementById('templatesList');
+
+        container.innerHTML = currentTemplates.map(t => {
+          const isSelected = t.key === selectedTemplateKey;
+          return `
+            <button class="tpl-card-btn ${isSelected ? 'active' : ''}" onclick="selectTemplate('${t.key}')">
+              <span class="tpl-title">${t.name}</span>
+              <span class="tpl-cat">${t.category === 'grupo' ? '📢 Alerta de Grupo' : '🤖 Conversa do Robô'}</span>
+            </button>
+          `;
+        }).join('');
+
+        if (!selectedTemplateKey && currentTemplates.length > 0) {
+          selectTemplate(currentTemplates[0].key);
+        } else if (selectedTemplateKey) {
+          selectTemplate(selectedTemplateKey);
+        }
+      } catch (err) {
+        console.error('Falha ao carregar templates:', err);
+      }
+    }
+
+    window.selectTemplate = function(key) {
+      selectedTemplateKey = key;
+      const tpl = currentTemplates.find(t => t.key === key);
+      if (!tpl) return;
+
+      document.querySelectorAll('.tpl-card-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+
+      const cards = document.querySelectorAll('.tpl-card-btn');
+      const idx = currentTemplates.findIndex(t => t.key === key);
+      if (cards[idx]) cards[idx].classList.add('active');
+
+      const editorSec = document.getElementById('templateEditorSection');
+      editorSec.style.display = 'grid';
+
+      document.getElementById('activeTemplateTitle').textContent = tpl.name;
+      document.getElementById('activeTemplateDesc').textContent = tpl.description || '';
+
+      const textarea = document.getElementById('templateTextarea');
+      textarea.value = tpl.template;
+
+      const varsContainer = document.getElementById('templateVarsContainer');
+      const vars = tpl.variables || [];
+      varsContainer.innerHTML = vars.map(v => `
+        <span class="var-pill" onclick="insertVariable('${v}')">${v}</span>
+      `).join('');
+
+      updatePreview();
+    };
+
+    window.insertVariable = function(varName) {
+      const textarea = document.getElementById('templateTextarea');
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      textarea.value = text.substring(0, start) + varName + text.substring(end);
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + varName.length;
+      updatePreview();
+    };
+
+    function updatePreview() {
+      const textarea = document.getElementById('templateTextarea');
+      const preview = document.getElementById('whatsappPreviewBubble');
+      let text = textarea.value;
+
+      // Substitui variáveis por exemplos fictícios realistas para prévia
+      const dummyValues = {
+        '{nome}': 'Moisés Silva',
+        '{telefone}': '32 99988-7766',
+        '{nome_whatsapp}': 'Moisés Silva',
+        '{funcao}': 'Supervisor de Produção',
+        '{setor}': 'EMBALAGEM',
+        '{maquina}': 'Seladora Automática',
+        '{tag}': 'SEL-02',
+        '{numero}': '1042',
+        '{prioridade}': '🟠 Alta',
+        '{status_parada}': '🛑 MÁQUINA PARADA',
+        '{solicitante}': 'Moisés Silva',
+        '{descricao}': 'Ruído forte no redutor e vazamento de óleo',
+        '{horario}': '21/10/2026, 08:30',
+        '{tipo}': 'CORRETIVA',
+        '{tecnico}': '👷 *Técnico Atribuído:* Carlos Mendes',
+        '{lista_setores}': '*1* - CORTE\n*2* - EMBALAGEM\n*3* - PINTURA',
+        '{lista_maquinas}': '*1* - Envasadora (TAG: 1001)\n*2* - Seladora (TAG: 1002)',
+      };
+
+      for (const [k, v] of Object.entries(dummyValues)) {
+        text = text.replaceAll(k, v);
+      }
+
+      preview.textContent = text;
+    }
+
+    document.getElementById('templateTextarea').addEventListener('input', updatePreview);
+    document.getElementById('btnRefreshTemplates').addEventListener('click', loadTemplates);
+
+    document.getElementById('btnSaveTemplate').addEventListener('click', async () => {
+      if (!selectedTemplateKey) return;
+      const textarea = document.getElementById('templateTextarea');
+      const alertEl = document.getElementById('templateAlert');
+
+      try {
+        const res = await fetch(`/api/whatsapp/templates/${encodeURIComponent(selectedTemplateKey)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template: textarea.value })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          alertEl.className = 'alert success';
+          alertEl.textContent = '✅ Mensagem salva com sucesso! O robô já utilizará este novo padrão.';
+          await loadTemplates();
+        } else {
+          alertEl.className = 'alert error';
+          alertEl.textContent = 'Erro ao salvar: ' + (data.error || 'Erro desconhecido');
+        }
+      } catch (err) {
+        alertEl.className = 'alert error';
+        alertEl.textContent = 'Erro de conexão: ' + err.message;
+      }
+    });
+
+    document.getElementById('btnResetTemplate').addEventListener('click', async () => {
+      if (!selectedTemplateKey) return;
+      if (!confirm('Deseja restaurar esta mensagem para o texto padrão de fábrica?')) return;
+      const alertEl = document.getElementById('templateAlert');
+
+      try {
+        const res = await fetch(`/api/whatsapp/templates/${encodeURIComponent(selectedTemplateKey)}/reset`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          alertEl.className = 'alert success';
+          alertEl.textContent = '↺ Mensagem restaurada para o padrão de fábrica.';
+          await loadTemplates();
+        } else {
+          alertEl.className = 'alert error';
+          alertEl.textContent = 'Erro ao restaurar: ' + (data.error || 'Erro desconhecido');
+        }
+      } catch (err) {
+        alertEl.className = 'alert error';
+        alertEl.textContent = 'Erro de conexão: ' + err.message;
+      }
+    });
+
+    // --- TAB 3: SIMULADOR DE CHAT ---
+    window.sendSimText = function(text) {
+      document.getElementById('simInputText').value = text;
+      handleSimSend();
+    };
+
+    async function handleSimSend() {
+      const input = document.getElementById('simInputText');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const userVal = document.getElementById('simUserSelect').value;
+      const [simPhone, simName] = userVal.split('|');
+
+      const container = document.getElementById('simMessagesContainer');
+
+      // Balão do usuário
+      const userBubble = document.createElement('div');
+      userBubble.className = 'whatsapp-bubble';
+      userBubble.textContent = text;
+      container.appendChild(userBubble);
+      container.scrollTop = container.scrollHeight;
+
+      input.value = '';
+
+      // Chamada de simulação
+      try {
+        const res = await fetch('/api/whatsapp/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: simPhone,
+            pushName: simName,
+            text: text,
+          })
+        });
+        const data = await res.json();
+
+        // Balão do robô
+        const botBubble = document.createElement('div');
+        botBubble.className = 'whatsapp-bubble incoming';
+        botBubble.textContent = data.response || 'Sem resposta';
+        container.appendChild(botBubble);
+        container.scrollTop = container.scrollHeight;
+      } catch (err) {
+        const errBubble = document.createElement('div');
+        errBubble.className = 'whatsapp-bubble incoming';
+        errBubble.style.color = '#f87171';
+        errBubble.textContent = 'Erro ao processar: ' + err.message;
+        container.appendChild(errBubble);
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    document.getElementById('btnSimSend').addEventListener('click', handleSimSend);
+    document.getElementById('simInputText').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleSimSend();
+    });
+
+    document.getElementById('btnResetSimSession').addEventListener('click', async () => {
+      const userVal = document.getElementById('simUserSelect').value;
+      const [simPhone] = userVal.split('|');
+      try {
+        await fetch('/api/whatsapp/sessions/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: simPhone })
+        });
+        const container = document.getElementById('simMessagesContainer');
+        container.innerHTML = `
+          <div class="whatsapp-bubble incoming">
+            🔄 Sessão do simulador reiniciada com sucesso! Envie <strong>abrir os</strong> para começar.
+          </div>
+        `;
+      } catch (err) {
+        alert('Erro ao resetar: ' + err.message);
+      }
+    });
+
+    // --- TAB 4: USUÁRIOS & WHATSAPP ---
+    let allUsersData = [];
+
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/whatsapp/users');
+        const data = await res.json();
+        if (!data.ok || !data.users) return;
+
+        allUsersData = data.users;
+        renderUsersTable(allUsersData);
+      } catch (err) {
+        console.error('Falha ao carregar usuários:', err);
+      }
+    }
+
+    function renderUsersTable(users) {
+      const tbody = document.getElementById('usersTableBody');
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Nenhum usuário encontrado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = users.map(u => {
+        const hasPhone = !!u.phone;
+        return `
+          <tr>
+            <td>
+              <strong style="color: #fff;">${u.name}</strong>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">@${u.username}</div>
+            </td>
+            <td>
+              <span style="font-size: 0.8rem; background: rgba(255,255,255,0.06); padding: 0.2rem 0.5rem; border-radius: 4px;">${u.role}</span>
+              ${u.sector_name ? `<span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 0.4rem;">(${u.sector_name})</span>` : ''}
+            </td>
+            <td>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input 
+                  type="text" 
+                  id="phone_user_${u.id}" 
+                  class="input-field" 
+                  style="max-width: 180px; padding: 0.4rem 0.6rem; font-size: 0.82rem;" 
+                  value="${u.phone || ''}" 
+                  placeholder="ex: 5532999887766"
+                >
+                ${hasPhone ? '<span style="font-size: 0.75rem; color: #34d399;">✓ Vinculado</span>' : '<span style="font-size: 0.75rem; color: var(--text-muted);">Sem vínculo</span>'}
+              </div>
+            </td>
+            <td>
+              <button class="btn btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.78rem;" onclick="saveUserPhone('${u.id}')">Salvar</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.saveUserPhone = async function(userId) {
+      const input = document.getElementById(`phone_user_${userId}`);
+      const phone = input.value.trim();
+
+      try {
+        const res = await fetch(`/api/whatsapp/users/${encodeURIComponent(userId)}/phone`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          await loadUsers();
+          alert('WhatsApp do colaborador salvo com sucesso!');
+        } else {
+          alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
+        }
+      } catch (err) {
+        alert('Erro ao salvar: ' + err.message);
+      }
+    };
+
+    document.getElementById('userFilterInput').addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase().trim();
+      const filtered = allUsersData.filter(u => 
+        u.name.toLowerCase().includes(term) || 
+        u.username.toLowerCase().includes(term) ||
+        (u.phone && u.phone.includes(term))
+      );
+      renderUsersTable(filtered);
+    });
+
+    // Início automático
+    loadStatus();
+    loadGroups();
+    setInterval(loadStatus, 4000);
   </script>
 </body>
 </html>

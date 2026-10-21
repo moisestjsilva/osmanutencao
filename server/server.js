@@ -32,7 +32,19 @@ import {
   joinGroupByInvite,
   listParticipatingGroups,
   disconnectBaileys,
+  onBaileysMessage,
+  sendWhatsAppMessage,
 } from './whatsapp.js';
+import {
+  processIncomingWhatsAppMessage,
+  getTemplates,
+  getTemplate,
+  saveTemplate,
+  resetTemplate,
+  listActiveSessions,
+  deleteSession as deleteBotSession,
+  cleanDigits,
+} from './whatsapp-bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -54,6 +66,29 @@ const PORT = Number(process.env.PORT || 3000);
 let db = openDb();
 seedAuthUsers(db);
 initMySQLSync(db);
+
+// Conecta o listener do Baileys ao processador de Chatbot de Abertura de OS
+onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, reply }) => {
+  try {
+    await processIncomingWhatsAppMessage(db, {
+      from: sender || jid,
+      text,
+      pushName,
+      isGroup,
+      replyFn: reply,
+    });
+  } catch (err) {
+    console.error('[WhatsApp-Bot] Erro ao processar mensagem recebida:', err.message);
+  }
+});
+
+// Auto-conecta ao iniciar se houver sessão Baileys salva
+if (isWhatsAppEnabled() && getWhatsAppProvider() === 'baileys') {
+  const bState = getBaileysStatus();
+  if (bState.hasAuth) {
+    initBaileys().catch((e) => console.warn('[WhatsApp-Baileys] Conexão automática ao iniciar:', e.message));
+  }
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -287,7 +322,7 @@ app.post('/api/upload', requireUser, (req, res) => {
 // ---------- Gestão de Usuários (Admin e Super Admin) ----------
 app.get('/api/users', requireAdmin, (req, res) => {
   const rows = db.prepare(`
-    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.specialty, u.active, u.avatar_url, u.created_at,
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.phone, u.specialty, u.active, u.avatar_url, u.created_at,
            t.name as team_name, s.name as sector_name, s.code as sector_code
     FROM users u
     LEFT JOIN teams t ON t.id = u.team_id
@@ -298,7 +333,7 @@ app.get('/api/users', requireAdmin, (req, res) => {
 });
 
 app.post('/api/users', requireAdmin, (req, res) => {
-  const { name, email, username, password, role = 'solicitante', teamId, sectorId, sector_id, specialty, avatarUrl, avatar_url } = req.body || {};
+  const { name, email, username, password, phone, role = 'solicitante', teamId, sectorId, sector_id, specialty, avatarUrl, avatar_url } = req.body || {};
   if (!name || !username || !password) {
     return res.status(400).json({ error: 'Preencha o nome, nome de usuário e senha' });
   }
@@ -322,15 +357,16 @@ app.post('/api/users', requireAdmin, (req, res) => {
   const { hash, salt } = hashPassword(password);
   const now = new Date().toISOString();
   const finalAvatar = avatarUrl || avatar_url || null;
+  const cleanPhone = phone ? cleanDigits(phone) : null;
 
   db.prepare(`
-    INSERT INTO users (id, name, email, username, role, team_id, sector_id, specialty, password_hash, salt, avatar_url, active, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, finalSector, specialty || null, hash, salt, finalAvatar, now);
+    INSERT INTO users (id, name, email, username, role, team_id, sector_id, phone, specialty, password_hash, salt, avatar_url, active, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+  `).run(id, name.trim(), cleanEmail, cleanUser, role, teamId || null, finalSector, cleanPhone, specialty || null, hash, salt, finalAvatar, now);
 
   res.status(201).json({
     ok: true,
-    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, sector_id: finalSector, specialty, avatar_url: finalAvatar }
+    user: { id, name: name.trim(), email: cleanEmail, username: cleanUser, role, teamId, sector_id: finalSector, phone: cleanPhone, specialty, avatar_url: finalAvatar }
   });
 });
 
@@ -378,6 +414,9 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
   if (teamId !== undefined) db.prepare('UPDATE users SET team_id = ? WHERE id = ?').run(teamId || null, target.id);
   if (sectorId !== undefined || sector_id !== undefined) {
     db.prepare('UPDATE users SET sector_id = ? WHERE id = ?').run(sectorId ?? sector_id ?? null, target.id);
+  }
+  if (req.body.phone !== undefined) {
+    db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(cleanDigits(req.body.phone) || null, target.id);
   }
   if (specialty !== undefined) db.prepare('UPDATE users SET specialty = ? WHERE id = ?').run(specialty || null, target.id);
   if (active !== undefined) db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, target.id);
@@ -862,6 +901,163 @@ app.post('/api/whatsapp/test', async (req, res) => {
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: 'Falha no teste de WhatsApp: ' + e.message });
+  }
+});
+
+// Gerenciamento de Templates do WhatsApp
+app.get('/api/whatsapp/templates', (req, res) => {
+  try {
+    const templates = getTemplates(db);
+    res.json({ ok: true, templates });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/whatsapp/templates/:key', (req, res) => {
+  try {
+    const { template } = req.body || {};
+    if (typeof template !== 'string') {
+      return res.status(400).json({ error: 'Conteúdo do template não fornecido' });
+    }
+    const updated = saveTemplate(db, req.params.key, template);
+    if (!updated) return res.status(404).json({ error: 'Template não encontrado' });
+    res.json({ ok: true, template: getTemplate(db, req.params.key) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/templates/:key/reset', (req, res) => {
+  try {
+    const ok = resetTemplate(db, req.params.key);
+    if (!ok) return res.status(404).json({ error: 'Template não encontrado' });
+    res.json({ ok: true, template: getTemplate(db, req.params.key) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Vínculo rápido de WhatsApp dos usuários
+app.get('/api/whatsapp/users', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT u.id, u.name, u.username, u.role, u.phone, s.name as sector_name
+      FROM users u
+      LEFT JOIN sectors s ON s.id = u.sector_id
+      WHERE u.active = 1
+      ORDER BY CASE u.role WHEN 'solicitante' THEN 1 WHEN 'manutentor' THEN 2 ELSE 3 END, u.name
+    `).all();
+    res.json({ ok: true, users: rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/whatsapp/users/:id/phone', (req, res) => {
+  try {
+    const { phone } = req.body || {};
+    const clean = cleanDigits(phone);
+    db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(clean || null, req.params.id);
+    res.json({ ok: true, id: req.params.id, phone: clean });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Sessões ativas do Chatbot
+app.get('/api/whatsapp/sessions', (req, res) => {
+  try {
+    res.json({ ok: true, sessions: listActiveSessions(db) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/sessions/reset', (req, res) => {
+  try {
+    const { phone } = req.body || {};
+    if (phone) deleteBotSession(db, phone);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Simulador de conversa WhatsApp para testes no navegador
+app.post('/api/whatsapp/simulate', async (req, res) => {
+  try {
+    const { phone, text, pushName } = req.body || {};
+    let capturedReply = null;
+    const result = await processIncomingWhatsAppMessage(db, {
+      from: phone || '553299999999',
+      text: text || 'abrir os',
+      pushName: pushName || 'Simulador',
+      isGroup: false,
+      replyFn: async (msg) => {
+        capturedReply = msg;
+        return { ok: true, text: msg };
+      },
+    });
+    res.json({
+      ok: true,
+      result,
+      response: capturedReply || result?.response || 'Mensagem processada.',
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Webhook para provedores externos (Evolution API / W-API)
+app.post('/api/whatsapp/webhook', async (req, res) => {
+  try {
+    const body = req.body || {};
+    let sender = '';
+    let text = '';
+    let pushName = '';
+    let isGroup = false;
+
+    // Formato Evolution API v2
+    if (body.event === 'messages.upsert' && body.data) {
+      const data = body.data;
+      if (data.key?.fromMe) return res.json({ ignored: true });
+      const remoteJid = data.key?.remoteJid || '';
+      isGroup = remoteJid.endsWith('@g.us');
+      sender = isGroup ? (data.key?.participant || remoteJid) : remoteJid;
+      pushName = data.pushName || '';
+      text = data.message?.conversation ||
+             data.message?.extendedTextMessage?.text ||
+             data.message?.imageMessage?.caption || '';
+    } 
+    // Formato W-API ou payload genérico
+    else if (body.phone || body.sender || body.number) {
+      sender = body.phone || body.sender || body.number;
+      text = body.text || body.message || '';
+      pushName = body.pushName || body.name || '';
+      isGroup = String(sender).includes('@g.us');
+    }
+
+    if (!sender || !text) {
+      return res.json({ skipped: true, reason: 'Payload sem remetente ou texto legível' });
+    }
+
+    const replyFn = async (replyText) => {
+      return sendWhatsAppMessage({ to: sender, text: replyText });
+    };
+
+    const result = await processIncomingWhatsAppMessage(db, {
+      from: sender,
+      text,
+      pushName,
+      isGroup,
+      replyFn,
+    });
+
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('[WhatsApp-Webhook] Erro ao processar:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

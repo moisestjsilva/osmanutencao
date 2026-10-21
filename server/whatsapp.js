@@ -21,7 +21,9 @@ import {
   joinGroupByInvite,
   listParticipatingGroups,
   disconnectBaileys,
+  onBaileysMessage,
 } from './baileys.js';
+import { renderTemplate } from './whatsapp-bot.js';
 
 export function isWhatsAppEnabled() {
   return String(process.env.WHATSAPP_ENABLED || 'false').trim().toLowerCase() === 'true';
@@ -59,7 +61,7 @@ export function formatNewOrderMessage({
   description,
   requesterName,
   responsibleName,
-}) {
+}, db = null) {
   const isStopped = Number(machineStopped) === 1;
   const statusEmoji = isStopped ? '🛑 *MÁQUINA PARADA!*' : '⚡ Máquina Operando';
   
@@ -72,6 +74,26 @@ export function formatNewOrderMessage({
   const prioLabel = prioMap[String(priority || 'media').toLowerCase()] || '🟡 MÉDIA';
   const typeLabel = String(type || 'corretiva').toUpperCase();
   const timeNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+  if (db) {
+    try {
+      const techText = responsibleName ? `👷 *Técnico Atribuído:* ${responsibleName}` : `📢 *Aviso:* Disponível para atendimento da equipe`;
+      const rendered = renderTemplate(db, 'group_order_notification', {
+        numero: number || 'S/N',
+        tipo: typeLabel,
+        prioridade: prioLabel,
+        status_parada: statusEmoji,
+        setor: sector || 'Não informado',
+        maquina: machine || 'Não informada',
+        tag: tag ? `(TAG: ${tag})` : '',
+        solicitante: requesterName || 'Não identificado',
+        tecnico: techText,
+        descricao: description ? description.trim() : 'Sem descrição',
+        horario: timeNow,
+      });
+      if (rendered && rendered.trim()) return rendered;
+    } catch (_) {}
+  }
 
   const lines = [
     `🚨 *NOVA ORDEM DE SERVIÇO #${number || 'S/N'}*`,
@@ -225,11 +247,11 @@ export async function sendWhatsAppMessage({ to, text }) {
  * garantindo que falhas de rede ou saldo na API do WhatsApp nunca impeçam ou atrasem
  * a abertura da OS no banco de dados.
  */
-export async function notifyNewOrderWhatsApp(orderData, recipient = null) {
+export async function notifyNewOrderWhatsApp(orderData, recipient = null, db = null) {
   if (!isWhatsAppEnabled()) return;
 
   try {
-    const text = formatNewOrderMessage(orderData);
+    const text = formatNewOrderMessage(orderData, db);
     await sendWhatsAppMessage({ to: recipient, text });
   } catch (err) {
     // Registra o alerta no console sem propagar o erro
@@ -264,4 +286,5 @@ export {
   joinGroupByInvite,
   listParticipatingGroups,
   disconnectBaileys,
+  onBaileysMessage,
 };

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { seedDefaultTemplates } from './whatsapp-bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -17,6 +18,7 @@ export function openDb() {
   const db = new DatabaseSync(DB_FILE);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   migrate(db);
+  seedDefaultTemplates(db);
   const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
   if (count === 0) seed(db);
   return db;
@@ -212,6 +214,34 @@ function migrate(db) {
   if (!notifCols.includes('status')) {
     db.exec(`ALTER TABLE notifications ADD COLUMN status TEXT DEFAULT 'enviada'`);
   }
+
+  // Migração de telefone para usuários (WhatsApp)
+  if (!userCols.includes('phone')) {
+    db.exec(`ALTER TABLE users ADD COLUMN phone TEXT`);
+  }
+
+  // Tabelas do Chatbot e Templates de Mensagens WhatsApp
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+      phone TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
+      step TEXT NOT NULL,
+      data_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_templates (
+      key TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      category TEXT NOT NULL DEFAULT 'bot',
+      template TEXT NOT NULL,
+      default_template TEXT NOT NULL,
+      variables_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL
+    );
+  `);
 }
 
 // ---------- Dados fictícios de demonstração ----------
