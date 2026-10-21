@@ -83,6 +83,7 @@ export function listView(root) {
   }
 
   const pageTitle = onlyTech ? 'Minhas Ordens de Serviço' : (isSol ? 'Meus Chamados de Manutenção' : 'Ordens de Serviço');
+  let selectedRequester = sessionStorage.getItem('nova-os:requester') || '';
 
   root.innerHTML = `
     <div class="page-head">
@@ -93,9 +94,17 @@ export function listView(root) {
       <button class="icon-btn" id="btn-refresh" aria-label="Atualizar">${icon('refresh', 18)}</button>
     </div>
     <div id="stopped-wrap"></div>
-    <div class="input-group" style="margin-bottom:10px">
-      <input class="input" id="search" type="search" placeholder="Buscar por nº, máquina ou descrição" aria-label="Buscar OS" />
+    <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; flex-wrap:wrap;">
+      <div class="input-group" style="flex:1; min-width:240px; margin-bottom:0;">
+        <input class="input" id="search" type="search" placeholder="Buscar por nº, máquina, solicitante ou descrição" aria-label="Buscar OS" />
+      </div>
+      <div style="min-width:220px; flex:0 0 auto;">
+        <select class="input select" id="filter-requester" aria-label="Filtrar por Solicitante" style="height:44px; font-size:13px; font-weight:500;">
+          <option value="">👤 Todos os Solicitantes</option>
+        </select>
+      </div>
     </div>
+    <div id="requester-active-badge"></div>
     <div class="chips" id="filters" role="tablist"></div>
     <div id="list" style="margin-top:8px"></div>`;
 
@@ -113,29 +122,94 @@ export function listView(root) {
           <div class="timer mono" data-stopped-clock="${w.createdAt}" data-op-hours="${w.machine?.operating_hours_per_day || 8}">${stoppedClock(w.createdAt, w.machine?.operating_hours_per_day || 8)}</div>
         </article>`).join('')}</div>` : '';
 
+    // Extrai lista única de solicitantes de todas as OSs
+    const reqMap = new Map();
+    for (const w of wos) {
+      const id = w.requester?.id;
+      const name = w.requester?.name;
+      if (id || name) {
+        const key = id || name;
+        const displayName = name || 'Solicitante';
+        if (!reqMap.has(key)) {
+          reqMap.set(key, { id: key, name: displayName, count: 0, open: 0 });
+        }
+        const item = reqMap.get(key);
+        item.count++;
+        if (!isClosed(w)) item.open++;
+      }
+    }
+    const requestersList = Array.from(reqMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Atualiza o select de solicitantes preservando o valor
+    const selEl = $('#filter-requester', root);
+    if (selEl) {
+      const currentVal = selectedRequester;
+      selEl.innerHTML = `<option value="">👤 Todos os Solicitantes (${wos.length})</option>` +
+        requestersList.map((r) => `
+          <option value="${esc(r.id)}" ${r.id === currentVal ? 'selected' : ''}>
+            ${esc(r.name)} (${r.count} OS${r.count > 1 ? 's' : ''}${r.open > 0 ? ` • ${r.open} aberta${r.open > 1 ? 's' : ''}` : ''})
+          </option>
+        `).join('');
+      selEl.value = currentVal;
+    }
+
+    // Badge visual quando há solicitante selecionado
+    const badgeEl = $('#requester-active-badge', root);
+    if (badgeEl) {
+      if (selectedRequester) {
+        const reqObj = requestersList.find((r) => r.id === selectedRequester);
+        const name = reqObj?.name || selectedRequester;
+        badgeEl.innerHTML = `
+          <div style="display:inline-flex; align-items:center; gap:8px; padding:4px 12px; margin-bottom:8px; border-radius:20px; background:var(--accent-dim, rgba(239, 68, 68, 0.1)); color:var(--accent, #ef4444); font-size:12px; font-weight:600; border:1px solid var(--border-strong, rgba(239, 68, 68, 0.2));">
+            <span>👤 Solicitante: <strong>${esc(name)}</strong></span>
+            <button type="button" id="btn-clear-requester" title="Remover filtro de solicitante" style="background:none; border:none; cursor:pointer; font-size:13px; line-height:1; color:inherit; padding:0 2px; font-weight:700;">✕</button>
+          </div>
+        `;
+      } else {
+        badgeEl.innerHTML = '';
+      }
+    }
+
+    // Aplica o filtro de solicitante
+    let baseWos = wos;
+    if (selectedRequester) {
+      baseWos = wos.filter((w) => (w.requester?.id === selectedRequester) || (w.requester?.name === selectedRequester));
+    }
+
     $('#filters', root).innerHTML = FILTERS.map(([k, label, fn]) =>
-      `<button class="chip ${filter === k ? 'active' : ''}" data-filter="${k}" id="filter-${k}">${label}<span class="count">${wos.filter(fn).length}</span></button>`).join('');
+      `<button class="chip ${filter === k ? 'active' : ''}" data-filter="${k}" id="filter-${k}">${label}<span class="count">${baseWos.filter(fn).length}</span></button>`).join('');
 
     const fn = FILTERS.find((f) => f[0] === filter)?.[2] || FILTERS[0][2];
     const ql = q.toLowerCase();
-    const items = wos.filter(fn).filter((w) => !ql || `${w.number} ${w.machine?.name} ${w.machine?.code} ${w.description} ${w.machine?.sector}`.toLowerCase().includes(ql))
+    const items = baseWos.filter(fn).filter((w) => !ql || `${w.number} ${w.machine?.name} ${w.machine?.code} ${w.description} ${w.machine?.sector} ${w.requester?.name || ''}`.toLowerCase().includes(ql))
       .sort((a, b) => filter === 'concluidas'
         ? (b.closedAt || '').localeCompare(a.closedAt || '')
         : (isStoppedNow(b) - isStoppedNow(a)) || (PRANK[a.priority] - PRANK[b.priority]) || (b.overdue - a.overdue) || b.createdAt.localeCompare(a.createdAt));
 
-    const dispCount = wos.filter((w) => !isClosed(w) && !w.responsible?.id).length;
+    const dispCount = baseWos.filter((w) => !isClosed(w) && !w.responsible?.id).length;
     $('#list', root).innerHTML = items.length ? items.map((w, i) => woCard(w, i)).join('') : `
       <div class="empty">
         <div class="ico">${icon('check', 28)}</div>
-        <strong>${filter === 'minhas' && onlyTech ? 'Nenhuma OS atribuída a você no momento' : 'Nenhuma OS aqui'}</strong>
-        ${filter === 'minhas' && onlyTech && dispCount > 0 ? `
+        <strong>${selectedRequester ? `Nenhuma OS encontrada para ${esc(requestersList.find(r => r.id === selectedRequester)?.name || 'este solicitante')} nesta aba` : (filter === 'minhas' && onlyTech ? 'Nenhuma OS atribuída a você no momento' : 'Nenhuma OS aqui')}</strong>
+        ${selectedRequester ? `
+          <p class="small" style="margin-top:6px">Tente trocar para outra aba (ex: Encerradas) ou limpar o filtro de solicitante.</p>
+          <button class="btn secondary sm" style="margin-top:12px" id="btn-clear-requester-empty">Limpar Filtro de Solicitante</button>
+        ` : (filter === 'minhas' && onlyTech && dispCount > 0 ? `
           <p class="small" style="margin-top:6px">Há <strong>${dispCount}</strong> OS aguardando atendimento na fábrica.</p>
           <button class="btn primary sm" style="margin-top:12px" data-filter="disponiveis">Ver OS Disponíveis na Fábrica</button>
-        ` : '<p class="small">Toque em + para abrir um chamado.</p>'}
+        ` : '<p class="small">Toque em + para abrir um chamado.</p>')}
       </div>`;
   }
 
   root.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-clear-requester') || e.target.closest('#btn-clear-requester-empty')) {
+      selectedRequester = '';
+      sessionStorage.removeItem('nova-os:requester');
+      const selEl = $('#filter-requester', root);
+      if (selEl) selEl.value = '';
+      render();
+      return;
+    }
     const f = e.target.closest('[data-filter]');
     if (f) { filter = f.dataset.filter; sessionStorage.setItem('nova-os:filter', filter); render(); return; }
     const o = e.target.closest('[data-open]');
@@ -143,6 +217,15 @@ export function listView(root) {
     if (e.target.closest('#btn-refresh')) sync().then(() => toast('Atualizado'));
   });
   $('#search', root).addEventListener('input', (e) => { q = e.target.value; render(); });
+  $('#filter-requester', root)?.addEventListener('change', (e) => {
+    selectedRequester = e.target.value;
+    if (selectedRequester) {
+      sessionStorage.setItem('nova-os:requester', selectedRequester);
+    } else {
+      sessionStorage.removeItem('nova-os:requester');
+    }
+    render();
+  });
   render();
   return on((w) => ['wos', 'queue', 'sync', 'change'].includes(w) && render());
 }
@@ -178,6 +261,7 @@ function woCard(w, i = 0) {
           <div class="card-tags-row">
             ${m?.code ? `<span class="tag-pill">TAG: ${esc(m.code)}</span>` : ''}
             ${m?.sector ? `<span class="sector-text">Setor: ${esc(m.sector)}</span>` : ''}
+            ${w.requester?.name ? `<span class="requester-pill" title="Solicitante: ${esc(w.requester.name)}">${icon('user', 11)} ${esc(w.requester.name)}</span>` : ''}
           </div>
           <div class="desc">${esc(w.description)}</div>
         </div>
