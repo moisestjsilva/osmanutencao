@@ -155,14 +155,17 @@ export async function initBaileys(forceNew = false) {
       const content = extractMessageContent(m.message);
       if (!content) continue;
 
+      const imageMsg = content.imageMessage || (content.documentMessage?.mimetype?.startsWith('image/') ? content.documentMessage : null);
+
       let text =
         content.conversation ||
         content.extendedTextMessage?.text ||
         content.imageMessage?.caption ||
+        content.documentMessage?.caption ||
         '';
 
       let mediaAttachment = null;
-      if (content.imageMessage) {
+      if (imageMsg) {
         try {
           const buffer = await downloadMediaMessage(
             m,
@@ -174,7 +177,8 @@ export async function initBaileys(forceNew = false) {
             }
           );
           if (buffer && buffer.length > 0) {
-            const ext = content.imageMessage.mimetype?.includes('png') ? 'png' : 'jpg';
+            const mime = imageMsg.mimetype || 'image/jpeg';
+            const ext = mime.includes('png') ? 'png' : (mime.includes('webp') ? 'webp' : 'jpg');
             const attId = randomUUID();
             const filename = `wa-${Date.now()}-${attId.slice(0, 8)}.${ext}`;
             const filepath = path.join(UPLOAD_DIR, filename);
@@ -182,7 +186,7 @@ export async function initBaileys(forceNew = false) {
             mediaAttachment = {
               id: attId,
               file: filename,
-              mime: content.imageMessage.mimetype || 'image/jpeg',
+              mime,
               size: buffer.length,
             };
             console.log(`[WhatsApp-Baileys] 📸 Foto recebida e salva com sucesso: ${filename} (${buffer.length} bytes)`);

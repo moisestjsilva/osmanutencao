@@ -62,6 +62,8 @@ export function formatNewOrderMessage({
   sector,
   tag,
   description,
+  hasPhoto = false,
+  photoFile = null,
   requesterName,
   responsibleName,
 }, db = null) {
@@ -81,7 +83,7 @@ export function formatNewOrderMessage({
   if (db) {
     try {
       const techText = responsibleName ? `👷 *Técnico Atribuído:* ${responsibleName}` : `📢 *Aviso:* Disponível para atendimento da equipe`;
-      const photoText = orderData.hasPhoto ? `📸 *Foto do Problema:* Anexada na OS` : '';
+      const photoText = hasPhoto ? `📸 *Foto do Problema:* Anexada na OS` : '';
       const rendered = renderTemplate(db, 'group_order_notification', {
         numero: number || 'S/N',
         tipo: typeLabel,
@@ -118,7 +120,7 @@ export function formatNewOrderMessage({
     lines.push(`📢 *Aviso:* Disponível para atendimento da equipe`);
   }
 
-  if (orderData.hasPhoto) {
+  if (hasPhoto) {
     lines.push(`📸 *Foto do Problema:* Anexada na OS`);
   }
 

@@ -161,10 +161,14 @@ export const DEFAULT_TEMPLATES = [
     description: 'Solicita os detalhes do defeito ou sintoma observado.',
     variables: ['{maquina}', '{tag}'],
     template: [
-      '📝 Por favor, descreva em poucas palavras o *problema / defeito observado*:',
-      '_(Exemplo: Vazamento de óleo no cilindro pneumático e ruído anormal no redutor)_',
+      '📸 *FOTO OU DESCRIÇÃO DO PROBLEMA:*',
       '',
-      '📸 _(Opcional: Se preferir, pode enviar uma foto do problema agora, com ou sem legenda)_'
+      'Por favor, envie uma *FOTO do problema* (com ou sem legenda) ou descreva em texto o defeito observado:',
+      '',
+      '• 📷 *Com foto:* Tire ou anexe a foto do defeito (pode escrever na legenda se quiser)',
+      '• ✍️ *Apenas texto:* Digite o que está acontecendo (ex: _vazamento de óleo no cilindro_)',
+      '',
+      '_(Envie a foto ou mensagem agora)_'
     ].join('\n')
   },
   {
@@ -261,6 +265,15 @@ export function seedDefaultTemplates(db) {
       t.description || '',
       t.key
     );
+
+    // Atualiza automaticamente o texto ativo para sincronizar melhorias oficiais de foto
+    if (['bot_ask_description', 'bot_success', 'group_order_notification'].includes(t.key)) {
+      db.prepare(`
+        UPDATE whatsapp_templates 
+        SET template = ?, default_template = ?, updated_at = ?
+        WHERE key = ? AND (template NOT LIKE '%FOTO OU DESCRIÇÃO%' OR template = default_template)
+      `).run(t.template, t.template, now, t.key);
+    }
   }
 }
 
