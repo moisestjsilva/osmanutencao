@@ -158,7 +158,21 @@ export async function initBaileys(forceNew = false) {
 
       const pushName = m.pushName || '';
       const isGroup = jid.endsWith('@g.us');
-      const sender = isGroup ? (m.key.participant || jid) : jid;
+      let sender = isGroup ? (m.key.participant || jid) : jid;
+
+      // WhatsApp moderno usa LID (ID de privacidade) em vez do telefone.
+      // Tenta resolver o número real (PN) para identificar o colaborador.
+      if (sender.endsWith('@lid')) {
+        const alt = isGroup ? m.key.participantAlt : m.key.remoteJidAlt;
+        let pn = alt && alt.includes('@s.whatsapp.net') ? alt : null;
+        if (!pn) {
+          try {
+            pn = await sock.signalRepository?.lidMapping?.getPNForLID(sender);
+          } catch (_) {}
+        }
+        console.log(`[WhatsApp-Baileys] 🔎 LID ${sender} -> telefone ${pn || 'não resolvido'}`);
+        if (pn) sender = pn;
+      }
 
       if (incomingMessageHandler) {
         try {
@@ -215,11 +229,11 @@ export async function sendBaileysMessage({ to, text }) {
   // Tratamento e limpeza rigorosa de JID
   if (jid.includes('@g.us')) {
     // Grupo
-  } else if (jid.includes('@s.whatsapp.net')) {
-    // Remove identificador de dispositivo (:22@s.whatsapp.net -> @s.whatsapp.net)
-    const [userPart] = jid.split('@');
+  } else if (jid.includes('@')) {
+    // @s.whatsapp.net ou @lid: remove identificador de dispositivo (:22@...)
+    const [userPart, server] = jid.split('@');
     const cleanUser = userPart.split(':')[0].replace(/\D/g, '');
-    jid = `${cleanUser}@s.whatsapp.net`;
+    jid = `${cleanUser}@${server}`;
   } else if (jid.length > 15) {
     jid = `${jid}@g.us`;
   } else {

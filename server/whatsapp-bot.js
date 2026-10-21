@@ -500,6 +500,10 @@ export async function processIncomingWhatsAppMessage(db, {
   // 3. Obtém ou inicializa a sessão do usuário
   let session = getSession(db, phone);
   let user = findUserByPhone(db, phone);
+  if (session && user && ['AWAITING_USER_IDENTIFICATION', 'SELECTING_USER_CANDIDATE'].includes(session.step)) {
+    deleteSession(db, phone);
+    session = null;
+  }
   console.log(`[WhatsApp-Bot] 🤖 Avaliando mensagem de "${phone}" (${pushName}): "${rawText}" | Sessão: ${session ? session.step : 'NOVA'} | Usuário: ${user ? `${user.name} (@${user.username})` : 'NÃO VINCULADO'}`);
 
   // Se não houver sessão ativa
@@ -581,7 +585,7 @@ export async function processIncomingWhatsAppMessage(db, {
     if (matchedUsers.length === 1) {
       const matched = matchedUsers[0];
       // Vincula o número de telefone ao usuário no banco!
-      db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(phone, matched.id);
+      db.prepare("UPDATE users SET phone = ? WHERE id = ? AND (phone IS NULL OR phone = '')").run(phone, matched.id);
 
       data.requester_id = matched.id;
       data.requester_name = matched.name;
@@ -634,7 +638,7 @@ export async function processIncomingWhatsAppMessage(db, {
     }
 
     const selected = candidates[choice - 1];
-    db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(phone, selected.id);
+    db.prepare("UPDATE users SET phone = ? WHERE id = ? AND (phone IS NULL OR phone = '')").run(phone, selected.id);
 
     data.requester_id = selected.id;
     data.requester_name = selected.name;
