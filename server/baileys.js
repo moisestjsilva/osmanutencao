@@ -182,6 +182,14 @@ export async function initBaileys(forceNew = false) {
             text: text.trim(),
             pushName,
             isGroup,
+            presence: async (presenceType) => {
+              if (sock && connectionStatus === 'connected') {
+                try {
+                  const targetJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`;
+                  await sock.sendPresenceUpdate(presenceType, targetJid);
+                } catch (_) {}
+              }
+            },
             reply: async (replyText) => {
               return await sendBaileysMessage({ to: jid, text: replyText });
             },

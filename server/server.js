@@ -68,7 +68,7 @@ seedAuthUsers(db);
 initMySQLSync(db);
 
 // Conecta o listener do Baileys ao processador de Chatbot de Abertura de OS
-onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, reply }) => {
+onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, presence, reply }) => {
   try {
     console.log(`[WhatsApp-Bot] 📨 Mensagem recebida de ${sender || jid} (${pushName || 'sem nome'}): "${text}"`);
     await processIncomingWhatsAppMessage(db, {
@@ -76,6 +76,7 @@ onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, reply }) => {
       text,
       pushName,
       isGroup,
+      presenceFn: presence,
       replyFn: reply,
     });
   } catch (err) {
@@ -821,13 +822,26 @@ app.get('/whatsapp', (req, res) => {
 app.get('/api/whatsapp/status', (req, res) => {
   const baileysState = getBaileysStatus();
   const currentRecipient = getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID || '');
+  const botDelay = Number(getSetting(db, 'whatsapp_bot_delay', '2'));
   res.json({
     enabled: isWhatsAppEnabled(),
     provider: getWhatsAppProvider(),
     recipient: currentRecipient,
     hasRecipient: !!currentRecipient,
+    delay: botDelay,
     ...baileysState,
   });
+});
+
+app.post('/api/whatsapp/delay', (req, res) => {
+  try {
+    const raw = Number(req.body?.delay ?? 2);
+    const delay = Math.max(0, Math.min(30, isNaN(raw) ? 2 : raw));
+    setSetting(db, 'whatsapp_bot_delay', String(delay));
+    res.json({ ok: true, delay });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/whatsapp/recipient', (req, res) => {

@@ -10,7 +10,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { applyOp } from './domain.js';
+import { applyOp, getSetting } from './domain.js';
 
 export const DEFAULT_TEMPLATES = [
   {
@@ -456,6 +456,7 @@ export async function processIncomingWhatsAppMessage(db, {
   text,
   pushName = '',
   isGroup = false,
+  presenceFn = null,
   replyFn = null,
 }) {
   const rawText = String(text || '').trim();
@@ -464,9 +465,19 @@ export async function processIncomingWhatsAppMessage(db, {
   const phone = cleanDigits(from);
   if (!phone) return null;
 
-  // Helper para enviar a resposta de volta
+  // Helper para enviar a resposta de volta com delay e presença humanizada
   const sendReply = async (replyText) => {
     if (typeof replyFn === 'function') {
+      const delaySec = Number(getSetting(db, 'whatsapp_bot_delay', '2'));
+      if (delaySec > 0) {
+        if (typeof presenceFn === 'function') {
+          try { await presenceFn('composing'); } catch (_) {}
+        }
+        await new Promise((r) => setTimeout(r, delaySec * 1000));
+        if (typeof presenceFn === 'function') {
+          try { await presenceFn('paused'); } catch (_) {}
+        }
+      }
       return await replyFn(replyText);
     }
     return { ok: true, text: replyText };

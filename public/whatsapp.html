@@ -970,6 +970,40 @@
         </div>
       </div>
 
+      <!-- Card Delay Humanizado na Resposta -->
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <span class="wa-card-title">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Tempo de Resposta do Robô (Delay Humanizado)
+          </span>
+          <div id="delayBadge" class="status-badge connected">
+            <span class="status-dot"></span>
+            <span id="delayBadgeText">2 segundos</span>
+          </div>
+        </div>
+
+        <p class="wa-card-desc">
+          Configure um intervalo de espera antes do robô responder às mensagens no WhatsApp. Enquanto aguarda, o WhatsApp exibirá o status <strong>"digitando..."</strong> para o colaborador, tornando o atendimento mais natural e realista.
+        </p>
+
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 260px;">
+            <select id="delaySelect" class="input-field" style="padding: 9px 12px; font-weight: 500;">
+              <option value="0">0s — Resposta instantânea (sem delay)</option>
+              <option value="1">1 segundo (rápido)</option>
+              <option value="2" selected>2 segundos (recomendado / humanizado)</option>
+              <option value="3">3 segundos (natural)</option>
+              <option value="4">4 segundos (moderado)</option>
+              <option value="5">5 segundos (conversacional)</option>
+              <option value="7">7 segundos (pausado)</option>
+              <option value="10">10 segundos (atendimento lento)</option>
+            </select>
+            <button id="btnSaveDelay" class="btn btn-emerald">Salvar Delay</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Card Link de Grupo / JID -->
       <div class="wa-card">
         <div class="wa-card-header">
@@ -1294,10 +1328,48 @@
           qrArea.style.display = 'none';
           startArea.style.display = 'block';
         }
+
+        if (typeof data.delay === 'number') {
+          const select = document.getElementById('delaySelect');
+          if (select) select.value = String(data.delay);
+          const badgeText = document.getElementById('delayBadgeText');
+          if (badgeText) {
+            badgeText.textContent = data.delay === 0 ? 'Instantâneo (0s)' : `${data.delay} segundo${data.delay > 1 ? 's' : ''}`;
+          }
+        }
       } catch (err) {
         console.error('Falha ao verificar status:', err);
       }
     }
+
+    // Salvar Delay Humanizado
+    document.getElementById('btnSaveDelay').addEventListener('click', async () => {
+      const select = document.getElementById('delaySelect');
+      const delay = Number(select.value);
+      const btn = document.getElementById('btnSaveDelay');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/whatsapp/delay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delay })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          const badgeText = document.getElementById('delayBadgeText');
+          if (badgeText) {
+            badgeText.textContent = delay === 0 ? 'Instantâneo (0s)' : `${delay} segundo${delay > 1 ? 's' : ''}`;
+          }
+          showToast(`Tempo de resposta ajustado para ${delay === 0 ? 'instantâneo (0s)' : delay + 's com status "digitando..."'}!`, 'success');
+        } else {
+          showToast('Erro ao salvar delay: ' + (data.error || 'Erro desconhecido'), 'error');
+        }
+      } catch (err) {
+        showToast('Erro ao salvar delay: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     document.getElementById('btnInit').addEventListener('click', async () => {
       const btn = document.getElementById('btnInit');
