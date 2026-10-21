@@ -68,14 +68,15 @@ seedAuthUsers(db);
 initMySQLSync(db);
 
 // Conecta o listener do Baileys ao processador de Chatbot de Abertura de OS
-onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, presence, reply }) => {
+onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, mediaAttachment, presence, reply }) => {
   try {
-    console.log(`[WhatsApp-Bot] 📨 Mensagem recebida de ${sender || jid} (${pushName || 'sem nome'}): "${text}"`);
+    console.log(`[WhatsApp-Bot] 📨 Mensagem recebida de ${sender || jid} (${pushName || 'sem nome'}): "${text}" ${mediaAttachment ? '(com foto anexada)' : ''}`);
     await processIncomingWhatsAppMessage(db, {
       from: sender || jid,
       text,
       pushName,
       isGroup,
+      mediaAttachment,
       presenceFn: presence,
       replyFn: reply,
     });

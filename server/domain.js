@@ -222,9 +222,22 @@ const handlers = {
       });
     }
 
+    // Salva anexos/fotos criados junto com a OS (ex: via WhatsApp ou upload direto)
+    const attachments = Array.isArray(p.attachments) ? p.attachments : [];
+    for (const att of attachments) {
+      try {
+        db.prepare(`INSERT INTO attachments (id,wo_id,user_id,file,mime,size,created_at) VALUES (?,?,?,?,?,?,?)`)
+          .run(att.id || randomUUID(), id, user.id, att.file, att.mime || 'image/jpeg', att.size || 0, at);
+        addEvent(db, id, user.id, 'foto', at, { origin: op.origin, data: { file: att.file } });
+      } catch (attErr) {
+        console.error('[Domain] Erro ao salvar anexo na criação da OS:', attErr.message);
+      }
+    }
+
     // Disparo assíncrono para o WhatsApp (Grupo de Manutenção)
     const respUser = responsibleId ? getUser(db, responsibleId) : null;
     const configuredRecipient = getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID);
+    const primaryAttachment = attachments.length > 0 ? attachments[0] : null;
     notifyNewOrderWhatsApp({
       number,
       type,
@@ -234,6 +247,8 @@ const handlers = {
       sector: lbl.sector,
       tag: machine.code,
       description: desc,
+      hasPhoto: attachments.length > 0,
+      photoFile: primaryAttachment ? primaryAttachment.file : null,
       requesterName: user.name,
       responsibleName: respUser?.name || null,
     }, configuredRecipient, db).catch((err) => {

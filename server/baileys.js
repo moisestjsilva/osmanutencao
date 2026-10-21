@@ -11,11 +11,15 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
+  extractMessageContent,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'node:crypto';
+import { UPLOAD_DIR } from './db.js';
 
 const AUTH_DIR = path.resolve(process.cwd(), 'data', 'whatsapp_auth');
 
@@ -148,11 +152,49 @@ export async function initBaileys(forceNew = false) {
       const jid = m.key.remoteJid;
       if (!jid || jid === 'status@broadcast') continue;
 
-      const text =
-        m.message.conversation ||
-        m.message.extendedTextMessage?.text ||
-        m.message.imageMessage?.caption ||
+      const content = extractMessageContent(m.message);
+      if (!content) continue;
+
+      let text =
+        content.conversation ||
+        content.extendedTextMessage?.text ||
+        content.imageMessage?.caption ||
         '';
+
+      let mediaAttachment = null;
+      if (content.imageMessage) {
+        try {
+          const buffer = await downloadMediaMessage(
+            m,
+            'buffer',
+            {},
+            {
+              logger: pino({ level: 'silent' }),
+              reuploadRequest: sock?.updateMediaMessage,
+            }
+          );
+          if (buffer && buffer.length > 0) {
+            const ext = content.imageMessage.mimetype?.includes('png') ? 'png' : 'jpg';
+            const attId = randomUUID();
+            const filename = `wa-${Date.now()}-${attId.slice(0, 8)}.${ext}`;
+            const filepath = path.join(UPLOAD_DIR, filename);
+            fs.writeFileSync(filepath, buffer);
+            mediaAttachment = {
+              id: attId,
+              file: filename,
+              mime: content.imageMessage.mimetype || 'image/jpeg',
+              size: buffer.length,
+            };
+            console.log(`[WhatsApp-Baileys] 📸 Foto recebida e salva com sucesso: ${filename} (${buffer.length} bytes)`);
+          }
+        } catch (mediaErr) {
+          console.error('[WhatsApp-Baileys] Erro ao baixar foto recebida:', mediaErr.message);
+        }
+      }
+
+      if (!text && mediaAttachment) {
+        text = 'Registro fotográfico anexado';
+      }
 
       if (!text || !text.trim()) continue;
 
@@ -182,6 +224,7 @@ export async function initBaileys(forceNew = false) {
             text: text.trim(),
             pushName,
             isGroup,
+            mediaAttachment,
             presence: async (presenceType) => {
               if (sock && connectionStatus === 'connected') {
                 try {
@@ -219,7 +262,7 @@ export function onBaileysMessage(handler) {
 /**
  * Envia mensagem via Baileys para número ou ID de grupo
  */
-export async function sendBaileysMessage({ to, text }) {
+export async function sendBaileysMessage({ to, text, image, caption }) {
   // Se estiver conectando no momento, aguarda até 4 segundos para estabilizar
   if (connectionStatus === 'connecting') {
     const start = Date.now();
@@ -249,8 +292,15 @@ export async function sendBaileysMessage({ to, text }) {
     jid = `${cleanNumber}@s.whatsapp.net`;
   }
 
-  console.log(`[WhatsApp-Baileys] 📤 Enviando resposta para ${jid}...`);
-  const result = await sock.sendMessage(jid, { text });
+  console.log(`[WhatsApp-Baileys] 📤 Enviando resposta para ${jid}... ${image ? '(com imagem)' : ''}`);
+  let content;
+  if (image) {
+    const imgBuffer = Buffer.isBuffer(image) ? image : fs.readFileSync(image);
+    content = { image: imgBuffer, caption: caption || text || '' };
+  } else {
+    content = { text: String(text || '') };
+  }
+  const result = await sock.sendMessage(jid, content);
   return { success: true, provider: 'baileys', messageId: result.key?.id, to: jid };
 }
 

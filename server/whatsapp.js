@@ -14,6 +14,9 @@
  * ===================================================================
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { UPLOAD_DIR } from './db.js';
 import {
   initBaileys,
   getBaileysStatus,
@@ -78,6 +81,7 @@ export function formatNewOrderMessage({
   if (db) {
     try {
       const techText = responsibleName ? `👷 *Técnico Atribuído:* ${responsibleName}` : `📢 *Aviso:* Disponível para atendimento da equipe`;
+      const photoText = orderData.hasPhoto ? `📸 *Foto do Problema:* Anexada na OS` : '';
       const rendered = renderTemplate(db, 'group_order_notification', {
         numero: number || 'S/N',
         tipo: typeLabel,
@@ -88,6 +92,7 @@ export function formatNewOrderMessage({
         tag: tag ? `(TAG: ${tag})` : '',
         solicitante: requesterName || 'Não identificado',
         tecnico: techText,
+        foto_anexada: photoText,
         descricao: description ? description.trim() : 'Sem descrição',
         horario: timeNow,
       });
@@ -111,6 +116,10 @@ export function formatNewOrderMessage({
     lines.push(`👷 *Técnico Atribuído:* ${responsibleName}`);
   } else {
     lines.push(`📢 *Aviso:* Disponível para atendimento da equipe`);
+  }
+
+  if (orderData.hasPhoto) {
+    lines.push(`📸 *Foto do Problema:* Anexada na OS`);
   }
 
   lines.push(
@@ -209,7 +218,7 @@ async function sendViaEvolution({ to, text }) {
  * Função central de envio de mensagem de texto.
  * Roteia automaticamente para o provedor selecionado no .env
  */
-export async function sendWhatsAppMessage({ to, text }) {
+export async function sendWhatsAppMessage({ to, text, image = null }) {
   if (!isWhatsAppEnabled()) {
     return { skipped: true, reason: 'WHATSAPP_ENABLED não está ativo (false)' };
   }
@@ -227,7 +236,7 @@ export async function sendWhatsAppMessage({ to, text }) {
   try {
     let result;
     if (provider === 'baileys') {
-      result = await sendBaileysMessage({ to: target, text });
+      result = await sendBaileysMessage({ to: target, text, image });
     } else if (provider === 'evolution') {
       result = await sendViaEvolution({ to: target, text });
     } else {
@@ -252,7 +261,12 @@ export async function notifyNewOrderWhatsApp(orderData, recipient = null, db = n
 
   try {
     const text = formatNewOrderMessage(orderData, db);
-    await sendWhatsAppMessage({ to: recipient, text });
+    let imagePath = null;
+    if (orderData.photoFile) {
+      const candidate = path.join(UPLOAD_DIR, path.basename(orderData.photoFile));
+      if (fs.existsSync(candidate)) imagePath = candidate;
+    }
+    await sendWhatsAppMessage({ to: recipient, text, image: imagePath });
   } catch (err) {
     // Registra o alerta no console sem propagar o erro
     console.warn('[WhatsApp] Notificação de nova OS não pôde ser enviada:', err.message);

@@ -162,7 +162,9 @@ export const DEFAULT_TEMPLATES = [
     variables: ['{maquina}', '{tag}'],
     template: [
       '📝 Por favor, descreva em poucas palavras o *problema / defeito observado*:',
-      '_(Exemplo: Vazamento de óleo no cilindro pneumático e ruído anormal no redutor)_'
+      '_(Exemplo: Vazamento de óleo no cilindro pneumático e ruído anormal no redutor)_',
+      '',
+      '📸 _(Opcional: Se preferir, pode enviar uma foto do problema agora, com ou sem legenda)_'
     ].join('\n')
   },
   {
@@ -170,7 +172,7 @@ export const DEFAULT_TEMPLATES = [
     name: 'Confirmação de OS Aberta',
     category: 'bot',
     description: 'Mensagem final enviada ao solicitante no WhatsApp com o número oficial da OS.',
-    variables: ['{numero}', '{maquina}', '{tag}', '{setor}', '{prioridade}', '{status_parada}', '{solicitante}', '{descricao}', '{horario}'],
+    variables: ['{numero}', '{maquina}', '{tag}', '{setor}', '{prioridade}', '{status_parada}', '{solicitante}', '{foto_anexada}', '{descricao}', '{horario}'],
     template: [
       '✅ *ORDEM DE SERVIÇO #{numero} ABERTA COM SUCESSO!*',
       '━━━━━━━━━━━━━━━━━━━━━━',
@@ -179,6 +181,7 @@ export const DEFAULT_TEMPLATES = [
       '⚠️ *Prioridade:* {prioridade}',
       '⚙️ *Status:* {status_parada}',
       '👤 *Solicitante:* {solicitante}',
+      '{foto_anexada}',
       '',
       '📝 *Descrição:*',
       '{descricao}',
@@ -203,7 +206,7 @@ export const DEFAULT_TEMPLATES = [
     name: 'Alerta de Nova OS no Grupo da Manutenção',
     category: 'grupo',
     description: 'Mensagem que o sistema dispara no grupo oficial do WhatsApp ao abrir qualquer OS.',
-    variables: ['{numero}', '{tipo}', '{prioridade}', '{status_parada}', '{setor}', '{maquina}', '{tag}', '{solicitante}', '{tecnico}', '{descricao}', '{horario}'],
+    variables: ['{numero}', '{tipo}', '{prioridade}', '{status_parada}', '{setor}', '{maquina}', '{tag}', '{solicitante}', '{tecnico}', '{foto_anexada}', '{descricao}', '{horario}'],
     template: [
       '🚨 *NOVA ORDEM DE SERVIÇO #{numero}*',
       '━━━━━━━━━━━━━━━━━━━━━━',
@@ -215,6 +218,7 @@ export const DEFAULT_TEMPLATES = [
       '🔧 *Máquina:* {maquina} {tag}',
       '👤 *Solicitante:* {solicitante}',
       '{tecnico}',
+      '{foto_anexada}',
       '',
       '📝 *Descrição do Problema:*',
       '{descricao}',
@@ -233,6 +237,11 @@ export function seedDefaultTemplates(db) {
     INSERT OR IGNORE INTO whatsapp_templates (key, name, description, category, template, default_template, variables_json, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const updateMetaStmt = db.prepare(`
+    UPDATE whatsapp_templates 
+    SET default_template = ?, variables_json = ?, name = ?, description = ?
+    WHERE key = ?
+  `);
 
   for (const t of DEFAULT_TEMPLATES) {
     insertStmt.run(
@@ -244,6 +253,13 @@ export function seedDefaultTemplates(db) {
       t.template,
       JSON.stringify(t.variables || []),
       now
+    );
+    updateMetaStmt.run(
+      t.template,
+      JSON.stringify(t.variables || []),
+      t.name,
+      t.description || '',
+      t.key
     );
   }
 }
@@ -316,6 +332,9 @@ export function renderTemplate(db, key, vars = {}) {
     const regex = new RegExp(`\\{${k}\\}`, 'gi');
     text = text.replace(regex, v !== undefined && v !== null ? String(v) : '');
   }
+
+  // Remove placeholders não substituídos (ex: {foto_anexada} quando vazia)
+  text = text.replace(/\{[a-z0-9_]+\}/gi, '');
 
   return text;
 }
@@ -456,11 +475,12 @@ export async function processIncomingWhatsAppMessage(db, {
   text,
   pushName = '',
   isGroup = false,
+  mediaAttachment = null,
   presenceFn = null,
   replyFn = null,
 }) {
   const rawText = String(text || '').trim();
-  if (!rawText) return null;
+  if (!rawText && !mediaAttachment) return null;
 
   const phone = cleanDigits(from);
   if (!phone) return null;
@@ -960,9 +980,23 @@ export async function processIncomingWhatsAppMessage(db, {
   // ETAPA: Descrição do Problema & Finalização da OS
   // -------------------------------------------------------------
   if (step === 'AWAITING_DESCRIPTION') {
-    const description = rawText.trim();
-    if (description.length < 3) {
-      const msg = 'Por favor, descreva o defeito com um pouco mais de detalhes (mínimo 3 caracteres):';
+    let description = rawText.trim();
+
+    // Se o usuário anexou uma foto nesta etapa
+    if (mediaAttachment) {
+      if (!data.attachments) data.attachments = [];
+      data.attachments.push(mediaAttachment);
+
+      // Se enviou foto sem legenda ou com texto automático
+      if (description === 'Registro fotográfico anexado' || description === 'Foto anexada' || description.length < 3) {
+        description = 'Registro fotográfico anexado pelo solicitante via WhatsApp';
+      }
+    }
+
+    const hasAttachments = Array.isArray(data.attachments) && data.attachments.length > 0;
+
+    if (description.length < 3 && !hasAttachments) {
+      const msg = 'Por favor, descreva o defeito com um pouco mais de detalhes (mínimo 3 caracteres) ou envie uma foto do problema:';
       await sendReply(msg);
       return { handled: true, step: 'AWAITING_DESCRIPTION', response: msg };
     }
@@ -992,6 +1026,7 @@ export async function processIncomingWhatsAppMessage(db, {
         machineStopped: Number(data.machine_stopped) === 1,
         description: description,
         recipientsMode: 'todos',
+        attachments: data.attachments || [],
       }
     };
 
@@ -1019,6 +1054,8 @@ export async function processIncomingWhatsAppMessage(db, {
     };
 
     const timeNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const hasPhoto = data.attachments && data.attachments.length > 0;
+    const photoText = hasPhoto ? '📸 *Foto Anexada:* Registrada com sucesso no sistema' : '';
 
     const successMsg = renderTemplate(db, 'bot_success', {
       numero: osNumber,
@@ -1028,6 +1065,7 @@ export async function processIncomingWhatsAppMessage(db, {
       prioridade: prioLabelMap[data.priority] || data.priority,
       status_parada: Number(data.machine_stopped) === 1 ? '🛑 MÁQUINA PARADA' : '⚡ Operando com alerta',
       solicitante: data.requester_name || 'Solicitante',
+      foto_anexada: photoText,
       descricao: description,
       horario: timeNow,
     });
