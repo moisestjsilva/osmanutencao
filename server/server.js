@@ -70,6 +70,7 @@ initMySQLSync(db);
 // Conecta o listener do Baileys ao processador de Chatbot de Abertura de OS
 onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, reply }) => {
   try {
+    console.log(`[WhatsApp-Bot] 📨 Mensagem recebida de ${sender || jid} (${pushName || 'sem nome'}): "${text}"`);
     await processIncomingWhatsAppMessage(db, {
       from: sender || jid,
       text,
@@ -1168,9 +1169,4 @@ setInterval(() => runScheduler(db), 5 * 60000);
 
 app.listen(PORT, () => {
   console.log(`Nova OS rodando em http://localhost:${PORT}`);
-  if (isWhatsAppEnabled() && getWhatsAppProvider() === 'baileys') {
-    initBaileys().catch((err) => {
-      console.warn('[WhatsApp] Erro ao iniciar Baileys automaticamente:', err.message);
-    });
-  }
 });

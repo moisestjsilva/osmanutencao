@@ -25,6 +25,7 @@ let currentQrDataUrl = null;
 let connectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'connected'
 let connectedUser = null;
 let reconnectTimer = null;
+let isInitializing = false;
 
 // Garante que o diretório de autenticação existe
 if (!fs.existsSync(AUTH_DIR)) {
@@ -41,91 +42,102 @@ export function getBaileysStatus() {
 }
 
 export async function initBaileys(forceNew = false) {
-  if (forceNew && sock) {
+  if (isInitializing && !forceNew) {
+    console.info('[WhatsApp-Baileys] Inicialização já em andamento, aguardando...');
+    return { status: connectionStatus, user: connectedUser };
+  }
+
+  if (sock && connectionStatus === 'connected' && !forceNew) {
+    return { status: connectionStatus, user: connectedUser };
+  }
+
+  if (sock) {
     try {
+      sock.ev.removeAllListeners();
       sock.end(undefined);
     } catch (_) {}
     sock = null;
   }
 
-  if (sock && connectionStatus === 'connected') {
-    return { status: connectionStatus, user: connectedUser };
-  }
-
+  isInitializing = true;
   connectionStatus = 'connecting';
   console.info('[WhatsApp-Baileys] Iniciando serviço WhatsApp nativo...');
 
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-  let version = undefined;
   try {
-    const vInfo = await fetchLatestBaileysVersion();
-    version = vInfo.version;
-  } catch (_) {
-    // Usa a versão padrão empacotada
-  }
-
-  sock = makeWASocket({
-    version,
-    auth: state,
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
-    browser: ['Nova OS Manutenção', 'Chrome', '1.0.0'],
-    defaultQueryTimeoutMs: 60000,
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      currentQrRaw = qr;
-      try {
-        currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 7 });
-      } catch (err) {
-        console.error('[WhatsApp-Baileys] Erro ao converter QR Code:', err.message);
-      }
-      connectionStatus = 'connecting';
-      console.info('[WhatsApp-Baileys] Novo QR Code gerado! Acesse /whatsapp ou escaneie no terminal.');
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    let version = undefined;
+    try {
+      const vInfo = await fetchLatestBaileysVersion();
+      version = vInfo.version;
+    } catch (_) {
+      // Usa a versão padrão empacotada
     }
 
-    if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      connectionStatus = 'disconnected';
-      connectedUser = null;
+    sock = makeWASocket({
+      version,
+      auth: state,
+      logger: pino({ level: 'silent' }),
+      printQRInTerminal: true,
+      browser: ['Nova OS Manutenção', 'Chrome', '1.0.0'],
+      defaultQueryTimeoutMs: 60000,
+    });
 
-      console.warn(
-        `[WhatsApp-Baileys] Conexão encerrada (código: ${statusCode || 'desconhecido'}). Reconectar: ${shouldReconnect}`
-      );
+    sock.ev.on('creds.update', saveCreds);
 
-      if (shouldReconnect) {
-        if (!reconnectTimer) {
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null;
-            initBaileys();
-          }, 4000);
-        }
-      } else {
-        // Deslogado explicitamente pelo celular -> limpa credenciais
-        console.warn('[WhatsApp-Baileys] Sessão desconectada pelo aparelho. Limpando credenciais antigas.');
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        currentQrRaw = qr;
         try {
-          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-          fs.mkdirSync(AUTH_DIR, { recursive: true });
-        } catch (_) {}
+          currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 7 });
+        } catch (err) {
+          console.error('[WhatsApp-Baileys] Erro ao converter QR Code:', err.message);
+        }
+        connectionStatus = 'connecting';
+        isInitializing = false;
+        console.info('[WhatsApp-Baileys] Novo QR Code gerado! Acesse /whatsapp ou escaneie no terminal.');
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        connectionStatus = 'disconnected';
+        connectedUser = null;
+        isInitializing = false;
+
+        console.warn(
+          `[WhatsApp-Baileys] Conexão encerrada (código: ${statusCode || 'desconhecido'}). Reconectar: ${shouldReconnect}`
+        );
+
+        if (shouldReconnect) {
+          if (!reconnectTimer) {
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null;
+              initBaileys();
+            }, 5000);
+          }
+        } else {
+          // Deslogado explicitamente pelo celular -> limpa credenciais
+          console.warn('[WhatsApp-Baileys] Sessão desconectada pelo aparelho. Limpando credenciais antigas.');
+          try {
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+            fs.mkdirSync(AUTH_DIR, { recursive: true });
+          } catch (_) {}
+          currentQrDataUrl = null;
+          currentQrRaw = null;
+        }
+      } else if (connection === 'open') {
+        connectionStatus = 'connected';
+        isInitializing = false;
         currentQrDataUrl = null;
         currentQrRaw = null;
+        connectedUser = sock.user;
+        console.info(
+          `[WhatsApp-Baileys] ✅ WHATSAPP CONECTADO COM SUCESSO! ID: ${connectedUser?.id || 'Conectado'}`
+        );
       }
-    } else if (connection === 'open') {
-      connectionStatus = 'connected';
-      currentQrDataUrl = null;
-      currentQrRaw = null;
-      connectedUser = sock.user;
-      console.info(
-        `[WhatsApp-Baileys] ✅ WHATSAPP CONECTADO COM SUCESSO! ID: ${connectedUser?.id || 'Conectado'}`
-      );
-    }
-  });
+    });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' && type !== 'append') return;
@@ -167,7 +179,13 @@ export async function initBaileys(forceNew = false) {
     }
   });
 
-  return { status: connectionStatus };
+    return { status: connectionStatus };
+  } catch (err) {
+    isInitializing = false;
+    connectionStatus = 'disconnected';
+    console.error('[WhatsApp-Baileys] Erro ao inicializar socket Baileys:', err.message);
+    throw err;
+  }
 }
 
 let incomingMessageHandler = null;
@@ -180,24 +198,36 @@ export function onBaileysMessage(handler) {
  * Envia mensagem via Baileys para número ou ID de grupo
  */
 export async function sendBaileysMessage({ to, text }) {
+  // Se estiver conectando no momento, aguarda até 4 segundos para estabilizar
+  if (connectionStatus === 'connecting') {
+    const start = Date.now();
+    while (connectionStatus === 'connecting' && (Date.now() - start < 4000)) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+
   if (!sock || connectionStatus !== 'connected') {
     throw new Error('WhatsApp não está conectado. Acesse /whatsapp para escanear o QR Code.');
   }
 
   let jid = String(to || '').trim();
 
-  // Tratamento de JID
-  if (jid.includes('@g.us') || jid.includes('@s.whatsapp.net')) {
-    // Já possui o sufixo correto
+  // Tratamento e limpeza rigorosa de JID
+  if (jid.includes('@g.us')) {
+    // Grupo
+  } else if (jid.includes('@s.whatsapp.net')) {
+    // Remove identificador de dispositivo (:22@s.whatsapp.net -> @s.whatsapp.net)
+    const [userPart] = jid.split('@');
+    const cleanUser = userPart.split(':')[0].replace(/\D/g, '');
+    jid = `${cleanUser}@s.whatsapp.net`;
   } else if (jid.length > 15) {
-    // Provavelmente ID de grupo sem sufixo
     jid = `${jid}@g.us`;
   } else {
-    // Número individual: limpa caracteres não numéricos
-    const cleanNumber = jid.replace(/\D/g, '');
+    const cleanNumber = jid.split('@')[0].split(':')[0].replace(/\D/g, '');
     jid = `${cleanNumber}@s.whatsapp.net`;
   }
 
+  console.log(`[WhatsApp-Baileys] 📤 Enviando resposta para ${jid}...`);
   const result = await sock.sendMessage(jid, { text });
   return { success: true, provider: 'baileys', messageId: result.key?.id, to: jid };
 }

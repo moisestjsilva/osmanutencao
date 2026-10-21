@@ -325,7 +325,44 @@ export function renderTemplate(db, key, vars = {}) {
  */
 export function cleanDigits(phone) {
   if (!phone) return '';
-  return String(phone).replace(/\D/g, '');
+  let raw = String(phone).trim();
+  if (raw.includes('@')) {
+    raw = raw.split('@')[0];
+  }
+  if (raw.includes(':')) {
+    raw = raw.split(':')[0];
+  }
+  return raw.replace(/\D/g, '');
+}
+
+/**
+ * Compara dois números de telefone considerando variações brasileiras:
+ * - Com ou sem DDI 55
+ * - Com ou sem o 9º dígito
+ * - Mesmo DDD e mesmos 8 dígitos finais
+ */
+export function matchBrazilianPhones(p1, p2) {
+  const d1 = cleanDigits(p1);
+  const d2 = cleanDigits(p2);
+  if (!d1 || !d2) return false;
+  if (d1 === d2) return true;
+
+  const core8_1 = d1.slice(-8);
+  const core8_2 = d2.slice(-8);
+  if (core8_1 !== core8_2) return false;
+
+  let ddd1 = '';
+  if (d1.startsWith('55') && d1.length >= 12) ddd1 = d1.slice(2, 4);
+  else if (d1.length >= 10) ddd1 = d1.slice(0, 2);
+
+  let ddd2 = '';
+  if (d2.startsWith('55') && d2.length >= 12) ddd2 = d2.slice(2, 4);
+  else if (d2.length >= 10) ddd2 = d2.slice(0, 2);
+
+  if (ddd1 && ddd2) {
+    return ddd1 === ddd2;
+  }
+  return true;
 }
 
 /**
@@ -339,20 +376,15 @@ export function findUserByPhone(db, rawPhone) {
   let user = db.prepare("SELECT * FROM users WHERE active=1 AND phone IS NOT NULL AND phone != '' AND phone = ?").get(digits);
   if (user) return user;
 
-  // Tenta comparar os últimos 8 ou 9 dígitos (DDD + número ou sem 55)
-  const last8 = digits.slice(-8);
-  const last9 = digits.slice(-9);
+  // Busca e compara todos os usuários ativos com telefone cadastrado
+  const users = db.prepare("SELECT * FROM users WHERE active=1 AND phone IS NOT NULL AND phone != ''").all();
+  for (const u of users) {
+    if (matchBrazilianPhones(u.phone, digits)) {
+      return u;
+    }
+  }
 
-  user = db.prepare(`
-    SELECT * FROM users 
-    WHERE active=1 
-      AND phone IS NOT NULL 
-      AND phone != '' 
-      AND (phone LIKE ? OR phone LIKE ?)
-    LIMIT 1
-  `).get(`%${last9}`, `%${last8}`);
-
-  return user || null;
+  return null;
 }
 
 /**
@@ -468,6 +500,7 @@ export async function processIncomingWhatsAppMessage(db, {
   // 3. Obtém ou inicializa a sessão do usuário
   let session = getSession(db, phone);
   let user = findUserByPhone(db, phone);
+  console.log(`[WhatsApp-Bot] 🤖 Avaliando mensagem de "${phone}" (${pushName}): "${rawText}" | Sessão: ${session ? session.step : 'NOVA'} | Usuário: ${user ? `${user.name} (@${user.username})` : 'NÃO VINCULADO'}`);
 
   // Se não houver sessão ativa
   if (!session) {
