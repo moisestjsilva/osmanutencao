@@ -249,14 +249,14 @@ export function updateMachines(db) {
 
   const updateStmt = db.prepare(`
     UPDATE machines 
-    SET name = ?, sector_id = ?, code = ?, active = 1 
+    SET name = ?, sector_id = ?, code = ?, active = 1, operating_hours_per_day = 8.0 
     WHERE id = ?
   `);
 
   const insertStmt = db.prepare(`
     INSERT INTO machines (
       id, code, name, sector_id, criticality, active, hourly_cost, operating_hours_per_day, default_checklist_json
-    ) VALUES (?, ?, ?, ?, 'media', 1, 0.0, 16.0, '[]')
+    ) VALUES (?, ?, ?, ?, 'media', 1, 0.0, 8.0, '[]')
   `);
 
   let updatedCount = 0;
@@ -310,6 +310,9 @@ export function updateMachines(db) {
 
       processedTags.add(upperTag);
     }
+
+    // Garante que todas as máquinas da base fiquem com 8.0 horas/dia
+    db.prepare('UPDATE machines SET operating_hours_per_day = 8.0').run();
 
     db.exec('COMMIT;');
   } catch (err) {
