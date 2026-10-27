@@ -220,6 +220,18 @@ function migrate(db) {
     db.exec(`ALTER TABLE users ADD COLUMN phone TEXT`);
   }
 
+  // Migração de colunas para conflicts (compatibilidade com versões anteriores)
+  const conflictCols = db.prepare(`PRAGMA table_info(conflicts)`).all().map((c) => c.name);
+  if (!conflictCols.includes('payload_json')) {
+    db.exec(`ALTER TABLE conflicts ADD COLUMN payload_json TEXT`);
+  }
+  if (!conflictCols.includes('reason')) {
+    db.exec(`ALTER TABLE conflicts ADD COLUMN reason TEXT`);
+  }
+  if (!conflictCols.includes('resolved_by')) {
+    db.exec(`ALTER TABLE conflicts ADD COLUMN resolved_by TEXT`);
+  }
+
   // Tabelas do Chatbot e Templates de Mensagens WhatsApp
   db.exec(`
     CREATE TABLE IF NOT EXISTS whatsapp_sessions (
