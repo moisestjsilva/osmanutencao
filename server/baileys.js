@@ -18,9 +18,12 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { randomUUID } from 'node:crypto';
-import { UPLOAD_DIR, DATA_DIR } from './db.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const AUTH_DIR = path.join(DATA_DIR, 'whatsapp_auth');
 
 let sock = null;

@@ -36,3 +36,4 @@ jobs:
           curl --fail-with-body -sS -X GET \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
             "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_APP_UUID&force=false"
+

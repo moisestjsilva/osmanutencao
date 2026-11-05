@@ -25,3 +25,4 @@ Os dados **não estão no Git** (`data/` é ignorado). Faça assim:
 4. Confira `/api/health`, login, OS, fotos. Só então desligue o CloudPanel.
 
 > Backups: ative **Scheduled Backups** do volume ou copie `/data` periodicamente.
+

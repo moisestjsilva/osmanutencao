@@ -18,3 +18,4 @@ for (const d of ['uploads', 'whatsapp_auth']) {
   if (fs.existsSync(src)) fs.cpSync(src, path.join(out, d), { recursive: true });
 }
 console.log('Backup em', out);
+

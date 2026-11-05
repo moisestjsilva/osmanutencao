@@ -323,6 +323,64 @@ app.post('/api/upload', requireUser, (req, res) => {
 });
 
 // ---------- Gestão de Usuários (Admin e Super Admin) ----------
+// ---------- Rota de Migração/Restauração de Dados (Coolify/Nuvem) ----------
+app.post('/api/admin/restore-database', (req, res) => {
+  const secret = req.get('X-Migration-Secret') || '';
+  const expectedSecret = process.env.MIGRATION_SECRET || 'nova-os-coolify-migration-2026';
+  const isSuper = req.user && req.user.role === 'superadmin';
+  if (!isSuper && secret !== expectedSecret) {
+    return res.status(403).json({ error: 'Acesso negado para restauração de dados' });
+  }
+
+  const { dbBase64, uploads } = req.body || {};
+  if (!dbBase64) {
+    return res.status(400).json({ error: 'Nenhum payload de banco enviado' });
+  }
+
+  try {
+    const targetFile = path.join(DATA_DIR, 'nova-os.db');
+    const tempFile = path.join(DATA_DIR, 'nova-os.db.incoming');
+    const buffer = Buffer.from(dbBase64, 'base64');
+    fs.writeFileSync(tempFile, buffer);
+
+    // Valida integridade do banco recebido antes de substituir
+    const testDb = new (db.constructor)(tempFile);
+    const chk = testDb.prepare('PRAGMA integrity_check').get();
+    testDb.close();
+
+    if (chk?.integrity_check !== 'ok') {
+      fs.unlinkSync(tempFile);
+      return res.status(400).json({ error: 'Banco corrompido: ' + JSON.stringify(chk) });
+    }
+
+    // Move banco validado para o destino
+    for (const ext of ['-wal', '-shm']) {
+      if (fs.existsSync(targetFile + ext)) fs.unlinkSync(targetFile + ext);
+    }
+    fs.renameSync(tempFile, targetFile);
+
+    // Restaura uploads se fornecidos { filename, base64 }
+    let restoredUploads = 0;
+    if (Array.isArray(uploads)) {
+      for (const item of uploads) {
+        if (item.filename && item.base64) {
+          const uPath = path.join(UPLOAD_DIR, path.basename(item.filename));
+          fs.writeFileSync(uPath, Buffer.from(item.base64, 'base64'));
+          restoredUploads++;
+        }
+      }
+    }
+
+    console.log(`[Migração] Banco de dados restaurado com sucesso! Uploads recebidos: ${restoredUploads}`);
+    res.json({ ok: true, message: 'Banco de dados e uploads restaurados com sucesso!', restoredUploads });
+
+    // Agenda reinício rápido do processo para reconectar o SQLite nativo de forma limpa
+    setTimeout(() => process.exit(0), 1000);
+  } catch (err) {
+    console.error('[Migração] Falha ao restaurar banco:', err.message);
+    res.status(500).json({ error: 'Falha na restauração: ' + err.message });
+  }
+});
 app.get('/api/users', requireAdmin, (req, res) => {
   const rows = db.prepare(`
     SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.phone, u.specialty, u.active, u.avatar_url, u.created_at,
