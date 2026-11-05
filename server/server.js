@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
-import { openDb, resetDb, UPLOAD_DIR } from './db.js';
+import { openDb, resetDb, UPLOAD_DIR, DATA_DIR } from './db.js';
 import { applyOp, getSetting, setSetting, CLOSED, deleteWorkOrderRecord } from './domain.js';
 import { generateCycle, runScheduler } from './preventive.js';
 import { computeIndicators } from './indicators.js';
