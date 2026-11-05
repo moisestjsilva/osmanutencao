@@ -19,9 +19,9 @@ import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
-import { UPLOAD_DIR } from './db.js';
+import { UPLOAD_DIR, DATA_DIR } from './db.js';
 
-const AUTH_DIR = path.resolve(process.cwd(), 'data', 'whatsapp_auth');
+const AUTH_DIR = path.join(DATA_DIR, 'whatsapp_auth');
 
 let sock = null;
 let currentQrRaw = null;
