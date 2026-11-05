@@ -930,23 +930,27 @@ app.post('/api/whatsapp/recipient', (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/init', async (req, res) => {
+const handleInitBaileys = async (req, res) => {
   try {
     const result = await initBaileys(true);
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+};
+app.post('/api/whatsapp/init', handleInitBaileys);
+app.post('/api/whatsapp/baileys/connect', handleInitBaileys);
 
-app.post('/api/whatsapp/disconnect', async (req, res) => {
+const handleDisconnectBaileys = async (req, res) => {
   try {
     const result = await disconnectBaileys();
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+};
+app.post('/api/whatsapp/disconnect', handleDisconnectBaileys);
+app.post('/api/whatsapp/baileys/disconnect', handleDisconnectBaileys);
 
 app.get('/api/whatsapp/groups', async (req, res) => {
   try {
@@ -957,26 +961,30 @@ app.get('/api/whatsapp/groups', async (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/join-group', async (req, res) => {
+const handleJoinGroup = async (req, res) => {
   try {
-    const { invite } = req.body || {};
+    const invite = (req.body?.inviteLink || req.body?.invite || '').trim();
     if (!invite) return res.status(400).json({ error: 'Link ou código de convite é obrigatório' });
     const result = await joinGroupByInvite(invite);
-    res.json({ ok: true, result });
+    res.json({ ok: true, groupJid: result?.jid || result?.id || result, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+};
+app.post('/api/whatsapp/join-group', handleJoinGroup);
+app.post('/api/whatsapp/group/join', handleJoinGroup);
 
-app.post('/api/whatsapp/test', async (req, res) => {
+const handleTestSend = async (req, res) => {
   try {
-    const { target } = req.body || {};
+    const target = req.body?.target || req.body?.recipient || req.body?.to;
     const result = await testWhatsAppConnection(target);
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: 'Falha no teste de WhatsApp: ' + e.message });
   }
-});
+};
+app.post('/api/whatsapp/test', handleTestSend);
+app.post('/api/whatsapp/test-send', handleTestSend);
 
 // Gerenciamento de Templates do WhatsApp
 app.get('/api/whatsapp/templates', (req, res) => {
