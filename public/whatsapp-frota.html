@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Central WhatsApp da Frota — Nova OS</title>
+  <meta name="description" content="Central exclusiva de WhatsApp, Evolution API e Robô de OS da Frota de Caminhões (abertura por Placa)." />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css?v=25" />
+
+  <script>
+    (function() {
+      const saved = localStorage.getItem('nova-os:theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+
+  <style>
+    :root {
+      --wa-fleet: #0284c7;
+      --wa-fleet-hover: #0369a1;
+      --wa-emerald: #10b981;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main-container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      animation: viewIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes viewIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .page-header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-bottom: 4px;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-3);
+    }
+
+    .breadcrumb a {
+      color: var(--text-3);
+      text-decoration: none;
+    }
+
+    .page-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .page-title-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .page-icon-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #ffffff;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+      flex-shrink: 0;
+    }
+
+    .page-title-text h1 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0;
+    }
+
+    .page-title-text p {
+      font-size: 13.5px;
+      color: var(--text-3);
+      margin: 4px 0 0;
+    }
+
+    .tabs-nav {
+      display: flex;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 4px;
+      border-radius: 14px;
+      gap: 4px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 9px 16px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-3);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .tab-pane {
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .tab-pane.active {
+      display: flex;
+    }
+
+    .wa-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .wa-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .wa-card-title {
+      font-size: 16.5px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .wa-card-desc {
+      font-size: 13px;
+      color: var(--text-3);
+      line-height: 1.5;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge.connected {
+      background: var(--ok-soft);
+      color: var(--ok-text);
+    }
+
+    .status-badge.connecting {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+    }
+
+    .status-badge.disconnected {
+      background: var(--danger-soft);
+      color: var(--danger-text);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 0;
+    }
+
+    .qr-image-wrapper {
+      background: #ffffff;
+      padding: 16px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    }
+
+    .qr-image-wrapper img {
+      width: 220px;
+      height: 220px;
+      display: block;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .input-field {
+      flex: 1;
+      min-width: 220px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 13.5px;
+      outline: none;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn-primary { background: var(--accent); color: #ffffff; }
+    .btn-emerald { background: #10b981; color: #ffffff; }
+    .btn-fleet { background: #0284c7; color: #ffffff; }
+    .btn-secondary { background: var(--surface-2); border-color: var(--border); color: var(--text-2); }
+    .btn-danger { background: var(--danger-soft); color: var(--danger-text); }
+
+    .groups-list {
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface-2);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .group-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      gap: 10px;
+    }
+
+    .template-selector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+    }
+
+    .template-chip {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: left;
+    }
+
+    .template-chip.active {
+      background: var(--surface);
+      border-color: #0284c7;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+    }
+
+    .template-chip strong { font-size: 13px; color: var(--text); }
+    .template-chip span { font-size: 11.5px; color: var(--text-3); }
+
+    .editor-layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 20px;
+      margin-top: 14px;
+    }
+
+    @media (max-width: 820px) {
+      .editor-layout { grid-template-columns: 1fr; }
+    }
+
+    .textarea-field {
+      width: 100%;
+      height: 260px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.55;
+      resize: vertical;
+    }
+
+    .vars-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .var-pill {
+      background: rgba(2, 132, 199, 0.14);
+      border: 1px solid rgba(2, 132, 199, 0.35);
+      color: #38bdf8;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+    }
+
+    .whatsapp-preview-box {
+      background: #0b141a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 16px;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .whatsapp-bubble {
+      background: #005c4b;
+      color: #e9edef;
+      border-radius: 10px 10px 2px 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      align-self: flex-end;
+      max-width: 92%;
+    }
+
+    .whatsapp-bubble.incoming {
+      background: #202c33;
+      align-self: flex-start;
+      border-radius: 10px 10px 10px 2px;
+    }
+
+    .chat-sim-container {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 520px;
+      background: #0b141a;
+    }
+
+    .chat-sim-header {
+      background: #202c33;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .chat-sim-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .chat-sim-input-area {
+      background: #202c33;
+      padding: 10px 14px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .sim-shortcuts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 14px;
+      background: #111b21;
+    }
+
+    .shortcut-chip {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #d1d5db;
+      font-size: 11.5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .wa-toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .wa-toast {
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #ffffff;
+      box-shadow: var(--shadow-lg);
+    }
+    .wa-toast.success { background: #059669; }
+    .wa-toast.error { background: #e11d48; }
+    .wa-toast.info { background: #0284c7; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/#/frota" aria-label="Nova OS — Frota">
+      <span class="brand-logo" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+      </span>
+      <span>Nova OS<small>Frota WhatsApp</small></span>
+    </a>
+
+    <div class="header-actions" style="gap: 8px;">
+      <a href="/whatsapp" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;">
+        🔧 Ir p/ WhatsApp da Fábrica
+      </a>
+      <a href="/#/frota" class="btn btn-fleet" style="padding: 7px 12px; font-size: 12.5px;">
+        &larr; Voltar para Frota
+      </a>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <div class="page-header">
+      <nav class="breadcrumb">
+        <a href="/#/frota">Gestão de Frota</a>
+        <span>/</span>
+        <span>Central WhatsApp & Evolution da Frota</span>
+      </nav>
+
+      <div class="page-title-row">
+        <div class="page-title-left">
+          <div class="page-icon-badge">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
+            </svg>
+          </div>
+          <div class="page-title-text">
+            <h1>Central WhatsApp Exclusiva da Frota</h1>
+            <p>Fluxo separado por <strong>Placa de Veículo</strong> (comando <code>frota</code>), templates próprios de caminhões, segundo aparelho opcional ou Evolution API dedicada</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-conn">
+        <span>📡 Conexão, Evolution & Grupo da Frota</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-templates">
+        <span>📝 Templates de OS da Frota (Por Placa)</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-sim">
+        <span>🤖 Simulador do Robô da Frota</span>
+      </button>
+    </nav>
+
+    <!-- ABA 1: CONEXÃO, EVOLUTION E GRUPO -->
+    <div id="tab-conn" class="tab-pane active">
+      <div class="wa-card" style="border-color: rgba(2, 132, 199, 0.4);">
+        <div class="wa-card-header">
+          <span class="wa-card-title">💡 Como Funciona o Atendimento Separado da Frota</span>
+          <span class="status-badge connected" id="sharedModeBadge">Ativo no Mesmo Número ou Dedicado</span>
+        </div>
+        <p class="wa-card-desc">
+          • <strong>No mesmo WhatsApp da Manutenção:</strong> Basta o motorista enviar a palavra <strong><code>frota</code></strong> (ou <code>frota RMI1A95</code>) que o robô entra automaticamente no fluxo exclusivo de veículos, pedindo a <strong>Placa</strong> e o <strong>Hodômetro (Km)</strong> sem misturar com as máquinas da fábrica.<br>
+          • <strong>Com um 2º Telefone Exclusivo (abaixo):</strong> Você também pode conectar um segundo número de WhatsApp (via QR Code nativo ou via <strong>Evolution API</strong>). Nesse segundo número, qualquer mensagem recebida já abre direto o fluxo de veículos da Frota!
+        </p>
+      </div>
+
+      <!-- Card 2º Aparelho via QR Code Nativo (Baileys da Frota) -->
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <span class="wa-card-title">📱 2º Telefone Exclusivo da Frota (Conexão Direta por QR Code)</span>
+          <div id="statusBadge" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            <span id="statusText">Verificando...</span>
+          </div>
+        </div>
+
+        <div id="connectedInfo" style="display: none;">
+          <p style="font-size: 14.5px; margin-bottom: 6px;">
+            Aparelho exclusivo da Frota conectado: <strong id="connectedUserText" style="color: var(--ok-text); font-family: var(--font-mono);"></strong>
+          </p>
+          <button id="btnDisconnect" class="btn btn-danger">Desconectar 2º Aparelho</button>
+        </div>
+
+        <div id="qrArea" class="qr-container" style="display: none;">
+          <div class="qr-image-wrapper">
+            <img id="qrImage" src="" alt="QR Code WhatsApp Frota">
+          </div>
+          <p class="wa-card-desc" style="text-align:center">Escaneie com o WhatsApp exclusivo do setor de Frota / Logística.</p>
+        </div>
+
+        <div id="startArea" style="display: none; text-align: center; padding: 10px 0;">
+          <p class="wa-card-desc" id="fallbackNote" style="margin-bottom: 12px;">
+            Nenhum 2º aparelho conectado. O fluxo <strong><code>frota</code></strong> já está funcionando normalmente pelo aparelho principal da Manutenção.
+          </p>
+          <button id="btnInit" class="btn btn-fleet">Conectar 2º Telefone Exclusivo para a Frota (QR Code)</button>
+        </div>
+      </div>
+
+      <!-- Card Evolution API Dedicada da Frota -->
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <span class="wa-card-title">🔗 Configuração Evolution API Exclusiva da Frota (Opcional)</span>
+          <span class="status-badge" id="evoBadge" style="background: var(--surface-2); color: var(--text-3);">Opcional</span>
+        </div>
+        <p class="wa-card-desc">
+          Caso prefira conectar o telefone da Frota através de uma instância separada da <strong>Evolution API v2</strong>, preencha os dados abaixo e aponte o Webhook da instância para:
+          <code id="webhookUrlDisplay" style="background:var(--surface-2);padding:3px 8px;border-radius:6px;font-family:var(--font-mono);color:var(--accent)"></code>
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">URL da Evolution API</label>
+            <input type="text" id="evoUrl" class="input-field" style="width:100%" placeholder="https://evolution.seudominio.com.br" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">Nome da Instância da Frota</label>
+            <input type="text" id="evoInstance" class="input-field" style="width:100%" placeholder="Ex.: frota_rufato" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">API Key / Token da Instância</label>
+            <input type="password" id="evoKey" class="input-field" style="width:100%" placeholder="••••••••••••••••" />
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;font-weight:600">
+            <input type="checkbox" id="evoEnabled" />
+            <span>Usar esta instância Evolution API para os envios da Frota</span>
+          </label>
+          <button id="btnSaveEvo" class="btn btn-fleet">Salvar Configuração Evolution</button>
+        </div>
+      </div>
+
+      <!-- Card Grupo Oficial da Frota -->
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <span class="wa-card-title">👥 Grupo de WhatsApp das Ordens de Serviço da Frota</span>
+          <div id="activeRecipientBadge" class="status-badge connected" style="display:none">
+            <span>🎯 Grupo Frota:</span> <span id="activeRecipientLabel" style="font-family:var(--font-mono)"></span>
+          </div>
+        </div>
+        <p class="wa-card-desc">
+          Selecione em qual grupo os alertas de novas OS de caminhões/veículos serão publicados. Se deixar em branco, usará o grupo geral de manutenção.
+        </p>
+
+        <div class="input-group">
+          <input type="text" id="inviteInput" class="input-field" placeholder="Cole o link de convite do grupo da Frota (https://chat.whatsapp.com/...)" />
+          <button id="btnJoinGroup" class="btn btn-primary">Entrar no Grupo</button>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:13px;font-weight:600;color:var(--text-2)">Grupos Disponíveis no Aparelho:</span>
+            <button id="btnRefreshGroups" class="btn btn-secondary" style="padding:4px 10px;font-size:11.5px">↻ Atualizar Lista</button>
+          </div>
+          <div id="groupsList" class="groups-list">
+            <div style="color:var(--text-3);font-size:13px;padding:8px">Carregando grupos...</div>
+          </div>
+        </div>
+
+        <div class="input-group" style="margin-top:6px">
+          <input type="text" id="targetInput" class="input-field" placeholder="JID do Grupo da Frota ou Telefone para teste" />
+          <button id="btnSendTest" class="btn btn-emerald">Enviar Teste da Frota</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 2: TEMPLATES EXCLUSIVOS DA FROTA -->
+    <div id="tab-templates" class="tab-pane">
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <div>
+            <span class="wa-card-title">📝 Templates Exclusivos das Ordens da Frota</span>
+            <p class="wa-card-desc" style="margin-top:4px">
+              Estes templates são usados apenas quando o chamado é da Frota (solicitando a <strong>Placa</strong> e o <strong>Hodômetro/Km</strong>, sem mexer nos templates da fábrica).
+            </p>
+          </div>
+          <button id="btnRefreshTemplates" class="btn btn-secondary" style="font-size:12px;padding:6px 12px">↻ Recarregar</button>
+        </div>
+
+        <div id="templatesList" class="template-selector-grid"></div>
+
+        <div class="editor-layout" id="templateEditorSection" style="display:none">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div>
+              <strong id="activeTemplateTitle" style="font-size:15px"></strong>
+              <p id="activeTemplateDesc" style="font-size:12.5px;color:var(--text-3);margin-top:3px"></p>
+            </div>
+            <textarea id="templateTextarea" class="textarea-field" spellcheck="false"></textarea>
+            <div>
+              <span style="font-size:12px;font-weight:600;color:var(--text-2)">Variáveis da Frota (clique para inserir):</span>
+              <div id="templateVarsContainer" class="vars-pills"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="btnSaveTemplate" class="btn btn-emerald" style="flex:1">💾 Salvar Template da Frota</button>
+              <button id="btnResetTemplate" class="btn btn-secondary" style="flex:1">↺ Restaurar Padrão</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="whatsapp-preview-box">
+              <div style="font-size:11px;color:#8696a0;text-transform:uppercase;margin-bottom:12px;font-weight:700">Prévia no WhatsApp do Motorista / Grupo</div>
+              <div id="whatsappPreviewBubble" class="whatsapp-bubble"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 3: SIMULADOR DO ROBÔ DA FROTA -->
+    <div id="tab-sim" class="tab-pane">
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <div>
+            <span class="wa-card-title">🤖 Simulador de Abertura de OS da Frota por Placa</span>
+            <p class="wa-card-desc">Teste agora mesmo digitando <code>frota</code> ou uma placa real cadastrada (ex.: <code>RMI1A95</code>, <code>GSW0232</code>, <code>RJP7J99</code>).</p>
+          </div>
+          <button id="btnResetSim" class="btn btn-danger" style="font-size:12px;padding:6px 12px">🗑️ Reiniciar Conversa</button>
+        </div>
+
+        <div class="chat-sim-container">
+          <div class="chat-sim-header">
+            <div style="color:#fff;font-weight:600;font-size:13.5px">🚚 Assistente WhatsApp — Central de Frota Rufato</div>
+          </div>
+
+          <div id="simMessagesContainer" class="chat-sim-messages">
+            <div class="whatsapp-bubble incoming">
+              🚚 Olá! Digite <strong>frota</strong> ou clique em um dos atalhos abaixo para testar a abertura de OS de caminhão pela Placa!
+            </div>
+          </div>
+
+          <div class="sim-shortcuts">
+            <span style="font-size:11.5px;color:#8696a0;align-self:center">Testar:</span>
+            <button class="shortcut-chip" onclick="sendSimText('frota')">frota</button>
+            <button class="shortcut-chip" onclick="sendSimText('RMI1A95')">Placa RMI1A95</button>
+            <button class="shortcut-chip" onclick="sendSimText('GSW0232')">Placa GSW0232</button>
+            <button class="shortcut-chip" onclick="sendSimText('145000')">Km 145000</button>
+            <button class="shortcut-chip" onclick="sendSimText('1')">Opção 1</button>
+            <button class="shortcut-chip" onclick="sendSimText('2')">Opção 2</button>
+            <button class="shortcut-chip" onclick="sendSimText('3')">Opção 3 (Alta)</button>
+            <button class="shortcut-chip" onclick="sendSimText('cancelar')">cancelar</button>
+          </div>
+
+          <div class="chat-sim-input-area">
+            <input type="text" id="simInputText" class="input-field" placeholder="Digite 'frota' ou a placa do veículo..." style="background:rgba(255,255,255,0.06);color:#fff" />
+            <button id="btnSimSend" class="btn btn-fleet">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="wa-toast-container" id="toastContainer"></div>
+
+  <script>
+    document.getElementById('webhookUrlDisplay').textContent = location.origin + '/api/whatsapp-frota/webhook';
+
+    function showToast(msg, type = 'success') {
+      const c = document.getElementById('toastContainer');
+      const t = document.createElement('div');
+      t.className = `wa-toast ${type}`;
+      t.textContent = msg;
+      c.appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+        if (btn.dataset.tab === 'tab-templates') loadTemplates();
+      });
+    });
+
+    let currentActiveRecipient = '';
+    let currentTemplates = [];
+    let selectedTemplateKey = null;
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/whatsapp-frota/status');
+        const data = await res.json();
+
+        const badge = document.getElementById('statusBadge');
+        const statusText = document.getElementById('statusText');
+        const connectedInfo = document.getElementById('connectedInfo');
+        const qrArea = document.getElementById('qrArea');
+        const startArea = document.getElementById('startArea');
+
+        currentActiveRecipient = data.fleetRecipientOnly || data.recipient || '';
+        const recBadge = document.getElementById('activeRecipientBadge');
+        if (currentActiveRecipient) {
+          recBadge.style.display = 'inline-flex';
+          document.getElementById('activeRecipientLabel').textContent = currentActiveRecipient;
+          if (!document.getElementById('targetInput').value) {
+            document.getElementById('targetInput').value = currentActiveRecipient;
+          }
+        } else {
+          recBadge.style.display = 'none';
+        }
+
+        if (data.evolution) {
+          document.getElementById('evoEnabled').checked = !!data.evolution.enabled;
+          if (!document.getElementById('evoUrl').value && data.evolution.url) document.getElementById('evoUrl').value = data.evolution.url;
+          if (!document.getElementById('evoInstance').value && data.evolution.instance) document.getElementById('evoInstance').value = data.evolution.instance;
+          const evoBadge = document.getElementById('evoBadge');
+          if (data.evolution.enabled && data.evolution.url) {
+            evoBadge.className = 'status-badge connected';
+            evoBadge.textContent = 'Evolution Ativa';
+          }
+        }
+
+        badge.className = 'status-badge ' + data.status;
+        if (data.status === 'connected') {
+          statusText.textContent = '2º Aparelho Conectado';
+          connectedInfo.style.display = 'block';
+          qrArea.style.display = 'none';
+          startArea.style.display = 'none';
+          document.getElementById('connectedUserText').textContent = data.user?.id ? data.user.id.split(':')[0] : 'Conectado';
+        } else if (data.status === 'connecting' && data.qrCode) {
+          statusText.textContent = 'Aguardando leitura do QR Code';
+          connectedInfo.style.display = 'none';
+          qrArea.style.display = 'flex';
+          startArea.style.display = 'none';
+          document.getElementById('qrImage').src = data.qrCode;
+        } else {
+          statusText.textContent = data.mainStatus === 'connected' ? 'Usando Aparelho Principal (Comando "frota")' : 'Desconectado';
+          connectedInfo.style.display = 'none';
+          qrArea.style.display = 'none';
+          startArea.style.display = 'block';
+        }
+      } catch (e) {}
+    }
+
+    document.getElementById('btnInit').addEventListener('click', async () => {
+      const btn = document.getElementById('btnInit');
+      btn.disabled = true;
+      btn.textContent = 'Gerando QR Code...';
+      try {
+        await fetch('/api/whatsapp-frota/baileys/connect', { method: 'POST' });
+        showToast('Iniciando conexão do 2º aparelho... Aguarde o QR Code.', 'info');
+        await loadStatus();
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Conectar 2º Telefone Exclusivo para a Frota (QR Code)';
+      }
+    });
+
+    document.getElementById('btnDisconnect').addEventListener('click', async () => {
+      if (!confirm('Desconectar o 2º aparelho exclusivo da Frota?')) return;
+      await fetch('/api/whatsapp-frota/baileys/disconnect', { method: 'POST' });
+      showToast('2º aparelho desconectado.', 'info');
+      loadStatus();
+    });
+
+    document.getElementById('btnSaveEvo').addEventListener('click', async () => {
+      const payload = {
+        enabled: document.getElementById('evoEnabled').checked,
+        url: document.getElementById('evoUrl').value.trim(),
+        instance: document.getElementById('evoInstance').value.trim(),
+        apikey: document.getElementById('evoKey').value.trim(),
+      };
+      const res = await fetch('/api/whatsapp-frota/evolution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        showToast('Configuração da Evolution API da Frota salva!');
+        loadStatus();
+      } else {
+        showToast('Erro ao salvar Evolution API', 'error');
+      }
+    });
+
+    async function loadGroups() {
+      const container = document.getElementById('groupsList');
+      try {
+        const res = await fetch('/api/whatsapp-frota/groups');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.groups) && data.groups.length > 0) {
+          container.innerHTML = data.groups.map(g => {
+            const isSel = g.id === currentActiveRecipient;
+            return `
+              <div class="group-item" style="${isSel ? 'border-color:#0284c7;background:var(--surface-3)' : ''}">
+                <div>
+                  <strong style="display:block;font-size:13px">${g.subject || 'Grupo'} ${isSel ? '<span style="color:#38bdf8;font-size:11px">(Grupo da Frota)</span>' : ''}</strong>
+                  <span style="font-size:11.5px;color:var(--text-3);font-family:var(--font-mono)">${g.id}</span>
+                </div>
+                <button class="btn btn-secondary" style="padding:5px 10px;font-size:11.5px" onclick="selectGroup('${g.id}')">
+                  ${isSel ? '✓ Selecionado' : 'Usar na Frota'}
+                </button>
+              </div>
+            `;
+          }).join('');
+        } else {
+          container.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:8px">Nenhum grupo listado.</div>';
+        }
+      } catch (e) {}
+    }
+
+    document.getElementById('btnRefreshGroups').addEventListener('click', loadGroups);
+
+    window.selectGroup = async function(jid) {
+      const res = await fetch('/api/whatsapp-frota/recipient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: jid }),
+      });
+      if (res.ok) {
+        showToast('Grupo oficial da Frota atualizado!');
+        await loadStatus();
+        await loadGroups();
+      }
+    };
+
+    document.getElementById('btnJoinGroup').addEventListener('click', async () => {
+      const link = document.getElementById('inviteInput').value.trim();
+      if (!link) return showToast('Cole o link do grupo', 'error');
+      const res = await fetch('/api/whatsapp-frota/group/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteLink: link }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        showToast('Grupo da Frota conectado!');
+        document.getElementById('inviteInput').value = '';
+        loadStatus();
+        loadGroups();
+      } else {
+        showToast(data.error || 'Erro ao entrar no grupo', 'error');
+      }
+    });
+
+    document.getElementById('btnSendTest').addEventListener('click', async () => {
+      const to = document.getElementById('targetInput').value.trim();
+      const res = await fetch('/api/whatsapp-frota/test-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) showToast('Mensagem de teste da Frota enviada!');
+      else showToast(data.error || 'Falha no envio', 'error');
+    });
+
+    // TEMPLATES DA FROTA
+    async function loadTemplates() {
+      const res = await fetch('/api/whatsapp-frota/templates');
+      const data = await res.json();
+      if (!data.ok) return;
+      currentTemplates = data.templates || [];
+      const list = document.getElementById('templatesList');
+      list.innerHTML = currentTemplates.map(t => `
+        <button class="template-chip ${t.key === selectedTemplateKey ? 'active' : ''}" onclick="selectTemplate('${t.key}')">
+          <strong>${t.name}</strong>
+          <span>${t.description || t.key}</span>
+        </button>
+      `).join('');
+      if (!selectedTemplateKey && currentTemplates.length) selectTemplate(currentTemplates[0].key);
+      else if (selectedTemplateKey) selectTemplate(selectedTemplateKey);
+    }
+
+    document.getElementById('btnRefreshTemplates').addEventListener('click', loadTemplates);
+
+    window.selectTemplate = function(key) {
+      selectedTemplateKey = key;
+      document.querySelectorAll('.template-chip').forEach(c => c.classList.remove('active'));
+      const activeChip = Array.from(document.querySelectorAll('.template-chip')).find(c => c.getAttribute('onclick')?.includes(key));
+      if (activeChip) activeChip.classList.add('active');
+
+      const tpl = currentTemplates.find(t => t.key === key);
+      if (!tpl) return;
+      document.getElementById('templateEditorSection').style.display = 'grid';
+      document.getElementById('activeTemplateTitle').textContent = tpl.name;
+      document.getElementById('activeTemplateDesc').textContent = tpl.description || '';
+      document.getElementById('templateTextarea').value = tpl.template;
+
+      const vars = Array.isArray(tpl.variables) ? tpl.variables : [];
+      document.getElementById('templateVarsContainer').innerHTML = vars.map(v => `<span class="var-pill" onclick="insertVariable('${v}')">${v}</span>`).join('');
+      updatePreview();
+    };
+
+    window.insertVariable = function(v) {
+      const ta = document.getElementById('templateTextarea');
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      ta.value = ta.value.substring(0, s) + v + ta.value.substring(e);
+      ta.focus();
+      updatePreview();
+    };
+
+    function updatePreview() {
+      const raw = document.getElementById('templateTextarea').value;
+      document.getElementById('whatsappPreviewBubble').innerHTML = raw
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+        .replace(/_(.*?)_/g, '<em>$1</em>');
+    }
+
+    document.getElementById('templateTextarea').addEventListener('input', updatePreview);
+
+    document.getElementById('btnSaveTemplate').addEventListener('click', async () => {
+      if (!selectedTemplateKey) return;
+      const template = document.getElementById('templateTextarea').value;
+      const res = await fetch(`/api/whatsapp/templates/${encodeURIComponent(selectedTemplateKey)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template }),
+      });
+      if (res.ok) {
+        showToast('Template da Frota salvo com sucesso!');
+        loadTemplates();
+      } else {
+        showToast('Erro ao salvar template', 'error');
+      }
+    });
+
+    document.getElementById('btnResetTemplate').addEventListener('click', async () => {
+      if (!selectedTemplateKey || !confirm('Restaurar texto padrão deste template da Frota?')) return;
+      await fetch(`/api/whatsapp/templates/${encodeURIComponent(selectedTemplateKey)}/reset`, { method: 'POST' });
+      showToast('Template restaurado!', 'info');
+      loadTemplates();
+    });
+
+    // SIMULADOR DA FROTA
+    const simPhone = '5532985048360';
+    async function sendSimMessage(text) {
+      if (!text || !text.trim()) return;
+      const container = document.getElementById('simMessagesContainer');
+      const u = document.createElement('div');
+      u.className = 'whatsapp-bubble';
+      u.textContent = text;
+      container.appendChild(u);
+      container.scrollTop = container.scrollHeight;
+      document.getElementById('simInputText').value = '';
+
+      const res = await fetch('/api/whatsapp-frota/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: simPhone, pushName: 'Motorista Rufato', text }),
+      });
+      const data = await res.json();
+      if (data.ok && data.response) {
+        const b = document.createElement('div');
+        b.className = 'whatsapp-bubble incoming';
+        b.innerHTML = data.response
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+          .replace(/_(.*?)_/g, '<em>$1</em>');
+        container.appendChild(b);
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    window.sendSimText = sendSimMessage;
+    document.getElementById('btnSimSend').addEventListener('click', () => sendSimMessage(document.getElementById('simInputText').value));
+    document.getElementById('simInputText').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendSimMessage(document.getElementById('simInputText').value);
+    });
+    document.getElementById('btnResetSim').addEventListener('click', async () => {
+      await fetch('/api/whatsapp/sessions/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: simPhone }),
+      });
+      document.getElementById('simMessagesContainer').innerHTML = `
+        <div class="whatsapp-bubble incoming">
+          🔄 Conversa reiniciada! Digite <strong>frota</strong> ou uma placa (ex.: <strong>RMI1A95</strong>) para testar.
+        </div>
+      `;
+    });
+
+    loadStatus();
+    loadGroups();
+    setInterval(loadStatus, 4000);
+  </script>
+</body>
+</html>

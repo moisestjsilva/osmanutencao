@@ -340,6 +340,7 @@ export function fleetView(root, params = {}) {
     topActions.innerHTML = `
       <button class="btn" id="qa-ck">${icon('check', 16)} Realizar Checklist</button>
       ${access === 'gestor' ? `
+        <a href="/whatsapp-frota" target="_blank" rel="noopener noreferrer" class="btn" style="text-decoration:none;border-color:rgba(14,165,233,0.4);color:var(--info)">${icon('message', 16)} Robô WhatsApp Frota</a>
         <button class="btn" id="qa-fuel">${icon('fuel', 16)} + Abastecimento</button>
         <button class="btn" id="qa-trip">${icon('route', 16)} + Viagem</button>
         <button class="btn primary" id="qa-veh">${icon('plus', 16)} Novo Caminhão</button>
@@ -2048,3 +2049,4 @@ export function fleetView(root, params = {}) {
   renderCurrentTab();
   return () => { alive = false; };
 }
+

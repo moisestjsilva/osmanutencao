@@ -379,5 +379,270 @@ export async function disconnectBaileys() {
     fs.mkdirSync(AUTH_DIR, { recursive: true });
   } catch (_) {}
 
-  return { success: true, message: 'Sessão desconectada e credenciais removidas.' };
+  return { ok: true };
 }
+
+// =========================================================================
+// SEGUNDA INSTÂNCIA DEDICADA À FROTA (OPCIONAL - SEGUNDO APARELHO)
+// =========================================================================
+const FLEET_AUTH_DIR = path.join(DATA_DIR, 'whatsapp_fleet_auth');
+if (!fs.existsSync(FLEET_AUTH_DIR)) {
+  fs.mkdirSync(FLEET_AUTH_DIR, { recursive: true });
+}
+
+let fleetSock = null;
+let fleetQrDataUrl = null;
+let fleetStatus = 'disconnected';
+let fleetUser = null;
+let fleetReconnectTimer = null;
+let fleetInitializing = false;
+let fleetIncomingHandler = null;
+
+export function getFleetBaileysStatus() {
+  return {
+    status: fleetStatus,
+    user: fleetUser,
+    qrCode: fleetQrDataUrl,
+    hasAuth: fs.existsSync(path.join(FLEET_AUTH_DIR, 'creds.json')),
+  };
+}
+
+export function onFleetBaileysMessage(handler) {
+  fleetIncomingHandler = handler;
+}
+
+export async function initFleetBaileys(forceNew = false) {
+  if (fleetInitializing && !forceNew) return { status: fleetStatus, user: fleetUser };
+  if (fleetSock && fleetStatus === 'connected' && !forceNew) return { status: fleetStatus, user: fleetUser };
+
+  if (fleetSock) {
+    try {
+      fleetSock.ev.removeAllListeners();
+      fleetSock.end(undefined);
+    } catch (_) {}
+    fleetSock = null;
+  }
+
+  fleetInitializing = true;
+  fleetStatus = 'connecting';
+  console.info('[WhatsApp-Frota] Iniciando instância dedicada de WhatsApp da Frota...');
+
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(FLEET_AUTH_DIR);
+    let version = undefined;
+    try {
+      const vInfo = await fetchLatestBaileysVersion();
+      version = vInfo.version;
+    } catch (_) {}
+
+    fleetSock = makeWASocket({
+      version,
+      auth: state,
+      logger: pino({ level: 'silent' }),
+      printQRInTerminal: false,
+      browser: ['Nova OS Frota', 'Chrome', '1.0.0'],
+      defaultQueryTimeoutMs: 60000,
+    });
+
+    fleetSock.ev.on('creds.update', saveCreds);
+
+    fleetSock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+      if (qr) {
+        try {
+          fleetQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 7 });
+        } catch (_) {}
+        fleetStatus = 'connecting';
+        fleetInitializing = false;
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        fleetStatus = 'disconnected';
+        fleetUser = null;
+        fleetInitializing = false;
+        if (shouldReconnect) {
+          if (!fleetReconnectTimer) {
+            fleetReconnectTimer = setTimeout(() => {
+              fleetReconnectTimer = null;
+              initFleetBaileys();
+            }, 5000);
+          }
+        } else {
+          try {
+            fs.rmSync(FLEET_AUTH_DIR, { recursive: true, force: true });
+            fs.mkdirSync(FLEET_AUTH_DIR, { recursive: true });
+          } catch (_) {}
+          fleetQrDataUrl = null;
+        }
+      } else if (connection === 'open') {
+        fleetStatus = 'connected';
+        fleetInitializing = false;
+        fleetQrDataUrl = null;
+        fleetUser = fleetSock.user;
+        console.info(`[WhatsApp-Frota] ✅ WHATSAPP DA FROTA CONECTADO! ID: ${fleetUser?.id || 'Conectado'}`);
+      }
+    });
+
+    fleetSock.ev.on('messages.upsert', async ({ messages, type }) => {
+      if (type !== 'notify' && type !== 'append') return;
+      for (const m of messages) {
+        if (!m.message || m.key.fromMe) continue;
+        const jid = m.key.remoteJid;
+        if (!jid || jid === 'status@broadcast') continue;
+
+        const content = extractMessageContent(m.message);
+        if (!content) continue;
+
+        const imageMsg = content.imageMessage || (content.documentMessage?.mimetype?.startsWith('image/') ? content.documentMessage : null);
+        let text =
+          content.conversation ||
+          content.extendedTextMessage?.text ||
+          content.imageMessage?.caption ||
+          content.documentMessage?.caption ||
+          '';
+
+        let mediaAttachment = null;
+        if (imageMsg) {
+          try {
+            const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: fleetSock?.updateMediaMessage });
+            if (buffer && buffer.length > 0) {
+              const mime = imageMsg.mimetype || 'image/jpeg';
+              const ext = mime.includes('png') ? 'png' : (mime.includes('webp') ? 'webp' : 'jpg');
+              const attId = randomUUID();
+              const filename = `wa-frota-${Date.now()}-${attId.slice(0, 8)}.${ext}`;
+              fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+              mediaAttachment = { id: attId, file: filename, mime, size: buffer.length };
+            }
+          } catch (_) {}
+        }
+
+        if (!text && mediaAttachment) text = 'Registro fotográfico anexado';
+        if (!text || !text.trim()) continue;
+
+        const pushName = m.pushName || '';
+        const isGroup = jid.endsWith('@g.us');
+        let sender = isGroup ? (m.key.participant || jid) : jid;
+
+        if (sender.endsWith('@lid')) {
+          const alt = isGroup ? m.key.participantAlt : m.key.remoteJidAlt;
+          let pn = alt && alt.includes('@s.whatsapp.net') ? alt : null;
+          if (!pn) {
+            try { pn = await fleetSock.signalRepository?.lidMapping?.getPNForLID(sender); } catch (_) {}
+          }
+          if (pn) sender = pn;
+        }
+
+        if (fleetIncomingHandler) {
+          try {
+            await fleetIncomingHandler({
+              jid,
+              sender,
+              text: text.trim(),
+              pushName,
+              isGroup,
+              mediaAttachment,
+              presence: async (presenceType) => {
+                if (fleetSock && fleetStatus === 'connected') {
+                  try {
+                    const targetJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`;
+                    await fleetSock.sendPresenceUpdate(presenceType, targetJid);
+                  } catch (_) {}
+                }
+              },
+              reply: async (replyText) => sendFleetBaileysMessage({ to: jid, text: replyText }),
+            });
+          } catch (err) {
+            console.error('[WhatsApp-Frota] Erro ao processar mensagem:', err.message);
+          }
+        }
+      }
+    });
+
+    return { status: fleetStatus };
+  } catch (err) {
+    fleetInitializing = false;
+    fleetStatus = 'disconnected';
+    throw err;
+  }
+}
+
+export async function sendFleetBaileysMessage({ to, text, image, caption }) {
+  if (fleetStatus === 'connecting') {
+    const start = Date.now();
+    while (fleetStatus === 'connecting' && Date.now() - start < 4000) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  if (!fleetSock || fleetStatus !== 'connected') {
+    throw new Error('WhatsApp exclusivo da Frota não está conectado.');
+  }
+
+  let jid = String(to || '').trim();
+  if (jid.includes('@g.us')) {
+    // Grupo
+  } else if (jid.includes('@')) {
+    const [userPart, server] = jid.split('@');
+    jid = `${userPart.split(':')[0].replace(/\D/g, '')}@${server}`;
+  } else if (jid.length > 15) {
+    jid = `${jid}@g.us`;
+  } else {
+    jid = `${jid.split('@')[0].split(':')[0].replace(/\D/g, '')}@s.whatsapp.net`;
+  }
+
+  let content;
+  if (image) {
+    const imgBuffer = Buffer.isBuffer(image) ? image : fs.readFileSync(image);
+    content = { image: imgBuffer, caption: caption || text || '' };
+  } else {
+    content = { text: String(text || '') };
+  }
+  const result = await fleetSock.sendMessage(jid, content);
+  return { success: true, provider: 'baileys-fleet', messageId: result.key?.id, to: jid };
+}
+
+export async function joinFleetGroupByInvite(inviteLinkOrCode) {
+  if (!fleetSock || fleetStatus !== 'connected') {
+    throw new Error('Conecte o WhatsApp da Frota antes de entrar no grupo.');
+  }
+  let code = String(inviteLinkOrCode || '').trim();
+  const match = code.match(/chat\.whatsapp\.com\/([A-Za-z0-9_-]+)/);
+  if (match) code = match[1];
+  const groupJid = await fleetSock.groupAcceptInvite(code);
+  return { success: true, groupJid: groupJid.endsWith('@g.us') ? groupJid : `${groupJid}@g.us` };
+}
+
+export async function listFleetParticipatingGroups() {
+  if (!fleetSock || fleetStatus !== 'connected') return [];
+  try {
+    const groups = await fleetSock.groupFetchAllParticipating();
+    return Object.values(groups).map((g) => ({
+      id: g.id,
+      subject: g.subject,
+      participantsCount: g.participants?.length || 0,
+      creation: g.creation,
+    }));
+  } catch (_) {
+    return [];
+  }
+}
+
+export async function disconnectFleetBaileys() {
+  try {
+    if (fleetSock) {
+      await fleetSock.logout().catch(() => {});
+      fleetSock.end(undefined);
+    }
+  } catch (_) {}
+  fleetSock = null;
+  fleetStatus = 'disconnected';
+  fleetUser = null;
+  fleetQrDataUrl = null;
+  try {
+    fs.rmSync(FLEET_AUTH_DIR, { recursive: true, force: true });
+    fs.mkdirSync(FLEET_AUTH_DIR, { recursive: true });
+  } catch (_) {}
+  return { success: true };
+}
+

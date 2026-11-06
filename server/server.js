@@ -37,6 +37,13 @@ import {
   disconnectBaileys,
   onBaileysMessage,
   sendWhatsAppMessage,
+  getFleetBaileysStatus,
+  initFleetBaileys,
+  sendFleetWhatsAppMessage,
+  joinFleetGroupByInvite,
+  listFleetParticipatingGroups,
+  disconnectFleetBaileys,
+  onFleetBaileysMessage,
 } from './whatsapp.js';
 import {
   processIncomingWhatsAppMessage,
@@ -47,6 +54,7 @@ import {
   listActiveSessions,
   deleteSession as deleteBotSession,
   cleanDigits,
+  seedDefaultTemplates,
 } from './whatsapp-bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +77,7 @@ const PORT = Number(process.env.PORT || 3000);
 let db = openDb();
 seedAuthUsers(db);
 migrateFleet(db);
+seedDefaultTemplates(db);
 initMySQLSync(db);
 
 // Conecta o listener do Baileys ao processador de Chatbot de Abertura de OS
@@ -89,12 +98,34 @@ onBaileysMessage(async ({ jid, sender, text, pushName, isGroup, mediaAttachment,
   }
 });
 
+// Conecta o listener da segunda instância Baileys (Exclusiva da Frota, se pareada)
+onFleetBaileysMessage(async ({ jid, sender, text, pushName, isGroup, mediaAttachment, presence, reply }) => {
+  try {
+    console.log(`[WhatsApp-Frota] 🚚 Mensagem recebida de ${sender || jid} (${pushName || 'sem nome'}): "${text}"`);
+    await processIncomingWhatsAppMessage(db, {
+      from: sender || jid,
+      text,
+      pushName,
+      isGroup,
+      mediaAttachment,
+      presenceFn: presence,
+      replyFn: reply,
+      forceFleetMode: true,
+    });
+  } catch (err) {
+    console.error('[WhatsApp-Frota] Erro ao processar mensagem recebida:', err.message);
+  }
+});
+
 // Auto-conecta ao iniciar se houver sessão Baileys salva
 if (isWhatsAppEnabled() && getWhatsAppProvider() === 'baileys') {
   const bState = getBaileysStatus();
   if (bState.hasAuth) {
     initBaileys().catch((e) => console.warn('[WhatsApp-Baileys] Conexão automática ao iniciar:', e.message));
   }
+}
+if (getFleetBaileysStatus().hasAuth) {
+  initFleetBaileys().catch((e) => console.warn('[WhatsApp-Frota] Conexão automática ao iniciar:', e.message));
 }
 
 const app = express();
@@ -889,6 +920,185 @@ app.get('/whatsapp', (req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'whatsapp.html'));
 });
 
+app.get('/whatsapp-frota', (req, res) => {
+  res.sendFile(path.join(ROOT, 'public', 'whatsapp-frota.html'));
+});
+
+// ---------- APIs Exclusivas da Central WhatsApp da Frota ----------
+app.get('/api/whatsapp-frota/status', (req, res) => {
+  const fb = getFleetBaileysStatus();
+  const mainB = getBaileysStatus();
+  const recipient = getSetting(db, 'fleet_whatsapp_group_id', '') || getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID || '');
+  res.json({
+    ...fb,
+    mainStatus: mainB.status,
+    mainUser: mainB.user,
+    recipient,
+    fleetRecipientOnly: getSetting(db, 'fleet_whatsapp_group_id', ''),
+    evolution: {
+      enabled: getSetting(db, 'fleet_evolution_enabled', '0') === '1',
+      url: getSetting(db, 'fleet_evolution_url', ''),
+      instance: getSetting(db, 'fleet_evolution_instance', ''),
+      hasApiKey: !!getSetting(db, 'fleet_evolution_apikey', ''),
+    },
+  });
+});
+
+app.post('/api/whatsapp-frota/evolution', (req, res) => {
+  try {
+    const { enabled, url, instance, apikey } = req.body || {};
+    if (enabled !== undefined) setSetting(db, 'fleet_evolution_enabled', enabled ? '1' : '0');
+    if (typeof url === 'string') setSetting(db, 'fleet_evolution_url', url.trim());
+    if (typeof instance === 'string') setSetting(db, 'fleet_evolution_instance', instance.trim());
+    if (typeof apikey === 'string' && apikey.trim() !== '') setSetting(db, 'fleet_evolution_apikey', apikey.trim());
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/baileys/connect', async (req, res) => {
+  try {
+    const result = await initFleetBaileys(true);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/baileys/disconnect', async (req, res) => {
+  try {
+    const result = await disconnectFleetBaileys();
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/whatsapp-frota/groups', async (req, res) => {
+  try {
+    let groups = await listFleetParticipatingGroups();
+    if (!groups.length) {
+      groups = await listParticipatingGroups();
+    }
+    res.json({ ok: true, groups });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/group/join', async (req, res) => {
+  try {
+    const invite = (req.body?.inviteLink || req.body?.invite || '').trim();
+    if (!invite) return res.status(400).json({ error: 'Informe o link de convite do grupo' });
+    const fb = getFleetBaileysStatus();
+    const result = fb.status === 'connected' ? await joinFleetGroupByInvite(invite) : await joinGroupByInvite(invite);
+    const groupJid = result?.groupJid || result?.jid || result?.id || result;
+    if (groupJid) setSetting(db, 'fleet_whatsapp_group_id', String(groupJid));
+    res.json({ ok: true, groupJid, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/recipient', (req, res) => {
+  try {
+    const recipient = String(req.body?.recipient || '').trim();
+    setSetting(db, 'fleet_whatsapp_group_id', recipient);
+    res.json({ ok: true, recipient });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/test-send', async (req, res) => {
+  try {
+    const to = req.body?.to || req.body?.target || getSetting(db, 'fleet_whatsapp_group_id', '');
+    const text = req.body?.text || '🚚 *Teste de Canal WhatsApp — Gestão de Frota (Nova OS)*\n\nEste canal está configurado para receber alertas e ordens de serviço de veículos da Frota!';
+    const result = await sendFleetWhatsAppMessage({ to, text }, db);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/whatsapp-frota/templates', (req, res) => {
+  try {
+    const all = getTemplates(db);
+    const templates = all.filter((t) => t.key.startsWith('fleet_') || t.category === 'frota' || t.category === 'frota_grupo');
+    res.json({ ok: true, templates });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/simulate', async (req, res) => {
+  try {
+    const { phone, text, pushName } = req.body || {};
+    let capturedReply = null;
+    const result = await processIncomingWhatsAppMessage(db, {
+      from: phone || '553299999999',
+      text: text || 'frota',
+      pushName: pushName || 'Motorista Simulador',
+      isGroup: false,
+      forceFleetMode: true,
+      replyFn: async (msg) => {
+        capturedReply = msg;
+        return { ok: true, text: msg };
+      },
+    });
+    res.json({
+      ok: true,
+      result,
+      orderCreated: Boolean(result?.orderCreated),
+      workOrder: result?.workOrder || null,
+      reply: capturedReply || result?.response || 'Mensagem processada.',
+      response: capturedReply || result?.response || 'Mensagem processada.',
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/whatsapp-frota/webhook', async (req, res) => {
+  try {
+    const body = req.body || {};
+    let sender = '';
+    let text = '';
+    let pushName = '';
+    let isGroup = false;
+
+    if (body.event === 'messages.upsert' && body.data) {
+      const data = body.data;
+      if (data.key?.fromMe) return res.json({ ignored: true });
+      const remoteJid = data.key?.remoteJid || '';
+      isGroup = remoteJid.endsWith('@g.us');
+      sender = isGroup ? (data.key?.participant || remoteJid) : remoteJid;
+      pushName = data.pushName || '';
+      text = data.message?.conversation || data.message?.extendedTextMessage?.text || data.message?.imageMessage?.caption || '';
+    } else if (body.phone || body.sender || body.number) {
+      sender = body.phone || body.sender || body.number;
+      text = body.text || body.message || '';
+      pushName = body.pushName || body.name || '';
+      isGroup = String(sender).includes('@g.us');
+    }
+
+    if (!sender || !text) return res.json({ skipped: true });
+
+    const result = await processIncomingWhatsAppMessage(db, {
+      from: sender,
+      text,
+      pushName,
+      isGroup,
+      forceFleetMode: true,
+      replyFn: async (replyText) => sendFleetWhatsAppMessage({ to: sender, text: replyText }, db),
+    });
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/whatsapp/status', (req, res) => {
   const baileysState = getBaileysStatus();
   const currentRecipient = getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID || '');
@@ -1000,7 +1210,10 @@ app.post('/api/whatsapp/test-send', handleTestSend);
 // Gerenciamento de Templates do WhatsApp
 app.get('/api/whatsapp/templates', (req, res) => {
   try {
-    const templates = getTemplates(db);
+    const all = getTemplates(db);
+    const templates = req.query.scope === 'all'
+      ? all
+      : all.filter((t) => !t.key.startsWith('fleet_') && t.category !== 'frota' && t.category !== 'frota_grupo');
     res.json({ ok: true, templates });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1095,6 +1308,9 @@ app.post('/api/whatsapp/simulate', async (req, res) => {
     res.json({
       ok: true,
       result,
+      orderCreated: Boolean(result?.orderCreated),
+      workOrder: result?.workOrder || null,
+      reply: capturedReply || result?.response || 'Mensagem processada.',
       response: capturedReply || result?.response || 'Mensagem processada.',
     });
   } catch (e) {

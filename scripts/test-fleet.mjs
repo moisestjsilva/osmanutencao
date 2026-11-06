@@ -133,6 +133,65 @@ async function main() {
   console.log('Exclusão');
   r = await call('DELETE', `/api/fleet/vehicles/${V.id}`, null, adm); assert.equal(r.soft, true); ok('veículo com histórico é apenas inativado');
 
+  console.log('Robô WhatsApp da Frota (Separado por Placa + Evolution)');
+  await call('POST', '/api/whatsapp/delay', { delay: 0 }, adm);
+  r = await call('POST', '/api/fleet/vehicles', { plate: 'RMI1A95', brand: 'MERCEDES', model: 'ACCELO 1016 2P', type: 'vuc', odometer_km: 150000 }, adm);
+  assert.equal(r.status, 201);
+  ok('veículo RMI1A95 cadastrado para teste do WhatsApp da Frota');
+  r = await call('GET', '/api/whatsapp/templates', null, adm);
+  assert.equal(r.status, 200);
+  assert.ok(r.templates.length > 0 && r.templates.every((t) => !String(t.category || '').startsWith('frota')), 'templates da fábrica não devem misturar com frota');
+  ok('templates da fábrica permanecem 100% isolados');
+
+  r = await call('GET', '/api/whatsapp-frota/templates', null, adm);
+  assert.equal(r.status, 200);
+  assert.ok(r.templates.length >= 10 && r.templates.some((t) => t.key === 'fleet_bot_ask_plate'), 'templates da frota presentes');
+  ok(`${r.templates.length} templates exclusivos da frota carregados`);
+
+  // Teste fluxo normal da fábrica (não pode quebrar)
+  r = await call('POST', '/api/whatsapp/simulate', { phone: '5532999990001', text: 'oi' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /Nova OS|Nome Completo/i);
+  r = await call('POST', '/api/whatsapp/simulate', { phone: '5532999990001', text: 'mecanico1' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /TAG/i);
+  ok('fluxo de OS da fábrica continua intacto (identifica colaborador e pede TAG)');
+
+  // Teste gatilho "frota" no WhatsApp principal
+  r = await call('POST', '/api/whatsapp/simulate', { phone: '5532999990002', text: 'frota' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /PLACA/i);
+  ok('digitar "frota" inicia fluxo separado solicitando a PLACA');
+
+  // Continuar fluxo da frota até abrir OS por placa (RMI1A95)
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990002', text: 'RMI1A95' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /RMI1A95/);
+  assert.match(r.reply, /KM/i);
+  ok('placa RMI1A95 localizada no cadastro da frota e solicita KM');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990002', text: '158400' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /urgência|prioridade/i);
+  ok('hodômetro 158.400 km recebido e solicita prioridade');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990002', text: '3' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /imobilizado|parado/i);
+  ok('prioridade alta selecionada e pergunta se o caminhão está parado');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990002', text: '1' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /defeito|problema|foto/i);
+  ok('status parado selecionado e solicita descrição/foto do problema');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990002', text: 'Vazamento de ar na cuíca de freio traseira' }, adm);
+  assert.equal(r.status, 200);
+  assert.equal(r.orderCreated, true);
+  assert.match(r.reply, /OS DE FROTA #\d+ ABERTA COM SUCESSO/i);
+  assert.match(r.reply, /RMI1A95/);
+  ok(`OS da frota aberta via WhatsApp por placa (#${r.workOrder?.number})`);
+
   console.log(`\n${pass} verificações OK`);
 }
 

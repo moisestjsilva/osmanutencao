@@ -1708,7 +1708,8 @@ export function moreView(root) {
     ...(isAdm ? [
       ['#/usuarios', 'users', isSuper ? 'Gestão de Usuários e Manutentores' : 'Gestão de Manutentores', 'Cadastrar equipe, gerenciar acessos e senhas'],
       ['#/cadastros', 'factory', 'Central de Cadastros', 'Máquinas, TAGs, setores e fichas padrão'],
-      ['/whatsapp', 'message', 'Robô WhatsApp & Templates de OS', 'Ajustar mensagens do bot, testes, pareamento QR e grupo de alertas'],
+      ['/whatsapp', 'message', 'Robô WhatsApp & Templates de OS (Fábrica)', 'Ajustar mensagens do bot industrial, pareamento QR e grupo de manutenção'],
+      ['/whatsapp-frota', 'truck', 'Robô WhatsApp & Evolution da Frota (Por Placa)', 'Conexão exclusiva ou Evolution API, grupo da frota e templates por placa'],
     ] : []),
     ['#/config', 'cog', 'Configurações do Sistema', isSuper ? 'Aparência, notificações push, WhatsApp e preferências' : 'Aparência e notificações push no aparelho'],
     ['#/etiquetas', 'qr', 'Máquinas e etiquetas QR', 'Visualização e impressão de todas as etiquetas QR'],
@@ -1743,6 +1744,8 @@ export function moreView(root) {
     if (!b) return;
     if (b.dataset.go === '/whatsapp' || b.dataset.go === 'https://os.moveisrufato.com.br/whatsapp') {
       window.open('/whatsapp', '_blank');
+    } else if (b.dataset.go === '/whatsapp-frota' || b.dataset.go === 'https://os.moveisrufato.com.br/whatsapp-frota') {
+      window.open('/whatsapp-frota', '_blank');
     } else if (b.dataset.go === 'chpass') {
       changePasswordModal();
     } else if (b.dataset.go === 'logout') {
@@ -2480,9 +2483,11 @@ export function configView(root) {
             </p>
             <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
               <a href="/whatsapp" target="_blank" rel="noopener noreferrer" class="btn primary sm" id="btn-open-whatsapp" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#25d366;border-color:#25d366;color:#ffffff;font-weight:600;box-shadow:0 2px 8px rgba(37,211,102,0.3)">
-                ${icon('message', 18)} Abrir Robô & Templates WhatsApp ↗
+                ${icon('message', 18)} WhatsApp Fábrica (/whatsapp) ↗
               </a>
-              <span class="muted xs" style="font-family:monospace;opacity:0.8">/whatsapp</span>
+              <a href="/whatsapp-frota" target="_blank" rel="noopener noreferrer" class="btn primary sm" id="btn-open-whatsapp-frota" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#0284c7;border-color:#0284c7;color:#ffffff;font-weight:600;box-shadow:0 2px 8px rgba(2,132,199,0.3)">
+                ${icon('truck', 18)} WhatsApp & Evolution da Frota (/whatsapp-frota) ↗
+              </a>
             </div>
           </div>
         </div>

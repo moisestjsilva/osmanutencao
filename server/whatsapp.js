@@ -25,8 +25,16 @@ import {
   listParticipatingGroups,
   disconnectBaileys,
   onBaileysMessage,
+  getFleetBaileysStatus,
+  initFleetBaileys,
+  sendFleetBaileysMessage,
+  joinFleetGroupByInvite,
+  listFleetParticipatingGroups,
+  disconnectFleetBaileys,
+  onFleetBaileysMessage,
 } from './baileys.js';
 import { renderTemplate } from './whatsapp-bot.js';
+import { getSetting } from './domain.js';
 
 export function isWhatsAppEnabled(db = null) {
   // 1. Se Baileys estiver conectado ou autenticado no aparelho, WhatsApp está ativo!
@@ -280,17 +288,44 @@ export async function sendWhatsAppMessage({ to, text, image = null }) {
  * a abertura da OS no banco de dados.
  */
 export async function notifyNewOrderWhatsApp(orderData, recipient = null, db = null) {
-  const bState = getBaileysStatus();
-  const isEnabled = (bState && (bState.status === 'connected' || bState.hasAuth)) || isWhatsAppEnabled();
-  if (!isEnabled) return;
+  const isFleetOrder = String(orderData?.sector || '').trim().toUpperCase() === 'FROTA';
 
   try {
-    const text = formatNewOrderMessage(orderData, db);
     let imagePath = null;
     if (orderData.photoFile) {
       const candidate = path.join(UPLOAD_DIR, path.basename(orderData.photoFile));
       if (fs.existsSync(candidate)) imagePath = candidate;
     }
+
+    if (isFleetOrder) {
+      let kmVal = orderData.km;
+      if (kmVal == null && db && orderData.tag) {
+        const veh = db.prepare('SELECT odometer_km FROM fleet_vehicles WHERE UPPER(plate) = UPPER(?)').get(orderData.tag);
+        if (veh) kmVal = veh.odometer_km;
+      }
+      const text = formatFleetOrderMessage({
+        number: orderData.number,
+        type: orderData.type,
+        priority: orderData.priority,
+        machineStopped: orderData.machineStopped,
+        vehicle: orderData.machine,
+        plate: orderData.tag,
+        km: kmVal,
+        description: orderData.description,
+        hasPhoto: orderData.hasPhoto,
+        requesterName: orderData.requesterName,
+        responsibleName: orderData.responsibleName,
+      }, db);
+      const fleetGroup = db ? getSetting(db, 'fleet_whatsapp_group_id', '') : '';
+      await sendFleetWhatsAppMessage({ to: fleetGroup || recipient, text, image: imagePath }, db);
+      return;
+    }
+
+    const bState = getBaileysStatus();
+    const isEnabled = (bState && (bState.status === 'connected' || bState.hasAuth)) || isWhatsAppEnabled();
+    if (!isEnabled) return;
+
+    const text = formatNewOrderMessage(orderData, db);
     await sendWhatsAppMessage({ to: recipient, text, image: imagePath });
   } catch (err) {
     // Registra o alerta no console sem propagar o erro
@@ -326,4 +361,116 @@ export {
   listParticipatingGroups,
   disconnectBaileys,
   onBaileysMessage,
+  getFleetBaileysStatus,
+  initFleetBaileys,
+  sendFleetBaileysMessage,
+  joinFleetGroupByInvite,
+  listFleetParticipatingGroups,
+  disconnectFleetBaileys,
+  onFleetBaileysMessage,
 };
+
+/**
+ * Envia mensagem pelo canal de WhatsApp da Frota:
+ * 1) Se Evolution dedicada da Frota estiver configurada e ativa -> envia via Evolution da Frota
+ * 2) Se Aparelho Baileys exclusivo da Frota estiver conectado -> envia via Baileys da Frota
+ * 3) Caso contrário -> usa o WhatsApp principal da Manutenção como fallback transparente
+ */
+export async function sendFleetWhatsAppMessage({ to, text, image = null }, db = null) {
+  const fleetGroup = db ? getSetting(db, 'fleet_whatsapp_group_id', '') : '';
+  const mainGroup = db ? getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID || '') : (process.env.WHATSAPP_GROUP_ID || '');
+  const target = normalizeRecipient(to || fleetGroup || mainGroup);
+  if (!target) {
+    return { skipped: true, reason: 'Nenhum destinatário ou grupo configurado para a Frota' };
+  }
+
+  // 1. Evolution dedicada da Frota (se configurada)
+  const evoEnabled = db ? getSetting(db, 'fleet_evolution_enabled', '0') === '1' : false;
+  const evoUrl = (db ? getSetting(db, 'fleet_evolution_url', '') : '') || process.env.FLEET_EVOLUTION_BASE_URL || '';
+  const evoInstance = (db ? getSetting(db, 'fleet_evolution_instance', '') : '') || process.env.FLEET_EVOLUTION_INSTANCE || '';
+  const evoKey = (db ? getSetting(db, 'fleet_evolution_apikey', '') : '') || process.env.FLEET_EVOLUTION_API_KEY || '';
+
+  if (evoEnabled && evoUrl && evoInstance && evoKey) {
+    const endpoint = `${evoUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(evoInstance)}`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: evoKey },
+      body: JSON.stringify({ number: target, text }),
+    });
+    const responseData = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(`[Evolution-Frota] Erro no envio (${responseData?.message || response.status})`);
+    }
+    return { success: true, provider: 'evolution-fleet', data: responseData };
+  }
+
+  // 2. Baileys dedicado da Frota (segundo telefone conectado em /whatsapp-frota)
+  const fb = getFleetBaileysStatus();
+  if (fb && fb.status === 'connected') {
+    return sendFleetBaileysMessage({ to: target, text, image });
+  }
+
+  // 3. Fallback: usa o WhatsApp principal (mesmo número da manutenção)
+  return sendWhatsAppMessage({ to: target, text, image });
+}
+
+export function formatFleetOrderMessage({
+  number,
+  type,
+  priority,
+  machineStopped,
+  vehicle,
+  plate,
+  km,
+  description,
+  hasPhoto = false,
+  requesterName,
+  responsibleName,
+}, db = null) {
+  const isStopped = Number(machineStopped) === 1;
+  const statusEmoji = isStopped ? '🛑 *VEÍCULO PARADO / IMOBILIZADO*' : '⚡ Veículo Rodando com Alerta';
+  const prioMap = { urgente: '🔴 URGENTE', alta: '🟠 ALTA', media: '🟡 MÉDIA', baixa: '🟢 BAIXA' };
+  const prioLabel = prioMap[String(priority || 'media').toLowerCase()] || '🟡 MÉDIA';
+  const typeLabel = String(type || 'corretiva').toUpperCase();
+  const timeNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const kmText = km != null && Number(km) > 0 ? `${Number(km).toLocaleString('pt-BR')} km` : 'Não informado';
+
+  if (db) {
+    try {
+      const techText = responsibleName ? `👷 *Mecânico Atribuído:* ${responsibleName}` : `📢 *Aviso:* Disponível para a oficina da Frota`;
+      const photoText = hasPhoto ? `📸 *Foto do Defeito:* Anexada na OS` : '';
+      const rendered = renderTemplate(db, 'fleet_group_order_notification', {
+        numero: number || 'S/N',
+        tipo: typeLabel,
+        prioridade: prioLabel,
+        status_parada: statusEmoji,
+        veiculo: vehicle || plate || 'Veículo',
+        placa: plate || 'S/P',
+        km: kmText,
+        solicitante: requesterName || 'Não identificado',
+        tecnico: techText,
+        foto_anexada: photoText,
+        descricao: description ? description.trim() : 'Sem descrição',
+        horario: timeNow,
+      });
+      if (rendered && rendered.trim()) return rendered;
+    } catch (_) {}
+  }
+
+  return [
+    `🚚🚨 *NOVA OS DE FROTA #${number || 'S/N'}*`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+    `🪪 *Placa:* *${plate || 'S/P'}*`,
+    `🚛 *Veículo:* ${vehicle || 'Veículo'}`,
+    `📏 *Hodômetro:* ${kmText}`,
+    `⚠️ *Prioridade:* ${prioLabel}`,
+    `⚙️ *Status:* ${statusEmoji}`,
+    `👤 *Solicitante:* ${requesterName || 'Não identificado'}`,
+    ``,
+    `📝 *Problema Relatado:*`,
+    `${description ? description.trim() : 'Sem descrição'}`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+    `🕒 _Abertura registrada em: ${timeNow}_`,
+  ].join('\n');
+}
+
