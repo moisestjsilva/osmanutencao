@@ -12,7 +12,7 @@ const DB_FILE = path.join(DATA_DIR, 'nova-os.db');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 
 // O domínio gerado pelo Coolify para sua aplicação
-const TARGET_URL = process.env.COOLIFY_APP_URL || 'http://kc0giltnnftlb8y5yln2uddw.186.225.65.18.sslip.io';
+const TARGET_URL = process.env.COOLIFY_APP_URL || 'https://os.moveisrufato.com.br';
 const SECRET = process.env.MIGRATION_SECRET || 'nova-os-coolify-migration-2026';
 
 async function main() {
