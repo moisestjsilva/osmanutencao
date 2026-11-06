@@ -239,19 +239,22 @@ async function sendViaEvolution({ to, text }) {
  * Roteia automaticamente para o provedor selecionado no .env
  */
 export async function sendWhatsAppMessage({ to, text, image = null }) {
-  if (!isWhatsAppEnabled()) {
-    return { skipped: true, reason: 'WHATSAPP_ENABLED não está ativo (false)' };
+  const bState = getBaileysStatus();
+  const provider = getWhatsAppProvider();
+
+  // Se Baileys estiver conectado ou com credencial salva, está habilitado
+  const isEnabled = (bState && (bState.status === 'connected' || bState.hasAuth)) || isWhatsAppEnabled();
+  if (!isEnabled) {
+    return { skipped: true, reason: 'WhatsApp não está conectado nem habilitado' };
   }
 
-  const rawRecipient = to || process.env.WHATSAPP_GROUP_ID;
+  const rawRecipient = to || process.env.WHATSAPP_GROUP_ID || '120363430040542857@g.us';
   const target = normalizeRecipient(rawRecipient);
 
   if (!target) {
-    console.warn('[WhatsApp] Destinatário não fornecido e WHATSAPP_GROUP_ID não definido no .env');
+    console.warn('[WhatsApp] Destinatário não fornecido e nenhum grupo padrão configurado');
     return { skipped: true, reason: 'Nenhum destinatário ou ID de grupo configurado' };
   }
-
-  const provider = getWhatsAppProvider();
 
   try {
     let result;
@@ -277,7 +280,9 @@ export async function sendWhatsAppMessage({ to, text, image = null }) {
  * a abertura da OS no banco de dados.
  */
 export async function notifyNewOrderWhatsApp(orderData, recipient = null, db = null) {
-  if (!isWhatsAppEnabled()) return;
+  const bState = getBaileysStatus();
+  const isEnabled = (bState && (bState.status === 'connected' || bState.hasAuth)) || isWhatsAppEnabled();
+  if (!isEnabled) return;
 
   try {
     const text = formatNewOrderMessage(orderData, db);
