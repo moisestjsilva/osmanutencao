@@ -385,9 +385,102 @@ export function migrateFleet(db) {
     const ins = db.prepare('INSERT INTO fleet_checklist_items (id,label,category,critical,active,sort_order) VALUES (?,?,?,?,1,?)');
     DEFAULT_CHECKLIST.forEach(([cat, label, crit], i) => ins.run(randomUUID(), label, cat, crit, i * 10));
   }
+
+  if (process.env.FLEET_SKIP_SEED !== '1' && !getSetting(db, 'fleet_initial_seed_v1')) {
+    const count = seedDefaultFleetVehicles(db);
+    setSetting(db, 'fleet_initial_seed_v1', nowIso());
+    if (count > 0) console.log(`[Frota] ${count} veículos oficiais cadastrados automaticamente.`);
+  }
 }
 
-// ---------------------------------------------------------------- Regras de negócio
+const DEFAULT_FLEET_VEHICLES = [
+  // Print 1 (29 veículos)
+  { brand: 'MERCEDES', model: 'L1620 3Eixos', year_manufacture: 2000, year_model: 2000, plate: 'GSW0232', chassis: '9BM695301YB249109', notes: null, type: 'truck', axles: 3, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: '708 2p', year_manufacture: 1988, year_model: 1988, plate: 'GMB2437', chassis: '9BM308325JB794112', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ACCELO 1016 2P', year_manufacture: 2021, year_model: 2021, plate: 'RMI1A95', chassis: '9BM979076MB196412', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'TROLLER', model: 'T-4 TX4 CONNECT 4X4 3.2 AUT.', year_manufacture: 2021, year_model: 2021, plate: 'OCE6F56', chassis: '94TT41353MH400600', notes: 'Celinho', nickname: 'Celinho', type: 'utilitario', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ATEGO 2425 3EIXOS', year_manufacture: 2011, year_model: 2011, plate: 'HEQ1931', chassis: '9BM958096BB818825', notes: null, type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'L1620 3Eixos', year_manufacture: 2008, year_model: 2008, plate: 'HBN7393', chassis: '9BM69530488589997', notes: 'Parado (Pipa)', nickname: 'Pipa', type: 'truck', axles: 3, fuel_type: 'diesel_s500', status: 'manutencao' },
+  { brand: 'REBOQUE', model: 'CARGA SECA 3 EIXOS', year_manufacture: 2006, year_model: 2007, plate: 'MWC1576', chassis: '9ADF1503675236320', notes: null, type: 'carreta', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'REBOQUE', model: 'CARGA SECA 3 EIXOS', year_manufacture: 2006, year_model: 2007, plate: 'KKF3964', chassis: '9ADF1503675236130', notes: null, type: 'carreta', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'SCANIA', model: 'P-360 A 6X2 2P', year_manufacture: 2012, year_model: 2012, plate: 'HOF8710', chassis: '9BSP6X200C3806729', notes: null, type: 'cavalo', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'FORD', model: 'CARGO 1317/1317 E T 3-EIXOS', year_manufacture: 2012, year_model: 2012, plate: 'HKF1879', chassis: '9BFXEAEUOCBS01560', notes: 'Parado', type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'manutencao' },
+  { brand: 'MERCEDES', model: 'ATRON 2324 6X2', year_manufacture: 2013, year_model: 2013, plate: 'OQR2771', chassis: '9BM695304DB915338', notes: 'Parado', type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'manutencao' },
+  { brand: 'MERCEDES', model: 'ATRON 2324 6X2', year_manufacture: 2013, year_model: 2013, plate: 'OQX9054', chassis: '9BM695304DB924171', notes: null, type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'REBOQUE', model: 'CARGA SECA 3 EIXOS', year_manufacture: 2014, year_model: 2014, plate: 'OXG5573', chassis: '955L1513EES360543', notes: null, type: 'carreta', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ATRON 2324 6X2', year_manufacture: 2014, year_model: 2014, plate: 'PUA9538', chassis: '9BM695304EB605557', notes: 'Parado', type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'manutencao' },
+  { brand: 'VOLKSWAGEN', model: '9-150 E DELIVERY 2P (DIESEL)', year_manufacture: 2011, year_model: 2012, plate: 'HGK2E32', chassis: '9533A62PXCR212326', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ATRON 2324 6X2', year_manufacture: 2014, year_model: 2014, plate: 'PUS3218', chassis: '9BM695304EB978287', notes: 'Parado', type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'manutencao' },
+  { brand: 'FIAT', model: 'STRADA WORKING CELEB 1.4', year_manufacture: 2015, year_model: 2015, plate: 'KRS3464', chassis: '9BD578141F7905433', notes: 'Valdenir', nickname: 'Valdenir', type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'SCANIA', model: 'R-450 A 6X2 2P (diesel) (E5)', year_manufacture: 2023, year_model: 2023, plate: 'RJP7J99', chassis: '9BSR6X200P4024827', notes: null, type: 'cavalo', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'FORD', model: 'CARGO 815', year_manufacture: 2005, year_model: 2005, plate: 'HBN7248', chassis: '9BFV2UHG55BB55057', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'L-1620 3 E', year_manufacture: 2007, year_model: 2007, plate: 'HBN7283', chassis: '9BM69530478544743', notes: 'Movelaria', nickname: 'Movelaria', type: 'truck', axles: 3, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ATEGO 2426 6X2 2P', year_manufacture: 2018, year_model: 2018, plate: 'QPD9874', chassis: '9BM958166JB105827', notes: null, type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'SCANIA', model: 'R-450 A 6X2 2P (diesel) (E5)', year_manufacture: 2019, year_model: 2019, plate: 'QUS3141', chassis: '9BSR6X200K3955560', notes: null, type: 'cavalo', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ATEGO 2426 6X2 2P (diesel) (E5)', year_manufacture: 2020, year_model: 2020, plate: 'QXV7C91', chassis: '9BM958166LB170522', notes: null, type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ATEGO 2426 6X2 2P (diesel) (E5)', year_manufacture: 2020, year_model: 2020, plate: 'QXV7C68', chassis: '9BM958166LB169810', notes: 'Parado', type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'manutencao' },
+  { brand: 'FIAT', model: 'UNO MILLE 1.0 FIRE 2P', year_manufacture: 2012, year_model: 2012, plate: 'HNP0378', chassis: '9BD15802AC6696746', notes: null, type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'LAND ROVER', model: 'RANGE ROVER SPORT HSE 3.0', year_manufacture: 2019, year_model: 2020, plate: 'QAW9B00', chassis: 'SALWA2BKOLA717846', notes: 'Celinho', nickname: 'Celinho', type: 'utilitario', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'SPRINTER 313 CHASSI 2.2', year_manufacture: 2008, year_model: 2008, plate: 'HDI3782', chassis: '8AC9036128A978162', notes: null, type: 'van', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'TOYOTA', model: 'COROLLA XEI 2.0 FLEX 16V AUT', year_manufacture: 2021, year_model: 2022, plate: 'RMV5A70', chassis: '9BRB33BE7N2062963', notes: 'Neivaldo', nickname: 'Neivaldo', type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'VOLKS', model: 'T-CROSS CONFORTLINE 1.0 TSI FLEX', year_manufacture: 2020, year_model: 2020, plate: 'RFC6H66', chassis: '9BWBH6BF7L4078817', notes: 'Italo/Comercial', nickname: 'Italo/Comercial', type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'FIAT', model: 'UNO MILLE 1.0 FIRE 2P', year_manufacture: 2012, year_model: 2012, plate: 'HNP0388', chassis: '9BD15802AC6696734', notes: null, type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'CHEVROLET', model: 'ONIX HATCH LT 1.0 12V FLEX 5 P', year_manufacture: 2022, year_model: 2023, plate: 'RUE3B12', chassis: '9BGEB48A0PG111004', notes: 'Marcelo', nickname: 'Marcelo', type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+
+  // Print 2 (17 veículos)
+  { brand: 'MERCEDES', model: 'ATEGO 2426 6X2 2P (diesel) (E5)', year_manufacture: 2022, year_model: 2022, plate: 'RVM8H15', chassis: '9BM958166NB292222', notes: null, type: 'truck', axles: 3, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'VOLKS', model: '8-160 OD ONIBUS', year_manufacture: 2006, year_model: 2006, plate: 'HDI2J14', chassis: '9BM38407868488109', notes: 'Onibus', nickname: 'Ônibus', type: 'outro', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'JEEP', model: 'COMPASS LIMITED 350 2.0 4X4', year_manufacture: 2023, year_model: 2023, plate: 'SHQ1B36', chassis: '988675139PKM17214', notes: 'Lais', nickname: 'Lais', type: 'utilitario', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'RAM', model: 'RAMPAGE LARAMIE 2.2 TB CD 4X4 Aut.', year_manufacture: 2025, year_model: 2026, plate: 'TYP9F40', chassis: '98859125FTKS23824', notes: 'Celinho', nickname: 'Celinho', type: 'utilitario', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'VOLKS', model: '8-150 E DELIVERY PLUS 2P', year_manufacture: 2011, year_model: 2011, plate: 'KOU5E51', chassis: '9533A52P3CR214932', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'GWM', model: 'Haval H6 GT PHEV AWD', year_manufacture: 2026, year_model: 2026, plate: 'SSL7B77', chassis: '92ZEFUA57TA103803', notes: 'Teka', nickname: 'Teka', type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ONIBUS CEFERAL CITMAX U', year_manufacture: 2005, year_model: 2005, plate: 'JQQ0177', chassis: '9BM38406758431847', notes: 'Onibus', nickname: 'Ônibus', type: 'outro', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'FIAT', model: 'STRADA ENDURANCE 1.3 FLEX CS', year_manufacture: 2024, year_model: 2025, plate: 'TCZ6D93', chassis: '9BD281AJHSYG32677', notes: 'Fabrica', nickname: 'Fábrica', type: 'utilitario', axles: 2, fuel_type: 'gasolina', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'L1313 3 EIXOS 2P', year_manufacture: 1982, year_model: 1982, plate: 'GMD7289', chassis: '34500212569181', notes: 'Parado', type: 'truck', axles: 3, fuel_type: 'diesel_s500', status: 'manutencao' },
+  { brand: 'MERCEDES', model: '710 PLUS 2P (DIESEL)', year_manufacture: 2000, year_model: 2000, plate: 'MTG3944', chassis: '9BM688156YB225880', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ACCELO 915C 2P (DIESEL)', year_manufacture: 2009, year_model: 2009, plate: 'GVE6F86', chassis: '9BM97904698671262', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ACCELO 1117 4x2 2p (diesel) (E6)', year_manufacture: 2025, year_model: 2026, plate: 'TWZ8F87', chassis: '9BM951104TB413752', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'ACCELO 1117 4x2 2p (diesel) (E6)', year_manufacture: 2025, year_model: 2026, plate: 'TWZ8F33', chassis: '9BM951104TB430872', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'OF1620 (Urbano) 47p', year_manufacture: 1997, year_model: 1997, plate: 'GVI2456', chassis: '9BM384087VB127165', notes: 'Onibus', nickname: 'Ônibus', type: 'outro', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'ÔNIBUS', model: 'MARCOPOLO TORINO U', year_manufacture: 2010, year_model: 2010, plate: 'HJF4725', chassis: '9532L82W8AR059452', notes: 'Onibus', nickname: 'Ônibus', type: 'outro', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+  { brand: 'VOLKSWAGEN', model: '8-150/8150 E WORKER 2p (diesel)', year_manufacture: 2001, year_model: 2001, plate: 'GXA2676', chassis: '9BWAD52R31R108973', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s500', status: 'ativo' },
+  { brand: 'MERCEDES', model: 'Accelo 1016 2p (diesel) (E5)', year_manufacture: 2012, year_model: 2012, plate: 'OOZ6G15', chassis: '9BM979076CS006303', notes: null, type: 'vuc', axles: 2, fuel_type: 'diesel_s10', status: 'ativo' },
+];
+
+export function seedDefaultFleetVehicles(db) {
+  const at = nowIso();
+  const findByPlate = db.prepare('SELECT id FROM fleet_vehicles WHERE plate = ?');
+  let inserted = 0;
+  tx(db, () => {
+    for (const v of DEFAULT_FLEET_VEHICLES) {
+      if (findByPlate.get(v.plate)) continue;
+      const id = 'fv-' + v.plate.toLowerCase();
+      insertRow(db, 'fleet_vehicles', {
+        id,
+        plate: v.plate,
+        nickname: v.nickname || null,
+        type: v.type || 'truck',
+        brand: v.brand,
+        model: v.model,
+        year_manufacture: v.year_manufacture,
+        year_model: v.year_model,
+        chassis: v.chassis,
+        fuel_type: v.fuel_type || 'diesel_s10',
+        axles: v.axles || 2,
+        odometer_km: 0,
+        odometer_updated_at: at,
+        status: v.status || 'ativo',
+        notes: v.notes || null,
+        active: 1,
+        created_at: at,
+        updated_at: at,
+      });
+      ensureMachineForVehicle(db, db.prepare('SELECT * FROM fleet_vehicles WHERE id = ?').get(id));
+      inserted++;
+    }
+  });
+  return inserted;
+}
 export function getDriverByUser(db, userId) {
   return db.prepare('SELECT * FROM fleet_drivers WHERE user_id = ? AND active = 1').get(userId) || null;
 }

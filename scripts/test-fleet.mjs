@@ -13,7 +13,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn(process.execPath, ['--no-warnings', 'server/server.js'], {
   cwd: ROOT,
   env: { ...process.env, DATA_DIR: DATA, PORT: String(PORT), WHATSAPP_ENABLED: 'false', WHATSAPP_PROVIDER: 'wapi',
-    WHATSAPP_GROUP_ID: '', WAPI_INSTANCE_ID: '', WAPI_API_KEY: '', MYSQL_HOST: '127.0.0.1', MYSQL_PORT: '1', MIGRATION_SECRET: '' },
+    WHATSAPP_GROUP_ID: '', WAPI_INSTANCE_ID: '', WAPI_API_KEY: '', MYSQL_HOST: '127.0.0.1', MYSQL_PORT: '1', MIGRATION_SECRET: '', FLEET_SKIP_SEED: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let log = '';
