@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import QRCode from 'qrcode';
 import { openDb, resetDb, UPLOAD_DIR, DATA_DIR } from './db.js';
 import { applyOp, getSetting, setSetting, CLOSED, deleteWorkOrderRecord } from './domain.js';
@@ -15,7 +15,10 @@ import {
   getSessionUser,
   deleteSession,
   seedAuthUsers,
+  fleetAccessOf,
 } from './auth.js';
+import { migrateFleet, startFleetScheduler } from './fleet-core.js';
+import { registerFleetRoutes } from './fleet.js';
 import { initMySQLSync } from './mysql-sync.js';
 import {
   getVapidPublicKey,
@@ -65,6 +68,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 let db = openDb();
 seedAuthUsers(db);
+migrateFleet(db);
 initMySQLSync(db);
 
 // Conecta o listener do Baileys ao processador de Chatbot de Abertura de OS
@@ -269,6 +273,8 @@ app.post('/api/auth/login', (req, res) => {
       teamId: user.team_id,
       specialty: user.specialty,
       avatar_url: user.avatar_url,
+      fleetRole: user.fleet_role || null,
+      fleetAccess: fleetAccessOf(user),
     }
   });
 });
@@ -325,10 +331,15 @@ app.post('/api/upload', requireUser, (req, res) => {
 // ---------- Gestão de Usuários (Admin e Super Admin) ----------
 // ---------- Rota de Migração/Restauração de Dados (Coolify/Nuvem) ----------
 app.post('/api/admin/restore-database', (req, res) => {
-  const secret = req.get('X-Migration-Secret') || '';
-  const expectedSecret = process.env.MIGRATION_SECRET || 'nova-os-coolify-migration-2026';
+  // Acesso: sessão de Super Admin OU segredo definido SOMENTE por variável de ambiente.
+  // Sem MIGRATION_SECRET configurado, apenas o Super Admin logado pode usar esta rota.
+  const secret = String(req.get('X-Migration-Secret') || '');
+  const expectedSecret = String(process.env.MIGRATION_SECRET || '');
   const isSuper = req.user && req.user.role === 'superadmin';
-  if (!isSuper && secret !== expectedSecret) {
+  const secretOk = expectedSecret.length >= 16
+    && secret.length === expectedSecret.length
+    && timingSafeEqual(Buffer.from(secret), Buffer.from(expectedSecret));
+  if (!isSuper && !secretOk) {
     return res.status(403).json({ error: 'Acesso negado para restauração de dados' });
   }
 
@@ -1237,9 +1248,14 @@ app.post('/api/admin/reset', requireUser, requireManager, (req, res) => {
   db.close();
   resetDb();
   db = openDb();
+  migrateFleet(db);
   runScheduler(db);
   res.json({ ok: true });
 });
+
+// Módulo de Frota (caminhões): /api/fleet/*
+registerFleetRoutes(app, () => db);
+startFleetScheduler(() => db);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 

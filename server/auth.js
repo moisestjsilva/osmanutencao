@@ -1,6 +1,14 @@
 // Módulo de Autenticação, Criptografia e Sessões (Nova OS)
 import crypto from 'node:crypto';
 
+// Perfil de acesso ao módulo de Frota: administradores = gestor; demais usam users.fleet_role.
+export function fleetAccessOf(u) {
+  if (!u) return null;
+  if (['superadmin', 'admin', 'gerente'].includes(u.role)) return 'gestor';
+  const fr = u.fleet_role ?? u.fleetRole;
+  return ['gestor', 'mecanico', 'motorista'].includes(fr) ? fr : null;
+}
+
 export function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
   return { hash, salt };
@@ -92,6 +100,9 @@ export function migrateAuth(db) {
   if (!userCols.includes('sector_id')) {
     db.exec('ALTER TABLE users ADD COLUMN sector_id TEXT REFERENCES sectors(id);');
   }
+  // A reconstrução da tabela acima não copia estas colunas; garante que existam (bancos novos).
+  if (!userCols.includes('avatar_url')) db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT;');
+  if (!userCols.includes('phone')) db.exec('ALTER TABLE users ADD COLUMN phone TEXT;');
 }
 
 export function seedAuthUsers(db) {
@@ -215,7 +226,7 @@ export function getSessionUser(db, token) {
   if (!token) return null;
   const now = new Date().toISOString();
   const row = db.prepare(`
-    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.specialty, u.avatar_url, u.active, s.expires_at
+    SELECT u.*, s.expires_at
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > ? AND u.active = 1
@@ -231,7 +242,9 @@ export function getSessionUser(db, token) {
     teamId: row.team_id,
     specialty: row.specialty,
     avatar_url: row.avatar_url,
-    active: !!row.active
+    active: !!row.active,
+    fleetRole: row.fleet_role || null,
+    fleetAccess: fleetAccessOf(row),
   };
 }
 

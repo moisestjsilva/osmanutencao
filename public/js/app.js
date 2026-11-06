@@ -6,6 +6,7 @@ import {
   listView, detailView, newView, plansView, kpiView, moreView, machinesView, notifsView, syncView, configView,
   loginView, usersView, cadastrosView, changePasswordModal
 } from './views.js';
+import { fleetView, hasFleetAccess, fleetLevelOf } from './fleet.js';
 
 let currentCleanup = null;
 let deferredInstallPrompt = null;
@@ -97,6 +98,13 @@ function router() {
     currentCleanup = syncView(root);
   } else if (path === '/config') {
     currentCleanup = configView(root);
+  } else if (path === '/frota' || path.startsWith('/frota/')) {
+    if (!hasFleetAccess(state.user)) {
+      toast('Seu usuário não possui permissão de acesso à Frota', 'warn');
+      location.hash = '#/';
+      return;
+    }
+    currentCleanup = fleetView(root, params);
   } else {
     location.hash = '#/';
   }
@@ -119,15 +127,22 @@ function renderNav() {
   nav.style.display = '';
 
   const role = state.user.role;
+  const canFleet = hasFleetAccess(state.user);
   let html = '';
 
   if (role === 'solicitante') {
-    // Solicitante: apenas abertura e acompanhamento dos seus chamados e perfil
+    // Solicitante: abertura e acompanhamento dos seus chamados (+ Frota se for motorista/gestor/mecânico)
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
         Meus Chamados
       </button>
+      ${canFleet ? `
+      <button class="nav-item" data-nav="#/frota" id="nav-fleet">
+        ${icon('truck', 22)}
+        Frota
+      </button>
+      ` : ''}
       <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir chamado">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
@@ -137,16 +152,23 @@ function renderNav() {
       </button>
     `;
   } else {
-    // Manutentor, Gerente, Admin e Super Admin: acesso direto às Preventivas, Ordens, Indicadores e Mais
+    // Manutentor, Gerente, Admin e Super Admin: acesso direto às Ordens, Preventivas, Frota (se habilitado), Indicadores e Mais
     html = `
       <button class="nav-item" data-nav="#/" id="nav-os">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
         Ordens
       </button>
+      ${canFleet ? `
+      <button class="nav-item" data-nav="#/frota" id="nav-fleet">
+        ${icon('truck', 22)}
+        Frota
+      </button>
+      ` : `
       <button class="nav-item" data-nav="#/preventivas" id="nav-prev">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>
         Preventivas
       </button>
+      `}
       <button class="nav-fab" data-nav="#/nova" id="nav-new" aria-label="Abrir nova OS">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>

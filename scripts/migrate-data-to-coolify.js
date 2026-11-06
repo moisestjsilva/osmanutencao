@@ -13,7 +13,13 @@ const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 
 // O domínio gerado pelo Coolify para sua aplicação
 const TARGET_URL = process.env.COOLIFY_APP_URL || 'https://os.moveisrufato.com.br';
-const SECRET = process.env.MIGRATION_SECRET || 'nova-os-coolify-migration-2026';
+// O segredo NUNCA fica no código: defina MIGRATION_SECRET (mín. 16 caracteres) no Coolify
+// e no terminal antes de rodar:  $env:MIGRATION_SECRET="..." ; npm run migrate-to-coolify
+const SECRET = process.env.MIGRATION_SECRET || '';
+if (SECRET.length < 16) {
+  console.error('❌ Defina a variável de ambiente MIGRATION_SECRET (mínimo 16 caracteres), igual à configurada no Coolify.');
+  process.exit(1);
+}
 
 async function main() {
   console.log(`=======================================================`);

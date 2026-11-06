@@ -10,6 +10,7 @@ import {
   PRIORITY, PRIO_COLOR, ROLE, compressImage, localInputValue,
 } from './ui.js';
 import { scanQR, extractCode, cameraSupported } from './scanner.js';
+import { hasFleetAccess } from './fleet.js';
 
 const CLOSED = ['Concluída', 'Cancelada'];
 const isClosed = (w) => CLOSED.includes(w.status);
@@ -1698,6 +1699,9 @@ export function moreView(root) {
   const isSuper = isSuperAdmin();
 
   const items = [
+    ...(hasFleetAccess(me()) ? [
+      ['#/frota', 'truck', 'Gestão de Frota (Caminhões)', 'Veículos, viagens, diesel, pneus, checklist diário, CNH, multas e custo/km'],
+    ] : []),
     ...(isTechUser ? [
       ['#/preventivas', 'calendar', 'Planos de Manutenção Preventiva', 'Programação periódica, calendários e checklists'],
     ] : []),

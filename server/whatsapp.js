@@ -248,7 +248,7 @@ export async function sendWhatsAppMessage({ to, text, image = null }) {
     return { skipped: true, reason: 'WhatsApp não está conectado nem habilitado' };
   }
 
-  const rawRecipient = to || process.env.WHATSAPP_GROUP_ID || '120363430040542857@g.us';
+  const rawRecipient = to || process.env.WHATSAPP_GROUP_ID;
   const target = normalizeRecipient(rawRecipient);
 
   if (!target) {
