@@ -1358,6 +1358,9 @@ export async function processIncomingWhatsAppMessage(db, {
     let result;
     try {
       result = applyOp(db, op);
+      if (!result || result.status !== 'ok') {
+        throw new Error(result?.message || 'Não foi possível gravar a OS');
+      }
     } catch (err) {
       console.error('[WhatsApp-Bot] Falha ao criar OS:', err.message);
       const errorMsg = `❌ Ocorreu um erro ao registrar a Ordem de Serviço no sistema: ${err.message}\nPor favor, tente novamente ou procure o suporte.`;
@@ -1666,6 +1669,9 @@ export async function processIncomingWhatsAppMessage(db, {
     let result;
     try {
       result = applyOp(db, op);
+      if (!result || result.status !== 'ok') {
+        throw new Error(result?.message || 'Não foi possível gravar a OS de Frota');
+      }
     } catch (err) {
       deleteSession(db, phone);
       const errorMsg = `❌ Erro ao abrir OS de Frota: ${err.message}`;

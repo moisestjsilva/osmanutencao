@@ -35,7 +35,19 @@ const isTech = (u) => u && ['manutentor', 'gerente', 'admin', 'superadmin'].incl
 const isManager = (u) => u && ['gerente', 'admin', 'superadmin'].includes(u.role);
 
 function nextNumber(db) {
-  const n = Number(getSetting(db, 'next_wo_number', '1001'));
+  let n = Number(getSetting(db, 'next_wo_number', '1001')) || 1001;
+  const maxRow = db.prepare(`
+    SELECT MAX(CAST(number AS INTEGER)) AS max_n
+    FROM work_orders
+    WHERE CAST(number AS INTEGER) >= 1000 AND CAST(number AS INTEGER) < 70000
+  `).get();
+  if (maxRow?.max_n && Number(maxRow.max_n) >= n) {
+    n = Number(maxRow.max_n) + 1;
+  }
+  const chk = db.prepare('SELECT 1 FROM work_orders WHERE number = ? OR number = ?');
+  while (chk.get(String(n), `${n}.0`)) {
+    n++;
+  }
   setSetting(db, 'next_wo_number', n + 1);
   return n;
 }
