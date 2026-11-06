@@ -976,7 +976,7 @@ app.post('/api/whatsapp/group/join', handleJoinGroup);
 
 const handleTestSend = async (req, res) => {
   try {
-    const target = req.body?.target || req.body?.recipient || req.body?.to;
+    const target = req.body?.target || req.body?.recipient || req.body?.to || getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID);
     const result = await testWhatsAppConnection(target);
     res.json({ ok: true, result });
   } catch (e) {

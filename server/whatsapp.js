@@ -28,12 +28,30 @@ import {
 } from './baileys.js';
 import { renderTemplate } from './whatsapp-bot.js';
 
-export function isWhatsAppEnabled() {
-  return String(process.env.WHATSAPP_ENABLED || 'false').trim().toLowerCase() === 'true';
+export function isWhatsAppEnabled(db = null) {
+  // 1. Se Baileys estiver conectado ou autenticado no aparelho, WhatsApp está ativo!
+  const bState = getBaileysStatus();
+  if (bState && (bState.status === 'connected' || bState.hasAuth)) {
+    return true;
+  }
+  // 2. Variável de ambiente explícita
+  if (process.env.WHATSAPP_ENABLED !== undefined) {
+    const envVal = String(process.env.WHATSAPP_ENABLED).trim().toLowerCase();
+    if (envVal === 'true') return true;
+  }
+  return false;
 }
 
-export function getWhatsAppProvider() {
-  return String(process.env.WHATSAPP_PROVIDER || 'wapi').trim().toLowerCase();
+export function getWhatsAppProvider(db = null) {
+  // Se Baileys estiver conectado ou autenticado, prioriza Baileys
+  const bState = getBaileysStatus();
+  if (bState && (bState.status === 'connected' || bState.hasAuth)) {
+    return 'baileys';
+  }
+  if (process.env.WHATSAPP_PROVIDER) {
+    return String(process.env.WHATSAPP_PROVIDER).trim().toLowerCase();
+  }
+  return 'baileys';
 }
 
 /**
