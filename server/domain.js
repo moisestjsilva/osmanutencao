@@ -8,6 +8,7 @@ import path from 'node:path';
 import { UPLOAD_DIR } from './db.js';
 import { sendPushToUsers } from './push.js';
 import { notifyNewOrderWhatsApp } from './whatsapp.js';
+import { fleetAccessOf } from './auth.js';
 
 export const CLOSED = ['Concluída', 'Cancelada'];
 const nowIso = () => new Date().toISOString();
@@ -31,8 +32,36 @@ export function setSetting(db, key, value) {
 }
 const getUser = (db, id) => db.prepare('SELECT * FROM users WHERE id=?').get(id);
 const getWoRow = (db, id) => db.prepare('SELECT * FROM work_orders WHERE id=?').get(id);
-const isTech = (u) => u && ['manutentor', 'gerente', 'admin', 'superadmin'].includes(u.role);
-const isManager = (u) => u && ['gerente', 'admin', 'superadmin'].includes(u.role);
+
+export function isFleetMachine(db, machineId) {
+  if (!machineId) return false;
+  try {
+    return Boolean(db.prepare(`
+      SELECT 1 FROM machines m
+      LEFT JOIN sectors s ON s.id = m.sector_id
+      LEFT JOIN fleet_vehicles v ON v.machine_id = m.id OR UPPER(v.plate) = UPPER(m.code)
+      WHERE m.id = ? AND (UPPER(s.name) = 'FROTA' OR s.code = 'S-FROTA' OR v.id IS NOT NULL)
+    `).get(machineId));
+  } catch {
+    return false;
+  }
+}
+
+const isTech = (u, db = null, wo = null) => {
+  if (!u) return false;
+  if (db && wo && isFleetMachine(db, wo.machine_id)) {
+    return ['gestor', 'mecanico'].includes(fleetAccessOf(u));
+  }
+  return ['manutentor', 'gerente', 'admin', 'superadmin'].includes(u.role);
+};
+
+const isManager = (u, db = null, wo = null) => {
+  if (!u) return false;
+  if (db && wo && isFleetMachine(db, wo.machine_id)) {
+    return fleetAccessOf(u) === 'gestor';
+  }
+  return ['gerente', 'admin', 'superadmin'].includes(u.role);
+};
 
 function nextNumber(db) {
   let n = Number(getSetting(db, 'next_wo_number', '1001')) || 1001;
@@ -206,11 +235,30 @@ const handlers = {
     addEvent(db, id, user.id, 'criar', at, { origin: op.origin, data: { recipientsMode: mode, recipients, effectiveRecipients: effective, responsibleId, checklistCount: checklistItems.length } });
     if (stopped) openMachineStop(db, machine.id, id, at);
     const lbl = woLabel(db, { machine_id: machine.id });
+    const isFleet = isFleetMachine(db, machine.id);
 
     // Item 3: Sistema de alertas inteligente
-    // Se direcionada a um técnico: notifica ele diretamente.
-    // Se não direcionada: todos os manutentores e admins recebem o alerta de chamado aberto na fábrica.
-    if (responsibleId) {
+    // Se for OS de FROTA: notifica EXCLUSIVAMENTE quem tem permissão na Frota (fleetAccessOf).
+    // Se for OS da FÁBRICA: notifica manutentores e admins da fábrica.
+    if (isFleet) {
+      const fleetStaff = db.prepare('SELECT id, role, fleet_role FROM users WHERE active=1').all()
+        .filter((u) => Boolean(fleetAccessOf(u)))
+        .map((u) => u.id);
+      if (responsibleId) {
+        notify(db, [responsibleId], {
+          woId: id,
+          kind: 'atribuicao',
+          title: `🚚 Nova OS de Frota #${number} Atribuída a Você!`,
+          body: `Placa: ${machine.code} • ${lbl.machine}: ${desc.slice(0, 90)}`,
+        });
+      }
+      notify(db, fleetStaff.filter((uid) => uid !== user.id && uid !== responsibleId), {
+        woId: id,
+        kind: 'nova_os_frota',
+        title: `🚚 ${stopped ? 'VEÍCULO PARADO • ' : ''}Nova OS de Frota #${number}`,
+        body: `Placa: ${machine.code} • ${lbl.machine}: ${desc.slice(0, 90)}`,
+      });
+    } else if (responsibleId) {
       notify(db, [responsibleId], {
         woId: id,
         kind: 'atribuicao',
@@ -271,7 +319,7 @@ const handlers = {
   },
 
   assume(db, op, user, wo) {
-    if (!isTech(user)) throw new OpError('forbidden', 'Somente manutentores podem assumir OS');
+    if (!isTech(user, db, wo)) throw new OpError('forbidden', 'Sem permissão para assumir esta OS');
     if (wo.responsible_id === user.id) return { woId: wo.id, already: true };
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `OS já está ${wo.status}`);
     const at = validTime(op.localTime);
@@ -290,7 +338,7 @@ const handlers = {
   },
 
   join(db, op, user, wo) {
-    if (!isTech(user)) throw new OpError('forbidden', 'Somente manutentores participam de OS');
+    if (!isTech(user, db, wo)) throw new OpError('forbidden', 'Sem permissão para participar desta OS');
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `OS já está ${wo.status}`);
     if (participant(db, wo.id, user.id)) return { woId: wo.id, already: true };
     const at = validTime(op.localTime);
@@ -301,7 +349,7 @@ const handlers = {
   },
 
   start(db, op, user, wo) {
-    if (!isTech(user)) throw new OpError('forbidden', 'Somente manutentores registram atendimento');
+    if (!isTech(user, db, wo)) throw new OpError('forbidden', 'Sem permissão para registrar atendimento nesta OS');
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `Não é possível iniciar: OS ${wo.status}`);
     const at = validTime(op.localTime);
     if (openInterval(db, wo.id, user.id)) return { woId: wo.id, already: true };
@@ -339,9 +387,9 @@ const handlers = {
   transfer(db, op, user, wo) {
     const to = getUser(db, op.payload?.toUserId);
     const reason = (op.payload?.reason || '').trim();
-    if (!to || !isTech(to)) throw new OpError('invalid', 'Destino da transferência inválido');
+    if (!to || !isTech(to, db, wo)) throw new OpError('invalid', 'Destino da transferência inválido');
     if (!reason) throw new OpError('invalid', 'Informe o motivo da transferência');
-    if (!(wo.responsible_id === user.id || isManager(user))) throw new OpError('forbidden', 'Somente o responsável ou o gerente transfere a OS');
+    if (!(wo.responsible_id === user.id || isManager(user, db, wo))) throw new OpError('forbidden', 'Somente o responsável ou o gerente transfere a OS');
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `OS já está ${wo.status}`);
     const at = validTime(op.localTime);
     if (wo.responsible_id) db.prepare(`UPDATE wo_participants SET role='colaborador' WHERE wo_id=? AND user_id=?`).run(wo.id, wo.responsible_id);
@@ -355,7 +403,7 @@ const handlers = {
   },
 
   update_checklist(db, op, user, wo) {
-    if (!isTech(user)) throw new OpError('forbidden', 'Sem permissão');
+    if (!isTech(user, db, wo)) throw new OpError('forbidden', 'Sem permissão');
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `OS já está ${wo.status}`);
     const list = sanitizeChecklist(op.payload?.checklist);
     db.prepare('UPDATE work_orders SET checklist_json=? WHERE id=?').run(JSON.stringify(list), wo.id);
@@ -365,7 +413,7 @@ const handlers = {
   },
 
   complete(db, op, user, wo) {
-    if (!(isTech(user) && (wo.responsible_id === user.id || isManager(user) || participant(db, wo.id, user.id))))
+    if (!(isTech(user, db, wo) && (wo.responsible_id === user.id || isManager(user, db, wo) || participant(db, wo.id, user.id))))
       throw new OpError('forbidden', 'Somente participantes da OS ou o gerente podem concluir');
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `OS já foi ${wo.status === 'Concluída' ? 'concluída' : 'cancelada'} por outro registro`);
     const p = op.payload || {};
@@ -391,7 +439,12 @@ const handlers = {
         wo.machine_stopped ? (p.machineRecovered ? 1 : 0) : null, returnedAt,
         checklist ? JSON.stringify(checklist) : null, at, user.id, wo.id);
     addEvent(db, wo.id, user.id, 'concluir', at, { origin: op.origin, data: { closedIntervals: open.length, machineRecovered: !!p.machineRecovered } });
-    if (wo.machine_stopped && p.machineRecovered) maybeCloseMachineStop(db, wo.machine_id, returnedAt);
+    if (wo.machine_stopped && p.machineRecovered) {
+      maybeCloseMachineStop(db, wo.machine_id, returnedAt);
+      if (isFleetMachine(db, wo.machine_id)) {
+        db.prepare("UPDATE fleet_vehicles SET status = 'ativo', updated_at = ? WHERE machine_id = ? AND status = 'manutencao'").run(at, wo.machine_id);
+      }
+    }
     if (wo.requester_id && wo.requester_id !== user.id)
       notify(db, [wo.requester_id], { woId: wo.id, kind: 'conclusao', title: `OS ${wo.number} concluída`, body: service.slice(0, 100) });
     bump(db, wo.id);
@@ -399,7 +452,7 @@ const handlers = {
   },
 
   cancel(db, op, user, wo) {
-    if (!isManager(user)) throw new OpError('forbidden', 'Somente o gerente cancela OS');
+    if (!isManager(user, db, wo)) throw new OpError('forbidden', 'Somente o gerente cancela OS');
     if (CLOSED.includes(wo.status)) throw new OpError('conflict', `OS já está ${wo.status}`);
     const reason = (op.payload?.reason || '').trim();
     if (!reason) throw new OpError('invalid', 'Informe o motivo do cancelamento');
@@ -413,7 +466,7 @@ const handlers = {
   },
 
   reopen(db, op, user, wo) {
-    if (!(isManager(user) || user.id === wo.requester_id)) throw new OpError('forbidden', 'Somente o gerente ou o solicitante reabre a OS');
+    if (!(isManager(user, db, wo) || user.id === wo.requester_id)) throw new OpError('forbidden', 'Somente o gerente ou o solicitante reabre a OS');
     if (wo.status !== 'Concluída') throw new OpError('conflict', 'Apenas OS concluídas podem ser reabertas');
     const reason = (op.payload?.reason || '').trim();
     if (!reason) throw new OpError('invalid', 'Informe o motivo da reabertura');
@@ -452,7 +505,7 @@ const handlers = {
 
   // Correção administrativa de tempo — exige motivo e preserva valor anterior
   correct_interval(db, op, user, wo) {
-    if (!isManager(user)) throw new OpError('forbidden', 'Somente o gerente corrige registros');
+    if (!isManager(user, db, wo)) throw new OpError('forbidden', 'Somente o gerente corrige registros');
     const p = op.payload || {};
     const reason = (p.reason || '').trim();
     if (!reason) throw new OpError('invalid', 'Correção exige motivo');
@@ -597,6 +650,11 @@ export function applyOp(db, op) {
     if (op.type !== 'create_wo') {
       wo = getWoRow(db, op.woId);
       if (!wo) throw new OpError('invalid', 'OS não encontrada (ainda não sincronizada?)', { retry: true });
+      if (isFleetMachine(db, wo.machine_id) && !fleetAccessOf(user)) {
+        throw new OpError('forbidden', 'Somente usuários com acesso à Frota podem atuar em OS da Frota');
+      }
+    } else if (op.origin !== 'whatsapp_fleet_bot' && op.payload?.machineId && isFleetMachine(db, op.payload.machineId) && !fleetAccessOf(user)) {
+      throw new OpError('forbidden', 'Somente usuários com acesso à Frota podem abrir OS de veículos da Frota');
     }
     const data = handler(db, op, user, wo);
     result = { opId: op.opId, status: 'ok', ...data };

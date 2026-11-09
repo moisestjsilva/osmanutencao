@@ -1622,7 +1622,17 @@ export async function processIncomingWhatsAppMessage(db, {
 
     let requesterId = data.requester_id || session.user_id;
     if (!requesterId) {
-      const fallbackUser = db.prepare("SELECT id, name FROM users WHERE active=1 ORDER BY CASE role WHEN 'solicitante' THEN 1 ELSE 2 END LIMIT 1").get();
+      const fallbackUser = db.prepare(`
+        SELECT id, name FROM users
+        WHERE active=1
+        ORDER BY CASE
+          WHEN fleet_role = 'motorista' THEN 1
+          WHEN fleet_role IS NOT NULL THEN 2
+          WHEN role IN ('admin', 'superadmin', 'gerente') THEN 3
+          ELSE 4
+        END
+        LIMIT 1
+      `).get();
       requesterId = fallbackUser?.id;
       data.requester_name = fallbackUser?.name || 'Motorista';
     }

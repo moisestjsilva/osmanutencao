@@ -21,6 +21,10 @@ const isSuperAdmin = () => me()?.role === 'superadmin';
 const canDeleteWo = () => ['admin', 'superadmin'].includes(me()?.role);
 const isOnlyTech = () => me()?.role === 'manutentor';
 const isManager = () => isAdmin();
+const isFleetWo = (w) => Boolean(w && (String(w.machine?.sector || '').toUpperCase() === 'FROTA' || String(w.machine?.sector_id || '') === 'sec-frota'));
+const myFleetAccess = () => me()?.fleetAccess || me()?.fleet_role || me()?.fleetRole || (isAdmin() ? 'gestor' : null);
+const isTechForWo = (w) => isFleetWo(w) ? ['gestor', 'mecanico'].includes(myFleetAccess()) : isTech();
+const isManagerForWo = (w) => isFleetWo(w) ? (isAdmin() || myFleetAccess() === 'gestor') : isManager();
 const PRANK = { urgente: 0, alta: 1, media: 2, baixa: 3 };
 const isStoppedNow = (w) => w.machineStopped && !isClosed(w) && w.machineRecovered !== true;
 const go = (h) => (location.hash = h);
@@ -63,11 +67,13 @@ export function listView(root) {
       ['disponiveis', 'Disponíveis na Fábrica', (w) => !isClosed(w) && !w.responsible?.id],
       ['minhas', 'Minhas Atribuídas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
       ['paradas', 'Máquinas Paradas', isStoppedNow],
+      ...(hasFleetAccess(me()) ? [['frota', '🚚 Frota', (w) => !isClosed(w) && isFleetWo(w)]] : []),
       ['concluidas', 'Concluídas por Mim', (w) => isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id))],
     ];
   } else if (isSol) {
     FILTERS = [
       ['abertas', 'Em Andamento', (w) => !isClosed(w)],
+      ...(hasFleetAccess(me()) ? [['frota', '🚚 Frota', (w) => !isClosed(w) && isFleetWo(w)]] : []),
       ['minhas', 'Meus Chamados', (w) => !isClosed(w) && w.requester?.id === me()?.id],
       ...(me()?.sector_id ? [['setor', 'Do Meu Setor', (w) => !isClosed(w) && w.machine?.sector_id === me()?.sector_id]] : []),
       ['concluidas', 'Encerrados', isClosed],
@@ -76,6 +82,7 @@ export function listView(root) {
   } else {
     FILTERS = [
       ['abertas', 'Abertas', (w) => !isClosed(w)],
+      ...(hasFleetAccess(me()) ? [['frota', '🚚 Frota', (w) => !isClosed(w) && isFleetWo(w)]] : []),
       ['minhas', 'Minhas', (w) => !isClosed(w) && (w.responsible?.id === me()?.id || w.participants?.some((p) => p.userId === me()?.id) || w.requester?.id === me()?.id)],
       ['paradas', 'Paradas', isStoppedNow],
       ['preventivas', 'Preventivas', (w) => w.type === 'preventiva' && !isClosed(w)],
@@ -110,7 +117,8 @@ export function listView(root) {
     <div id="list" style="margin-top:8px"></div>`;
 
   function render() {
-    const wos = workOrders();
+    const canSeeFleet = hasFleetAccess(me());
+    const wos = workOrders().filter((w) => !isFleetWo(w) || canSeeFleet);
     const stopped = wos.filter(isStoppedNow).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     $('#list-sub', root).textContent = `${wos.filter((w) => !isClosed(w)).length} abertas • ${stopped.length} máquina(s) parada(s)`;
     $('#stopped-wrap', root).innerHTML = stopped.length ? `
@@ -392,7 +400,7 @@ export function detailView(root, { id }) {
       <section class="card tight" id="checklist">
         ${wo.checklist.map((c, i) => `
           <label class="check-row ${c.done ? 'checked' : ''}" data-check="${i}">
-            <input type="checkbox" ${c.done ? 'checked' : ''} ${isTech() && !isClosed(wo) ? '' : 'disabled'} />
+            <input type="checkbox" ${c.done ? 'checked' : ''} ${isTechForWo(wo) && !isClosed(wo) ? '' : 'disabled'} />
             <span class="box">${icon('check', 16, 3)}</span><span class="text">${esc(c.text)}</span>
           </label>`).join('')}
       </section>` : ''}
@@ -411,12 +419,12 @@ export function detailView(root, { id }) {
           <div class="part-row small">
             <div class="grow"><strong>${esc(iv.userName)}</strong><div class="muted xs">${fmtDateTime(iv.started_at)} → ${iv.ended_at ? fmtTime(iv.ended_at) : 'em andamento'} ${iv.end_reason ? `• ${esc(iv.end_reason.replace('_', ' '))}` : ''}</div></div>
             <span class="mono">${fmtMin(((iv.ended_at ? new Date(iv.ended_at) : Date.now()) - new Date(iv.started_at)) / 60000)}</span>
-            ${isManager() ? `<button class="icon-btn" data-correct="${iv.id}" aria-label="Corrigir intervalo">${icon('edit', 16)}</button>` : ''}
+            ${isManagerForWo(wo) ? `<button class="icon-btn" data-correct="${iv.id}" aria-label="Corrigir intervalo">${icon('edit', 16)}</button>` : ''}
           </div>`).join('')}
         ${wo.audit?.length ? `<div class="info-box xs" style="margin-top:8px">${wo.audit.length} correção(ões) auditada(s): ${wo.audit.map((a) => `${esc(a.user_name)} alterou ${a.field === 'started_at' ? 'início' : 'fim'} de ${fmtDateTime(a.old_value)} para ${fmtDateTime(a.new_value)} — “${esc(a.reason)}”`).join('; ')}</div>` : ''}
       </section>` : ''}
 
-      ${wo.conflicts?.length && isManager() ? `
+      ${wo.conflicts?.length && isManagerForWo(wo) ? `
       <div class="section-title"><span>Conflitos de sincronização</span></div>
       ${wo.conflicts.map((c) => `<div class="${c.resolved_at ? 'info-box' : 'error-box'} small" style="margin-bottom:8px"><strong>${esc(c.type)}</strong> de ${esc(userName(c.user_id))}: ${esc(c.reason)} ${c.resolved_at ? `<br>Resolvido: ${esc(c.resolution)}` : `<br><a href="#/sync">Revisar</a>`}</div>`).join('')}` : ''}
 
@@ -435,7 +443,9 @@ export function detailView(root, { id }) {
     bar.id = 'action-bar';
     const btns = [];
     const u = me();
-    if (!isClosed(wo) && isTech()) {
+    const canTechWo = isTechForWo(wo);
+    const canMgrWo = isManagerForWo(wo);
+    if (!isClosed(wo) && canTechWo) {
       if (myPart?.state === 'trabalhando') {
         btns.push(`<button class="btn lg" data-act="pause" id="act-pause">${icon('pause', 18)} Pausar</button>`);
         btns.push(`<button class="btn lg success" data-act="complete" id="act-complete">${icon('check', 18)} Concluir</button>`);
@@ -444,15 +454,15 @@ export function detailView(root, { id }) {
         btns.push(`<button class="btn lg primary" data-act="assume" id="act-assume">${icon('hand', 18)} Assumir</button>`);
       } else if (myPart) {
         btns.push(`<button class="btn lg primary" data-act="start" id="act-start">${icon('play', 18)} ${myPart.state === 'aguardando' ? 'Iniciar' : 'Retomar'}</button>`);
-        if (wo.responsible?.id === u.id || isManager()) btns.push(`<button class="btn lg success" data-act="complete" id="act-complete">${icon('check', 18)} Concluir</button>`);
+        if (wo.responsible?.id === u.id || canMgrWo) btns.push(`<button class="btn lg success" data-act="complete" id="act-complete">${icon('check', 18)} Concluir</button>`);
       } else {
         btns.push(`<button class="btn lg" data-act="join" id="act-join">${icon('users', 18)} Participar</button>`);
         btns.push(`<button class="btn lg primary" data-act="start" id="act-start">${icon('play', 18)} Iniciar junto</button>`);
       }
       btns.push(`<button class="btn lg" data-act="more" id="act-more" style="flex:0 0 56px" aria-label="Mais ações">⋯</button>`);
-    } else if (!isClosed(wo) && isManager()) {
+    } else if (!isClosed(wo) && canMgrWo) {
       btns.push(`<button class="btn lg" data-act="more" id="act-more">Mais ações</button>`);
-    } else if (wo.status === 'Concluída' && (isManager() || wo.requester?.id === u?.id)) {
+    } else if (wo.status === 'Concluída' && (canMgrWo || wo.requester?.id === u?.id)) {
       btns.push(`<button class="btn lg" data-act="reopen" id="act-reopen">${icon('undo', 18)} Reabrir OS</button>`);
       if (canDeleteWo()) btns.push(`<button class="btn lg danger" data-act="delete" id="act-delete">${icon('trash', 18)} Excluir</button>`);
     } else if (wo.status === 'Cancelada' && canDeleteWo()) {
@@ -534,13 +544,15 @@ export function detailView(root, { id }) {
     }
     if (a === 'more') {
       const myPart = wo.participants?.find((p) => p.userId === u.id);
+      const canTechWo = isTechForWo(wo);
+      const canMgrWo = isManagerForWo(wo);
       const items = [];
       if (myPart && ['trabalhando', 'pausado', 'aguardando'].includes(myPart.state)) items.push(['finish_part', 'clock', 'Encerrar minha parte', 'Finaliza só o seu tempo']);
-      if (myPart?.state !== 'trabalhando' && (wo.responsible?.id === u.id || isManager() || myPart)) items.push(['complete', 'check', 'Concluir OS', 'Registrar serviço realizado']);
-      if (wo.responsible?.id === u.id || isManager()) items.push(['transfer', 'swap', 'Transferir responsável', 'Fica registrado no histórico']);
-      if (!wo.responsible && isTech()) items.push(['assume', 'hand', 'Assumir OS', '']);
+      if (myPart?.state !== 'trabalhando' && (wo.responsible?.id === u.id || canMgrWo || myPart)) items.push(['complete', 'check', 'Concluir OS', 'Registrar serviço realizado']);
+      if (wo.responsible?.id === u.id || canMgrWo) items.push(['transfer', 'swap', 'Transferir responsável', 'Fica registrado no histórico']);
+      if (!wo.responsible && canTechWo) items.push(['assume', 'hand', 'Assumir OS', '']);
       items.push(['photo', 'camera', 'Adicionar foto', '']);
-      if (isManager()) items.push(['cancel', 'x', 'Cancelar OS', 'Somente gerente, com motivo']);
+      if (canMgrWo) items.push(['cancel', 'x', 'Cancelar OS', 'Somente gerente, com motivo']);
       if (canDeleteWo()) items.push(['delete', 'trash', 'Excluir OS', 'Exclusão definitiva (Admin / Super Admin)']);
       sheet(`<h2>Ações</h2><div class="menu-list" style="margin-top:8px">${items.map(([k, ic, t, s]) => `
         <button class="menu-item" data-more="${k}"><span class="ico">${icon(ic, 18)}</span><span><strong>${t}</strong>${s ? `<div class="muted xs">${s}</div>` : ''}</span></button>`).join('')}</div>`, {
@@ -612,7 +624,12 @@ export function detailView(root, { id }) {
   }
 
   function transferSheet() {
-    const techs = state.boot.users.filter((u) => ['manutentor', 'gerente'].includes(u.role) && u.id !== wo.responsible?.id);
+    const fleetWo = isFleetWo(wo);
+    const techs = state.boot.users.filter((u) => {
+      if (u.id === wo.responsible?.id) return false;
+      if (fleetWo) return ['gestor', 'mecanico'].includes(u.fleetAccess || u.fleet_role || u.fleetRole) || ['admin', 'superadmin', 'gerente'].includes(u.role);
+      return ['manutentor', 'gerente'].includes(u.role);
+    });
     let to = null;
     sheet(`<h2>Transferir responsável</h2>
       <div style="margin-top:12px">${techs.map((u) => `<button class="user-option" data-to="${u.id}">${avatar(u.name, '', userAvatarUrl(u, u.avatar_url))}<span class="grow"><strong>${esc(u.name)}</strong><div class="muted xs">${esc(u.specialty || ROLE[u.role])}</div></span></button>`).join('')}</div>
@@ -674,7 +691,7 @@ export function detailView(root, { id }) {
     });
     $$('[data-check]', root).forEach((row) => row.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!isTech() || isClosed(wo)) return;
+      if (!isTechForWo(wo) || isClosed(wo)) return;
       const list = structuredClone(wo.checklist);
       const i = +row.dataset.check;
       list[i].done = !list[i].done;

@@ -97,11 +97,26 @@ export function registerFleetRoutes(app, getDb) {
     const alerts = computeAlerts(db);
     const tripSql = `SELECT t.*, v.plate, v.nickname, d.name driver_name FROM fleet_trips t
                      JOIN fleet_vehicles v ON v.id = t.vehicle_id LEFT JOIN fleet_drivers d ON d.id = t.driver_id`;
+    const openOrders = db.prepare(`
+      SELECT w.id, w.number, w.status, w.priority, w.machine_stopped, w.description, w.created_at,
+             COALESCE(v.plate, m.code) AS plate, v.nickname, v.brand, v.model,
+             u.name AS requester_name, r.name AS responsible_name
+      FROM work_orders w
+      JOIN machines m ON m.id = w.machine_id
+      LEFT JOIN sectors s ON s.id = m.sector_id
+      LEFT JOIN fleet_vehicles v ON v.machine_id = m.id OR UPPER(v.plate) = UPPER(m.code)
+      LEFT JOIN users u ON u.id = w.requester_id
+      LEFT JOIN users r ON r.id = w.responsible_id
+      WHERE w.status NOT IN ('Concluída', 'Cancelada')
+        AND (v.id IS NOT NULL OR UPPER(s.name) = 'FROTA' OR s.code = 'S-FROTA')
+      ORDER BY w.machine_stopped DESC, w.created_at DESC
+    `).all();
     if (access === 'motorista') {
       const d = req.fleet.driver;
       return {
         access, driver: d ? driverCnh(d) : null,
         open_trip: d ? db.prepare(`${tripSql} WHERE t.driver_id = ? AND t.status = 'em_andamento'`).get(d.id) || null : null,
+        open_orders: openOrders,
         alerts: d ? alerts.filter((a) => a.driver_id === d.id) : [],
         pending_fines: d ? db.prepare(`SELECT f.*, v.plate FROM fleet_fines f JOIN fleet_vehicles v ON v.id = f.vehicle_id WHERE f.driver_id = ? AND f.status = 'pendente' ORDER BY f.fine_date DESC`).all(d.id) : [],
         recent_checklists: d ? db.prepare(`SELECT c.id, c.type, c.has_issues, c.critical_issues, c.created_at, v.plate FROM fleet_checklists c JOIN fleet_vehicles v ON v.id = c.vehicle_id WHERE c.driver_id = ? ORDER BY c.created_at DESC LIMIT 5`).all(d.id) : [],
@@ -119,20 +134,7 @@ export function registerFleetRoutes(app, getDb) {
         proximos: alerts.filter((a) => a.level === 'vencendo' || a.level === 'proxima').length,
       },
       open_trips: db.prepare(`${tripSql} WHERE t.status = 'em_andamento' ORDER BY t.start_at DESC`).all(),
-      open_orders: db.prepare(`
-        SELECT w.id, w.number, w.status, w.priority, w.machine_stopped, w.description, w.created_at,
-               COALESCE(v.plate, m.code) AS plate, v.nickname, v.brand, v.model,
-               u.name AS requester_name, r.name AS responsible_name
-        FROM work_orders w
-        JOIN machines m ON m.id = w.machine_id
-        LEFT JOIN sectors s ON s.id = m.sector_id
-        LEFT JOIN fleet_vehicles v ON v.machine_id = m.id OR UPPER(v.plate) = UPPER(m.code)
-        LEFT JOIN users u ON u.id = w.requester_id
-        LEFT JOIN users r ON r.id = w.responsible_id
-        WHERE w.status NOT IN ('Concluída', 'Cancelada')
-          AND (v.id IS NOT NULL OR UPPER(s.name) = 'FROTA' OR s.code = 'S-FROTA')
-        ORDER BY w.machine_stopped DESC, w.created_at DESC
-      `).all(),
+      open_orders: openOrders,
       checklist_issues: db.prepare(`SELECT c.id, c.type, c.critical_issues, c.wo_id, c.created_at, v.plate, d.name driver_name
                                     FROM fleet_checklists c JOIN fleet_vehicles v ON v.id = c.vehicle_id LEFT JOIN fleet_drivers d ON d.id = c.driver_id
                                     WHERE c.has_issues = 1 AND substr(c.created_at,1,10) >= ? ORDER BY c.created_at DESC LIMIT 8`).all(addDays(today(), -7)),

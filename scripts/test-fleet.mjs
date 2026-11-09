@@ -190,7 +190,50 @@ async function main() {
   assert.equal(r.orderCreated, true);
   assert.match(r.reply, /OS DE FROTA #\d+ ABERTA COM SUCESSO/i);
   assert.match(r.reply, /RMI1A95/);
+  const fleetWoId = r.workOrder?.id;
   ok(`OS da frota aberta via WhatsApp por placa (#${r.workOrder?.number})`);
+
+  // Teste de visibilidade das OS da Frota:
+  // 1) Solicitante sem acesso à Frota (tPlain) NÃO pode ver OS da Frota
+  r = await call('GET', '/api/workorders', null, tPlain);
+  assert.equal(r.status, 200);
+  assert.equal(r.workOrders.some((w) => w.id === fleetWoId || w.machine?.sector === 'FROTA'), false);
+  r = await call('GET', `/api/workorders/${fleetWoId}`, null, tPlain);
+  assert.equal(r.status, 403);
+  ok('solicitante sem acesso à frota NÃO visualiza OS da frota (403 no detalhe e oculta na lista)');
+
+  // 2) Manutentor da fábrica SEM acesso à Frota NÃO pode ver OS da Frota
+  r = await call('POST', '/api/users', { name: 'Manutentor Fabrica', username: 'manutfab', password: 'senha123', role: 'manutentor' }, adm);
+  const techFab = await login('manutfab', 'senha123');
+  r = await call('GET', '/api/workorders', null, techFab);
+  assert.equal(r.status, 200);
+  assert.equal(r.workOrders.some((w) => w.id === fleetWoId || w.machine?.sector === 'FROTA'), false);
+  r = await call('GET', `/api/workorders/${fleetWoId}`, null, techFab);
+  assert.equal(r.status, 403);
+  ok('manutentor da fábrica sem acesso à frota NÃO visualiza OS da frota');
+
+  // 3) Solicitante COM permissão de Gestor da Frota (ex.: Bruno Ribeiro) VISUALIZA todas as OS da Frota
+  r = await call('POST', '/api/users', { name: 'Bruno Gestor Frota', username: 'brunofrota', password: 'senha123', role: 'solicitante' }, adm);
+  const brunoId = r.user.id;
+  r = await call('PUT', `/api/fleet/team/${brunoId}`, { fleet_role: 'gestor' }, adm);
+  assert.equal(r.status, 200);
+  const bruno = await login('brunofrota', 'senha123');
+  r = await call('GET', '/api/workorders', null, bruno);
+  assert.equal(r.status, 200);
+  assert.equal(r.workOrders.some((w) => w.id === fleetWoId), true);
+  r = await call('GET', `/api/workorders/${fleetWoId}`, null, bruno);
+  assert.equal(r.id, fleetWoId);
+  assert.equal(r.status, 'Aberta');
+  ok('solicitante com permissão de Gestor da Frota visualiza OS abertas da frota');
+
+  // 4) Motorista e Mecânico da Frota também visualizam as OS abertas da Frota
+  r = await call('GET', '/api/workorders', null, tJoao);
+  assert.equal(r.workOrders.some((w) => w.id === fleetWoId), true);
+  r = await call('GET', '/api/fleet/dashboard', null, tJoao);
+  assert.equal(r.open_orders.some((w) => w.id === fleetWoId), true);
+  r = await call('GET', '/api/workorders', null, tMec);
+  assert.equal(r.workOrders.some((w) => w.id === fleetWoId), true);
+  ok('motorista e mecânico da frota visualizam as OS abertas da frota');
 
   console.log(`\n${pass} verificações OK`);
 }

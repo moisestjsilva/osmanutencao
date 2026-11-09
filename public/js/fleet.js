@@ -319,6 +319,40 @@ export function fleetView(root, params = {}) {
           </section>
         ` : ''}
 
+        ${(d.open_orders || []).length ? `
+          <div class="section-title">
+            <span>🔧 Ordens de Serviço Abertas da Frota (${d.open_orders.length})</span>
+            <a href="#/" class="muted xs" style="text-decoration:underline">Ver todas no Quadro de OS →</a>
+          </div>
+          <div class="cad-grid" style="margin-bottom:14px">
+            ${d.open_orders.map((wo) => `
+              <div class="cad-card" style="${wo.machine_stopped ? 'border-color:var(--danger)' : ''}">
+                <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px">
+                  <div>
+                    ${plateBadge(wo.plate, wo.nickname)}
+                    <div class="xs muted" style="margin-top:4px">${esc([wo.brand, wo.model].filter(Boolean).join(' '))}</div>
+                  </div>
+                  <div class="row" style="gap:4px;flex-wrap:wrap;justify-content:flex-end">
+                    <span class="badge ${wo.machine_stopped ? 'danger' : 'info'}">OS #${esc(wo.number)}</span>
+                    ${wo.machine_stopped ? '<span class="badge danger">🛑 PARADO</span>' : ''}
+                  </div>
+                </div>
+                <div class="small" style="margin-top:6px">
+                  <strong>${esc(wo.description || 'Sem descrição')}</strong>
+                  <div class="muted xs" style="margin-top:4px">
+                    Status: <strong>${esc(wo.status)}</strong> • Prioridade: <strong>${esc(wo.priority)}</strong>
+                  </div>
+                  <div class="muted xs">Aberta em: ${fmtDateTime(wo.created_at)}</div>
+                </div>
+                <div class="cad-card-footer">
+                  <span class="muted xs">${wo.responsible_name ? `Resp.: ${esc(wo.responsible_name)}` : 'Aguardando atendimento'}</span>
+                  <a class="btn sm primary" href="#/os/${esc(wo.id)}" style="text-decoration:none">Ver OS</a>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+
         <div class="section-title"><span>Meus Últimos Checklists</span></div>
         <section class="card">
           ${(d.recent_checklists || []).length ? d.recent_checklists.map((c) => `

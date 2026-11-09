@@ -95,7 +95,7 @@ export function formatNewOrderMessage({
 }, db = null) {
   const isStopped = Number(machineStopped) === 1;
   const statusEmoji = isStopped ? '🛑 *MÁQUINA PARADA!*' : '⚡ Máquina Operando';
-  
+
   const prioMap = {
     urgente: '🔴 URGENTE',
     alta: '🟠 ALTA',
@@ -125,7 +125,7 @@ export function formatNewOrderMessage({
         horario: timeNow,
       });
       if (rendered && rendered.trim()) return rendered;
-    } catch (_) {}
+    } catch (_) { }
   }
 
   const lines = [
@@ -454,7 +454,7 @@ export function formatFleetOrderMessage({
         horario: timeNow,
       });
       if (rendered && rendered.trim()) return rendered;
-    } catch (_) {}
+    } catch (_) { }
   }
 
   return [

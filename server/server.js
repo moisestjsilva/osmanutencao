@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import QRCode from 'qrcode';
 import { openDb, resetDb, UPLOAD_DIR, DATA_DIR } from './db.js';
-import { applyOp, getSetting, setSetting, CLOSED, deleteWorkOrderRecord } from './domain.js';
+import { applyOp, getSetting, setSetting, CLOSED, deleteWorkOrderRecord, isFleetMachine } from './domain.js';
 import { generateCycle, runScheduler } from './preventive.js';
 import { computeIndicators } from './indicators.js';
 import {
@@ -159,7 +159,7 @@ function identify(req, res, next) {
   // Fallback opcional por X-User-Id para suporte à fila offline/legado
   const id = req.get('X-User-Id');
   if (id) {
-    const row = db.prepare('SELECT id, name, email, username, role, team_id, specialty, avatar_url, active FROM users WHERE id=? AND active=1').get(id);
+    const row = db.prepare('SELECT id, name, email, username, role, team_id, sector_id, specialty, avatar_url, fleet_role, active FROM users WHERE id=? AND active=1').get(id);
     if (row) {
       req.user = {
         id: row.id,
@@ -168,8 +168,12 @@ function identify(req, res, next) {
         username: row.username,
         role: row.role,
         teamId: row.team_id,
+        sector_id: row.sector_id || null,
         specialty: row.specialty,
         avatar_url: row.avatar_url,
+        fleet_role: row.fleet_role || null,
+        fleetRole: row.fleet_role || null,
+        fleetAccess: fleetAccessOf(row),
         active: !!row.active
       };
       return next();
@@ -199,6 +203,7 @@ app.use('/api', identify);
 // ---------- Serialização ----------
 const userProfileOf = (id) => (id ? db.prepare('SELECT id, name, avatar_url FROM users WHERE id=?').get(id) : null);
 const nameOf = (id) => (id ? userProfileOf(id)?.name : null);
+const FLEET_MACHINES_SQL = `SELECT m.id FROM machines m LEFT JOIN sectors s ON s.id = m.sector_id LEFT JOIN fleet_vehicles v ON v.machine_id = m.id OR UPPER(v.plate) = UPPER(m.code) WHERE UPPER(s.name) = 'FROTA' OR s.code = 'S-FROTA' OR v.id IS NOT NULL`;
 
 function serializeWo(w, full = false) {
   const m = db.prepare('SELECT m.id, m.code, m.name, m.criticality, m.hourly_cost, m.operating_hours_per_day, m.image_url, s.id sector_id, s.name sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.id=?').get(w.machine_id);
@@ -425,13 +430,13 @@ app.post('/api/admin/restore-database', (req, res) => {
 });
 app.get('/api/users', requireAdmin, (req, res) => {
   const rows = db.prepare(`
-    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.phone, u.specialty, u.active, u.avatar_url, u.created_at,
+    SELECT u.id, u.name, u.email, u.username, u.role, u.team_id, u.sector_id, u.phone, u.specialty, u.fleet_role, u.active, u.avatar_url, u.created_at,
            t.name as team_name, s.name as sector_name, s.code as sector_code
     FROM users u
     LEFT JOIN teams t ON t.id = u.team_id
     LEFT JOIN sectors s ON s.id = u.sector_id
     ORDER BY CASE u.role WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 WHEN 'gerente' THEN 3 WHEN 'manutentor' THEN 4 ELSE 5 END, u.name
-  `).all();
+  `).all().map((u) => ({ ...u, fleetRole: u.fleet_role || null, fleetAccess: fleetAccessOf(u) }));
   res.json({ users: rows });
 });
 
@@ -726,19 +731,27 @@ app.delete('/api/machines/:id', requireAdmin, (req, res) => {
 
 // ---------- Bootstrap e Dados Gerais ----------
 app.get('/api/bootstrap', (req, res) => {
+  const hasFleet = Boolean(req.user && fleetAccessOf(req.user));
+  const allSectors = db.prepare('SELECT * FROM sectors ORDER BY name').all();
+  const sectors = hasFleet
+    ? allSectors
+    : allSectors.filter((s) => String(s.name || '').toUpperCase() !== 'FROTA' && s.code !== 'S-FROTA');
+  const machinesQuery = hasFleet
+    ? 'SELECT m.*, s.name as sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.active=1 ORDER BY m.code'
+    : `SELECT m.*, s.name as sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.active=1 AND m.id NOT IN (${FLEET_MACHINES_SQL}) ORDER BY m.code`;
   res.json({
     serverTime: new Date().toISOString(),
     currentUser: req.user || null,
-    sectors: db.prepare('SELECT * FROM sectors ORDER BY name').all(),
+    sectors,
     teams: db.prepare('SELECT * FROM teams ORDER BY name').all(),
     users: db.prepare(`
-      SELECT u.id, u.name, u.username, u.email, u.role, u.team_id, u.sector_id, u.specialty, u.avatar_url, s.name as sector_name
+      SELECT u.id, u.name, u.username, u.email, u.role, u.team_id, u.sector_id, u.specialty, u.fleet_role, u.avatar_url, s.name as sector_name
       FROM users u
       LEFT JOIN sectors s ON s.id = u.sector_id
       WHERE u.active = 1
       ORDER BY u.role, u.name
-    `).all(),
-    machines: db.prepare('SELECT m.*, s.name as sector FROM machines m JOIN sectors s ON s.id=m.sector_id WHERE m.active=1 ORDER BY m.code').all(),
+    `).all().map((u) => ({ ...u, fleetRole: u.fleet_role || null, fleetAccess: fleetAccessOf(u) })),
+    machines: db.prepare(machinesQuery).all(),
     settings: { defaultRecipientsMode: getSetting(db, 'default_recipients_mode', 'todos') },
   });
 });
@@ -747,6 +760,7 @@ app.get('/api/workorders', (req, res) => {
   const since = new Date(Date.now() - Number(req.query.days || 30) * 86400000).toISOString();
   const isTech = req.user?.role === 'manutentor';
   const isSol = req.user?.role === 'solicitante';
+  const fleetAccess = req.user ? fleetAccessOf(req.user) : null;
   const scope = req.query.scope; // 'minhas', 'disponiveis', 'todas'
 
   let query = `
@@ -755,15 +769,23 @@ app.get('/api/workorders', (req, res) => {
   `;
   const params = [since, since];
 
+  // Regra estrita da Frota: quem NÃO tem acesso à Frota nunca vê OS de veículos da Frota
+  if (!fleetAccess) {
+    query += ` AND machine_id NOT IN (${FLEET_MACHINES_SQL})`;
+  }
+
   if (isSol) {
-    // Solicitante: vê as ordens que ele abriu ou as ordens do seu setor de atuação
+    // Solicitante: vê as ordens que ele abriu, as do seu setor, e — se tiver permissão na Frota — todas as OS da Frota
+    const orParts = ['requester_id = ?'];
+    params.push(req.user.id);
     if (req.user?.sector_id) {
-      query += ` AND (requester_id = ? OR machine_id IN (SELECT id FROM machines WHERE sector_id = ?))`;
-      params.push(req.user.id, req.user.sector_id);
-    } else {
-      query += ` AND requester_id = ?`;
-      params.push(req.user.id);
+      orParts.push('machine_id IN (SELECT id FROM machines WHERE sector_id = ?)');
+      params.push(req.user.sector_id);
     }
+    if (fleetAccess) {
+      orParts.push(`machine_id IN (${FLEET_MACHINES_SQL})`);
+    }
+    query += ` AND (${orParts.join(' OR ')})`;
   } else if (isTech) {
     if (scope === 'minhas') {
       query += ` AND (responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
@@ -771,8 +793,12 @@ app.get('/api/workorders', (req, res) => {
     } else if (scope === 'disponiveis') {
       query += ` AND status NOT IN ('Concluída','Cancelada') AND responsible_id IS NULL`;
     } else if (scope !== 'todas') {
-      // Padrão do manutentor: todas as OS ativas da fábrica (para atender/assumir) + concluídas que ele participou
-      query += ` AND (status NOT IN ('Concluída','Cancelada') OR responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
+      // Padrão do manutentor: todas as OS ativas permitidas + concluídas que ele participou (ou da Frota se tiver acesso)
+      if (fleetAccess) {
+        query += ` AND (status NOT IN ('Concluída','Cancelada') OR responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?) OR machine_id IN (${FLEET_MACHINES_SQL}))`;
+      } else {
+        query += ` AND (status NOT IN ('Concluída','Cancelada') OR responsible_id = ? OR id IN (SELECT wo_id FROM wo_participants WHERE user_id = ?))`;
+      }
       params.push(req.user.id, req.user.id);
     }
   } else if (req.query.tech) {
@@ -794,6 +820,10 @@ app.get('/api/workorders', (req, res) => {
 app.get('/api/workorders/:id', (req, res) => {
   const w = db.prepare('SELECT * FROM work_orders WHERE id=?').get(req.params.id);
   if (!w) return res.status(404).json({ error: 'OS não encontrada' });
+  const fleetAccess = req.user ? fleetAccessOf(req.user) : null;
+  if (isFleetMachine(db, w.machine_id) && !fleetAccess) {
+    return res.status(403).json({ error: 'Somente usuários com acesso à Frota podem visualizar esta OS' });
+  }
   res.json(serializeWo(w, true));
 });
 
@@ -851,7 +881,11 @@ app.get('/api/qr/:code.svg', async (req, res) => {
 
 // Central de avisos
 app.get('/api/notifications', requireUser, (req, res) => {
-  const rows = db.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100').all(req.user.id);
+  const hasFleet = Boolean(fleetAccessOf(req.user));
+  const query = hasFleet
+    ? 'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100'
+    : `SELECT * FROM notifications WHERE user_id=? AND COALESCE(kind,'') NOT IN ('frota_alerta','nova_os_frota') AND (wo_id IS NULL OR wo_id NOT IN (SELECT id FROM work_orders WHERE machine_id IN (${FLEET_MACHINES_SQL}))) ORDER BY created_at DESC LIMIT 100`;
+  const rows = db.prepare(query).all(req.user.id);
   res.json({ notifications: rows, unread: rows.filter((r) => !r.read_at).length });
 });
 app.post('/api/notifications/read', requireUser, (req, res) => {

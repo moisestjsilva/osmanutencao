@@ -240,9 +240,11 @@ export function getSessionUser(db, token) {
     username: row.username,
     role: row.role,
     teamId: row.team_id,
+    sector_id: row.sector_id || null,
     specialty: row.specialty,
     avatar_url: row.avatar_url,
     active: !!row.active,
+    fleet_role: row.fleet_role || null,
     fleetRole: row.fleet_role || null,
     fleetAccess: fleetAccessOf(row),
   };
