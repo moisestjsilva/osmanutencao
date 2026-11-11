@@ -761,41 +761,7 @@ async function start() {
         setupPushNotifications(false);
       }
     }
-
-    // Alertas sonoros e toasts na tela quando o app está aberto em primeiro plano
-    if (typeof ev === 'object' && ev?.type === 'new-notifs') {
-      for (const n of ev.items) {
-        const isStop = /PARADA/i.test(n.title);
-        const isDirect = /Atribuída a Você/i.test(n.title) || n.kind === 'atribuicao';
-
-        // Toca o alarme sonoro
-        playAlertChime(isDirect || isStop ? 'urgent' : 'normal');
-
-        const toastKind = isStop ? 'alarm' : (isDirect ? 'warn' : 'ok');
-        const t = toast(`${n.title}: ${n.body}`, toastKind, 8000);
-        if (n.wo_id) {
-          t.style.cursor = 'pointer';
-          t.title = 'Clique para abrir esta Ordem de Serviço';
-          t.onclick = () => {
-            location.hash = `#/os/${n.wo_id}`;
-          };
-        }
-      }
-    }
   });
-
-  // Desbloqueia áudio para toques e alarmes na primeira interação
-  const unlockAudio = () => {
-    try {
-      if (!audioCtx) {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) audioCtx = new AudioCtx();
-      }
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-    } catch {}
-  };
-  window.addEventListener('click', unlockAudio, { once: true });
-  window.addEventListener('touchstart', unlockAudio, { once: true });
 
   // Inicializa o banco de dados cliente e carrega sessão salva
   await init();

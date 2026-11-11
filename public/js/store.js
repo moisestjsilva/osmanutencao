@@ -602,24 +602,16 @@ export async function discardAllFailed() {
 }
 
 // ---------------- Avisos ----------------
-const seen = new Set(JSON.parse(sessionStorage.getItem('nova-os:seen') || '[]'));
 export async function loadNotifs() {
   if (!state.user) return;
   try {
     const r = await api('/api/notifications');
-    const fresh = r.notifications.filter((n) => !n.read_at && !seen.has(n.id));
     state.notifs = r.notifications;
     state.unread = r.unread;
-    if (fresh.length) {
-      for (const n of fresh) seen.add(n.id);
-      sessionStorage.setItem('nova-os:seen', JSON.stringify([...seen].slice(-500)));
-      emit({ type: 'new-notifs', items: fresh });
-    }
     emit('notifs');
   } catch {}
 }
 export function resetNotifTracking() {
-  seen.clear();
   sessionStorage.removeItem('nova-os:seen');
 }
 
