@@ -804,9 +804,12 @@ export function fleetView(root, params = {}) {
         <div style="display:flex;flex-direction:column;gap:10px">
           <div>
             <strong style="font-size:15px;display:block">📋 Checklist de Viagem — Frota (Saída / Chegada)</strong>
-            <div class="muted xs" style="margin-top:3px">Preencha direto pelo celular abaixo ou envie a palavra <strong>Chek</strong> no WhatsApp da Frota.</div>
+            <div class="muted xs" style="margin-top:3px">Preencha em 1 toque pelo celular abaixo ou envie a palavra <strong>Chek</strong> no WhatsApp da Frota para receber o link direto.</div>
           </div>
-          <button class="btn primary block" id="btn-new-ck-banner">${icon('camera', 16)} Iniciar Preenchimento do Checklist</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" id="btn-new-ck-banner" style="flex:1;min-width:210px">${icon('camera', 16)} Iniciar Checklist Aqui</button>
+            <a class="btn" href="/checklist-frota.html?motorista=${encodeURIComponent(state.user?.name || 'Motorista')}" target="_blank" style="flex:1;min-width:210px;text-align:center;justify-content:center">🔗 Abrir Tela Rápida 1-Toque (Sem Login)</a>
+          </div>
         </div>
       </div>
       ${rows.length ? `
@@ -1599,7 +1602,7 @@ export function fleetView(root, params = {}) {
 
   async function openNewChecklistModal(onSaved) {
     const itemsRes = await api('/api/fleet/checklist-items');
-    const items = itemsRes.items || [];
+    const items = (itemsRes.items || []).filter((it) => !String(it.label || '').toLowerCase().includes('faixas refletivas'));
     const driverName = state.user?.name || 'Motorista';
     const nowFormatted = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -1617,7 +1620,7 @@ export function fleetView(root, params = {}) {
         return { key: 'painel', mandatory: true, label: '📸 Foto OBRIGATÓRIA: Painel com motor ligado (Km, combustível e alertas).' };
       }
       if (c.includes('PNEUS') || c.startsWith('2')) {
-        return { key: 'pneus', mandatory: false, label: '📸 Foto: Apenas se houver corte, pneu murcho ou defeito.' };
+        return { key: 'pneus', mandatory: false, label: '📸 Foto — Pneus & Rodagem:' };
       }
       if (c.includes('ILUMINA') || c.startsWith('3')) {
         return { key: 'iluminacao', mandatory: false, label: '📸 Foto: Apenas se houver lâmpada queimada ou quebra.' };

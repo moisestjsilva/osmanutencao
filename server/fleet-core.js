@@ -273,7 +273,6 @@ export const DEFAULT_CHECKLIST = [
   ['3️⃣ Iluminação & Sinalização', 'Farol baixo e alto', 1],
   ['3️⃣ Iluminação & Sinalização', 'Lanternas e luz de freio', 1],
   ['3️⃣ Iluminação & Sinalização', 'Setas e pisca-alerta', 1],
-  ['3️⃣ Iluminação & Sinalização', 'Faixas refletivas', 0],
   ['4️⃣ Funilaria, Vidros & Itens', 'Para-brisa e retrovisores sem trincas', 1],
   ['4️⃣ Funilaria, Vidros & Itens', 'Lataria e para-choques sem batidas', 0],
   ['4️⃣ Funilaria, Vidros & Itens', 'Kit a bordo (macaco, chave, triângulo, extintor)', 1],
@@ -408,6 +407,8 @@ export function migrateFleet(db) {
     DEFAULT_CHECKLIST.forEach(([cat, label, crit], i) => ins.run(randomUUID(), label, cat, crit, (i + 1) * 10));
     setSetting(db, 'fleet_checklist_v2_clean', nowIso());
   }
+  // Garantir remoção do item "Faixas refletivas" em bancos já existentes
+  db.prepare("DELETE FROM fleet_checklist_items WHERE LOWER(label) LIKE '%faixas refletivas%'").run();
 
   if (process.env.FLEET_SKIP_SEED !== '1' && !getSetting(db, 'fleet_initial_seed_v1')) {
     const count = seedDefaultFleetVehicles(db);

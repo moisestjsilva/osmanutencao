@@ -804,16 +804,13 @@
       <div class="wa-card">
         <div class="wa-card-header">
           <div>
-            <span class="wa-card-title">🤖 Simulador do Robô da Frota (Link 1-Toque + Enquete Clicável)</span>
-            <p class="wa-card-desc">Compare os <strong>2 casos lado a lado</strong>: o <strong>Caso 1 (Link 1-Toque no Celular)</strong> e o <strong>Caso 2 (Enquete Clicável dentro do WhatsApp)</strong>.</p>
+            <span class="wa-card-title">🤖 Simulador do Robô da Frota (Link Direto de 1 Toque)</span>
+            <p class="wa-card-desc">Quando o motorista envia <code>Chek</code> e informa a placa, o robô responde com o <strong>Link Direto de 1 Toque no Celular</strong> (sem precisar fazer login).</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <a href="/checklist-frota.html?placa=RMI1A95&motorista=Motorista%20Rufato" target="_blank" class="btn btn-fleet" style="font-size:12px;padding:7px 12px">
-              🔗 Ver Caso 1: Abrir Tela 1-Toque (RMI1A95)
+              🔗 Abrir Checklist 1-Toque (RMI1A95)
             </a>
-            <button onclick="startDemoChecklist()" class="btn btn-emerald" style="font-size:12px;padding:7px 12px">
-              📊 Ver Caso 2: Iniciar Enquete no Chat (Chek RMI1A95)
-            </button>
             <button id="btnResetSim" class="btn btn-danger" style="font-size:12px;padding:7px 12px">🗑️ Reiniciar</button>
           </div>
         </div>
@@ -821,27 +818,22 @@
         <div class="chat-sim-container" style="height: 580px;">
           <div class="chat-sim-header">
             <div style="color:#fff;font-weight:600;font-size:13.5px">🚚 Assistente WhatsApp — Central de Frota Rufato</div>
-            <span style="font-size:11px;color:#34d399;font-weight:700">✓ Enquetes Nativas + Link 1-Toque Ativos</span>
+            <span style="font-size:11px;color:#34d399;font-weight:700">✓ Link Direto 1-Toque Ativo</span>
           </div>
 
           <div id="simMessagesContainer" class="chat-sim-messages">
             <div class="whatsapp-bubble incoming">
-              🚚 Olá! Clique em <strong>"📊 Ver Caso 2: Iniciar Enquete no Chat (Chek RMI1A95)"</strong> acima ou digite <strong>Chek RMI1A95</strong> para ver os <strong>2 casos funcionando juntos</strong>:<br><br>
-              1️⃣ <strong>Caso 1 (Link Rápido 1-Toque):</strong> O robô envia um cartão azul clicável que abre a tela <code>/checklist-frota.html?placa=RMI1A95</code> já com a placa selecionada.<br>
-              2️⃣ <strong>Caso 2 (Enquete Clicável no WhatsApp):</strong> Logo abaixo da mensagem aparece a <strong>Enquete Nativa</strong> onde o motorista só toca na opção desejada!
+              🚚 Olá! Digite <strong>Chek</strong> (ou <strong>Chek RMI1A95</strong>) para receber o <strong>Link Direto de 1 Toque</strong> do Checklist de Viagem, ou digite <strong>frota</strong> para abrir uma OS de manutenção de caminhão!
             </div>
           </div>
 
           <div class="sim-shortcuts">
             <span style="font-size:11.5px;color:#8696a0;align-self:center">Atalhos:</span>
-            <button class="shortcut-chip" onclick="startDemoChecklist()" style="border-color:#10b981;color:#34d399;font-weight:700">🧪 Chek RMI1A95 (Link + Enquete)</button>
+            <button class="shortcut-chip" onclick="startDemoChecklist()" style="border-color:#10b981;color:#34d399;font-weight:700">📋 Chek RMI1A95</button>
             <button class="shortcut-chip" onclick="sendSimText('Chek')" style="border-color:#10b981;color:#34d399">📋 Chek</button>
             <button class="shortcut-chip" onclick="sendSimText('frota')">🚚 frota (Abrir OS)</button>
             <button class="shortcut-chip" onclick="sendSimText('RMI1A95')">Placa RMI1A95</button>
             <button class="shortcut-chip" onclick="sendSimText('GSW0232')">Placa GSW0232</button>
-            <button class="shortcut-chip" onclick="sendSimText('158500')">Km 158500</button>
-            <button class="shortcut-chip" onclick="sendSimText('OK')" style="border-color:#38bdf8;color:#38bdf8">✅ OK (Tudo OK)</button>
-            <button class="shortcut-chip" onclick="sendSimText('foto')" style="border-color:#f59e0b;color:#fbbf24">📸 Enviar Foto</button>
             <button class="shortcut-chip" onclick="sendSimText('cancelar')">cancelar</button>
           </div>
 
@@ -1144,8 +1136,8 @@
         const localUrl = quickLink.replace(/^https?:\/\/[^/]+/, '');
         html += `
           <div class="wa-quicklink-card">
-            <div style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase">🔗 CASO 1 — Link Direto 1-Toque (Web Mobile)</div>
-            <div style="font-size:12px;color:#cbd5e1">O motorista toca no link abaixo e responde tudo em uma tela limpa com câmera:</div>
+            <div style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase">🔗 Link Direto de 1 Toque no Celular (Sem Login)</div>
+            <div style="font-size:12px;color:#cbd5e1">Toque no botão abaixo para abrir o Checklist com a placa já selecionada:</div>
             <a href="${localUrl}" target="_blank" class="wa-quicklink-btn">
               📱 Abrir Checklist 1-Toque no Celular &rarr;
             </a>
@@ -1233,7 +1225,7 @@
       });
       document.getElementById('simMessagesContainer').innerHTML = `
         <div class="whatsapp-bubble incoming">
-          🔄 Conversa reiniciada! Clique em <strong>"🧪 Chek RMI1A95 (Link + Enquete)"</strong> abaixo para ver os 2 casos funcionando.
+          🔄 Conversa reiniciada! Digite <strong>Chek</strong> ou <strong>frota</strong> para testar.
         </div>
       `;
     });

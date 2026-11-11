@@ -70,7 +70,9 @@ async function main() {
   r = await call('POST', '/api/fleet/fuel', { vehicle_id: V.id, km: 101400, liters: 900, price_per_l: 6 }, tJoao); assert.ok(r.warnings.length); ok('aviso de litros acima do tanque');
 
   console.log('Checklist (bloqueio + OS automática)');
-  const items = (await call('GET', '/api/fleet/checklist-items', null, tJoao)).items; assert.equal(items.length, 15);
+  const items = (await call('GET', '/api/fleet/checklist-items', null, tJoao)).items;
+  assert.equal(items.length, 14);
+  assert.equal(items.some((i) => /faixas refletivas/i.test(i.label)), false);
   r = await call('POST', '/api/fleet/checklists', { vehicle_id: V.id, type: 'saida', answers: [] }, tJoao); assert.equal(r.status, 400); ok('checklist incompleto é recusado');
   const answers = items.map((i, idx) => ({ item_id: i.id, status: idx === 0 ? 'problema' : 'ok', note: idx === 0 ? 'Pneu dianteiro careca' : '' }));
   r = await call('POST', '/api/fleet/checklists', { vehicle_id: V.id, type: 'saida', km: 101400, answers, require_photos: true }, tJoao);
@@ -246,10 +248,9 @@ async function main() {
 
   r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'RMI1A95' }, adm);
   assert.equal(r.status, 200);
-  assert.match(r.reply, /Saída.*Chegada/is);
   assert.equal(Boolean(r.quickLink && r.quickLink.includes('/checklist-frota.html?placa=RMI1A95')), true);
-  assert.equal(Boolean(r.poll && Array.isArray(r.poll.values) && r.poll.values.length === 2), true);
-  ok('placa RMI1A95 retorna tanto o Link 1-Toque (Caso 1) quanto a Enquete Clicável (Caso 2)');
+  assert.equal(r.poll, null);
+  ok('placa RMI1A95 retorna o Link Direto de 1 Toque (Caso 1) como opção definitiva');
 
   // Testar resposta clicando na opção da Enquete (Poll): "1 - 📤 Saída (Início de Viagem)"
   r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '1 - 📤 Saída (Início de Viagem)' }, adm);
@@ -307,8 +308,9 @@ async function main() {
   r = await call('GET', '/api/fleet/quick-checklist?placa=RMI1A95');
   assert.equal(r.status, 200);
   assert.equal(r.selected?.plate, 'RMI1A95');
-  assert.equal(Array.isArray(r.items) && r.items.length >= 15, true);
-  ok('GET /api/fleet/quick-checklist?placa=RMI1A95 carrega veículo pré-selecionado sem exigir login');
+  assert.equal(Array.isArray(r.items) && r.items.length === 14, true);
+  assert.equal(r.items.some((i) => /faixas refletivas/i.test(i.label)), false);
+  ok('GET /api/fleet/quick-checklist?placa=RMI1A95 carrega veículo pré-selecionado sem exigir login e sem Faixas Refletivas');
 
   const fakePhoto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
   const quickAnswers = r.items.map((i) => ({ item_id: i.id, status: 'ok', note: '', photo_url: '' }));

@@ -12,6 +12,7 @@ import {
   VEHICLE_TYPES, FUEL_TYPES, DRIVER_STATUS, FINE_STATUS, CNH_CATEGORIES,
 } from './fleet-core.js';
 import { setSetting } from './domain.js';
+import { sendFleetWhatsAppMessage } from './whatsapp.js';
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const ALL = FLEET_LEVELS;
@@ -185,6 +186,24 @@ export function registerFleetRoutes(app, getDb) {
           });
           db.prepare('UPDATE fleet_checklists SET wo_id = ? WHERE id = ?').run(r.woId, id);
           wo = { id: r.woId, number: r.number };
+        } catch (_) {}
+      }
+
+      const cleanPhone = String(b.phone || '').replace(/\D/g, '');
+      if (cleanPhone.length >= 10) {
+        try {
+          db.prepare('DELETE FROM whatsapp_bot_sessions WHERE phone LIKE ?').run(`%${cleanPhone.slice(-8)}`);
+          const confirmMsg = [
+            '✅ *CHECKLIST DE VIAGEM — FROTA CONCLUÍDO!*',
+            `🚛 *Veículo:* ${[v.brand, v.model].filter(Boolean).join(' ') || v.plate}`,
+            `🪪 *Placa:* *${v.plate}*`,
+            `👤 *Motorista:* ${driverName}`,
+            `📍 *Tipo:* ${type === 'saida' ? '📤 Saída' : '📥 Chegada'}`,
+            `📏 *Hodômetro:* ${Number(km || 0).toLocaleString('pt-BR')} km`,
+            `📊 *Resultado:* ${problems.length ? `⚠️ ${problems.length} item(ns) Irregular(es)` : '✅ 100% OK'}`,
+            wo ? `🔧 *OS DE FROTA #${wo.number} ABERTA AUTOMATICAMENTE!*` : '',
+          ].filter(Boolean).join('\n');
+          sendFleetWhatsAppMessage({ to: cleanPhone, text: confirmMsg }, db).catch(() => {});
         } catch (_) {}
       }
 
