@@ -8,7 +8,7 @@ import {
   FleetError, nowIso, today, addDays, fleetAccessOf, parseBody, SCHEMAS, tx, insertRow, updateRow,
   getVehicle, getDriverByUser, ensureMachineForVehicle, setOdometer, recomputeConsumption, planStatus, docStatus,
   openWorkOrder, fleetUserIds, fleetSettings, computeAlerts, dispatchAlerts, vehicleCostSummary, costReport, costReportCsv,
-  validCpf, DOC_TYPES_VEHICLE, DOC_TYPES_DRIVER, COST_CATEGORIES, TIRE_EVENTS, FLEET_LEVELS, VEHICLE_STATUS,
+  validCpf, saveChecklistPhoto, DOC_TYPES_VEHICLE, DOC_TYPES_DRIVER, COST_CATEGORIES, TIRE_EVENTS, FLEET_LEVELS, VEHICLE_STATUS,
   VEHICLE_TYPES, FUEL_TYPES, DRIVER_STATUS, FINE_STATUS, CNH_CATEGORIES,
 } from './fleet-core.js';
 import { setSetting } from './domain.js';
@@ -517,40 +517,82 @@ export function registerFleetRoutes(app, getDb) {
       args.push(req.user.id); if (req.fleet.driver) args.push(req.fleet.driver.id);
     }
     const rows = db.prepare(`${ckSelect} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY c.created_at DESC LIMIT ${limitOf(req, 50)}`).all(...args);
-    return { checklists: rows.map(({ answers_json, ...r }) => r) };
+    return {
+      checklists: rows.map(({ answers_json, photos_json, ...r }) => {
+        const photos = JSON.parse(photos_json || '{}');
+        const ans = JSON.parse(answers_json || '[]');
+        const itemPhotos = ans.filter((a) => a.photo_url).length;
+        const stagePhotos = Object.values(photos).filter(Boolean).length;
+        return { ...r, photos, photo_count: stagePhotos + itemPhotos };
+      }),
+    };
   });
   get('/checklists/:id', ALL, (req, res, db) => {
     const c = db.prepare(`${ckSelect} WHERE c.id = ?`).get(req.params.id);
     if (!c) throw new FleetError(404, 'Checklist não encontrado');
     if (!own(req, c)) throw new FleetError(403, 'Checklist de outro motorista');
-    const { answers_json, ...rest } = c;
-    return { checklist: { ...rest, answers: JSON.parse(answers_json || '[]') } };
+    const { answers_json, photos_json, ...rest } = c;
+    return {
+      checklist: {
+        ...rest,
+        answers: JSON.parse(answers_json || '[]'),
+        photos: JSON.parse(photos_json || '{}'),
+      },
+    };
   });
 
   post('/checklists', ALL, (req, res, db) => {
     const access = req.fleet.access;
     const driver = access === 'motorista' ? needDriver(req) : (req.body?.driver_id ? db.prepare('SELECT * FROM fleet_drivers WHERE id = ?').get(req.body.driver_id) : req.fleet.driver);
     const v = activeVehicle(db, req.body?.vehicle_id);
-    const type = req.body?.type === 'retorno' ? 'retorno' : 'saida';
+    const type = ['retorno', 'chegada'].includes(req.body?.type) ? 'retorno' : 'saida';
     const km = req.body?.km === undefined || req.body.km === '' ? null : Number(String(req.body.km).replace(',', '.'));
     if (km != null && (!Number.isFinite(km) || km < 0)) throw new FleetError(400, 'Quilometragem inválida');
+    const generalNotes = String(req.body?.notes || '').trim().slice(0, 500) || null;
     const items = db.prepare('SELECT * FROM fleet_checklist_items WHERE active = 1 ORDER BY sort_order, label').all();
     const given = new Map((Array.isArray(req.body?.answers) ? req.body.answers : []).map((a) => [a.item_id, a]));
     const answers = items.map((it) => {
       const a = given.get(it.id);
-      if (!a || !['ok', 'problema', 'na'].includes(a.status)) throw new FleetError(400, `Responda o item: ${it.label}`);
-      const note = String(a.note || '').trim().slice(0, 300);
-      if (a.status === 'problema' && note.length < 3) throw new FleetError(400, `Descreva o problema do item: ${it.label}`);
-      return { item_id: it.id, label: it.label, category: it.category, critical: it.critical, status: a.status, note: note || null };
+      const rawStatus = a?.status === 'irregular' ? 'problema' : a?.status;
+      if (!a || !['ok', 'problema', 'na'].includes(rawStatus)) throw new FleetError(400, `Responda o item: ${it.label}`);
+      const note = String(a.note || (rawStatus === 'problema' ? generalNotes : '') || '').trim().slice(0, 300);
+      if (rawStatus === 'problema' && note.length < 3) throw new FleetError(400, `Descreva a avaria/observação do item irregular: ${it.label}`);
+      const photoUrl = saveChecklistPhoto(a.photo_url || a.photo || null);
+      return { item_id: it.id, label: it.label, category: it.category, critical: it.critical, status: rawStatus, note: note || null, photo_url: photoUrl };
     });
+
+    const rawPhotos = req.body?.photos && typeof req.body.photos === 'object' ? req.body.photos : {};
+    const photos = {};
+    for (const k of ['painel', 'pneus', 'iluminacao', 'frente', 'traseira', 'lateral_direita', 'lateral_esquerda']) {
+      const saved = saveChecklistPhoto(rawPhotos[k]);
+      if (saved) photos[k] = saved;
+    }
+
+    if (req.body?.require_photos === true) {
+      if (!photos.painel) throw new FleetError(400, '📸 Envie a foto obrigatória do Painel com motor ligado (Etapa 1)');
+      const tireProb = answers.some((a) => a.status === 'problema' && String(a.category || '').includes('Pneus'));
+      const tireItemPhoto = answers.some((a) => a.photo_url && String(a.category || '').includes('Pneus'));
+      if (tireProb && !photos.pneus && !tireItemPhoto) {
+        throw new FleetError(400, '📸 Como houve item irregular em Pneus & Rodagem, envie a foto do pneu/defeito (Etapa 2)');
+      }
+      const lightProb = answers.some((a) => a.status === 'problema' && String(a.category || '').includes('Ilumina'));
+      const lightItemPhoto = answers.some((a) => a.photo_url && String(a.category || '').includes('Ilumina'));
+      if (lightProb && !photos.iluminacao && !lightItemPhoto) {
+        throw new FleetError(400, '📸 Como houve item irregular em Iluminação & Sinalização, envie a foto do defeito (Etapa 3)');
+      }
+      if (!photos.frente || !photos.traseira || !photos.lateral_direita || !photos.lateral_esquerda) {
+        throw new FleetError(400, '📸 Envie as 4 fotos obrigatórias do caminhão: Frente, Traseira, Lateral Direita e Lateral Esquerda (Etapa 4)');
+      }
+    }
+
     const problems = answers.filter((a) => a.status === 'problema');
     const critical = problems.filter((a) => a.critical);
     const id = randomUUID();
     const at = nowIso();
     tx(db, () => {
       insertRow(db, 'fleet_checklists', { id, vehicle_id: v.id, driver_id: driver?.id || null, user_id: req.user.id, type, km,
-        answers_json: JSON.stringify(answers), has_issues: problems.length ? 1 : 0, critical_issues: critical.length,
-        notes: String(req.body?.notes || '').trim().slice(0, 500) || null, created_at: at });
+        answers_json: JSON.stringify(answers), photos_json: JSON.stringify(photos), has_issues: problems.length ? 1 : 0, critical_issues: critical.length,
+        notes: generalNotes, created_at: at });
       if (km != null) setOdometer(db, v, km, 'checklist', req.user.id);
       if (critical.length && v.status === 'ativo') db.prepare("UPDATE fleet_vehicles SET status='manutencao', updated_at=? WHERE id=?").run(at, v.id);
     });
@@ -560,10 +602,20 @@ export function registerFleetRoutes(app, getDb) {
       const wantOs = critical.length > 0 || req.body?.open_os === true;
       if (wantOs) {
         try {
+          const allPhotoUrls = [
+            ...Object.values(photos),
+            ...answers.map((a) => a.photo_url).filter(Boolean),
+          ];
+          const woAttachments = allPhotoUrls.map((u) => {
+            const fname = String(u).replace(/^\/uploads\//, '');
+            return fname ? { id: randomUUID(), file: fname, mime: 'image/jpeg', size: 0 } : null;
+          }).filter(Boolean);
+
           const r = openWorkOrder(db, req.user, v, {
-            description: `Checklist de ${type === 'saida' ? 'saída' : 'retorno'} — ${v.plate}${driver ? ` (motorista ${driver.name})` : ''}:\n${text}`.slice(0, 900),
+            description: `Checklist de ${type === 'saida' ? 'saída' : 'chegada'} — ${v.plate}${driver ? ` (motorista ${driver.name})` : ''}:\n${text}${generalNotes ? `\nObs.: ${generalNotes}` : ''}`.slice(0, 900),
             priority: critical.length ? 'urgente' : 'media', stopped: critical.length > 0,
             title: `Frota ${v.plate}: problemas no checklist`,
+            attachments: woAttachments,
           });
           db.prepare('UPDATE fleet_checklists SET wo_id = ? WHERE id = ?').run(r.woId, id);
           out.wo = { id: r.woId, number: r.number };

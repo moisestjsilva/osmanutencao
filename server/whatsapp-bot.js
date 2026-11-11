@@ -10,8 +10,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { applyOp, getSetting } from './domain.js';
-import { setOdometer, ensureMachineForVehicle } from './fleet-core.js';
+import { applyOp, getSetting, notify } from './domain.js';
+import { setOdometer, ensureMachineForVehicle, openWorkOrder, fleetUserIds, insertRow, tx } from './fleet-core.js';
 
 export const DEFAULT_TEMPLATES = [
   {
@@ -396,6 +396,133 @@ export const DEFAULT_TEMPLATES = [
       '━━━━━━━━━━━━━━━━━━━━━━',
       '🕒 _Abertura registrada em: {horario}_'
     ].join('\n')
+  },
+  {
+    key: 'fleet_ck_welcome',
+    name: 'Frota Checklist: Início (Comando Chek)',
+    category: 'frota',
+    description: 'Enviada quando o motorista digita "Chek" para iniciar o Checklist de Viagem da Frota.',
+    variables: ['{nome}', '{telefone}'],
+    template: [
+      '📋 *CHECKLIST DE VIAGEM — FROTA*',
+      '_(Preenchimento rápido: Saída / Chegada)_',
+      '',
+      '👋 Olá *{nome}*!',
+      '🚛 Digite a *PLACA do Veículo* (ex: *RMI1A95*, *QXV7C91*) para iniciar o checklist:',
+      '_(Ou digite *lista* para escolher da lista | *cancelar* para sair)_'
+    ].join('\n')
+  },
+  {
+    key: 'fleet_ck_ask_type',
+    name: 'Frota Checklist: Tipo (Saída / Chegada)',
+    category: 'frota',
+    description: 'Confirma veículo e motorista e pergunta se o checklist é de Saída ou Chegada.',
+    variables: ['{placa}', '{veiculo}', '{motorista}', '{horario}'],
+    template: [
+      '📋 *CHECKLIST DE VIAGEM — FROTA*',
+      '🚛 *Placa do Veículo:* *{placa}* ({veiculo})',
+      '👤 *Motorista:* {motorista}',
+      '📅 *Data/Hora:* {horario}',
+      '',
+      '📍 *Tipo do Checklist:*',
+      '*1* - ( ) *Saída*',
+      '*2* - ( ) *Chegada*',
+      '',
+      '_(Digite *1* para Saída ou *2* para Chegada)_'
+    ].join('\n')
+  },
+  {
+    key: 'fleet_ck_stage_1',
+    name: 'Frota Checklist: Etapa 1 (Cabine & Painel)',
+    category: 'frota',
+    description: 'Perguntas da Etapa 1 do Checklist de Viagem.',
+    variables: ['{placa}', '{veiculo}'],
+    template: [
+      '1️⃣ *CABINE & PAINEL* (*{placa}*)',
+      '• *1.* Km e nível de combustível: [ ] OK  [ ] Irregular',
+      '• *2.* Luzes de alerta no painel: [ ] OK  [ ] Irregular',
+      '• *3.* Nível de Arla 32: [ ] OK  [ ] Irregular',
+      '• *4.* Cinto, buzina e limpadores: [ ] OK  [ ] Irregular',
+      '',
+      '👉 Digite *OK* (ou *0*) se *TODOS* estiverem OK',
+      '👉 Ou digite o(s) número(s) *Irregulares* (ex: *2* ou *2, 4*)'
+    ].join('\n')
+  },
+  {
+    key: 'fleet_ck_stage_2',
+    name: 'Frota Checklist: Etapa 2 (Pneus & Rodagem)',
+    category: 'frota',
+    description: 'Perguntas da Etapa 2 do Checklist de Viagem.',
+    variables: ['{placa}', '{veiculo}'],
+    template: [
+      '2️⃣ *PNEUS & RODAGEM* (*{placa}*)',
+      '• *1.* Calibragem / pressão visual: [ ] OK  [ ] Irregular',
+      '• *2.* Desgaste dos sulcos (TWI): [ ] OK  [ ] Irregular',
+      '• *3.* Porcas de roda bem fixadas: [ ] OK  [ ] Irregular',
+      '• *4.* Estado do estepe: [ ] OK  [ ] Irregular',
+      '',
+      '👉 Digite *OK* (ou *0*) se *TODOS* estiverem OK',
+      '👉 Ou digite o(s) número(s) *Irregulares* (ex: *1* ou *1, 3*)'
+    ].join('\n')
+  },
+  {
+    key: 'fleet_ck_stage_3',
+    name: 'Frota Checklist: Etapa 3 (Iluminação & Sinalização)',
+    category: 'frota',
+    description: 'Perguntas da Etapa 3 do Checklist de Viagem.',
+    variables: ['{placa}', '{veiculo}'],
+    template: [
+      '3️⃣ *ILUMINAÇÃO & SINALIZAÇÃO* (*{placa}*)',
+      '• *1.* Farol baixo e alto: [ ] OK  [ ] Irregular',
+      '• *2.* Lanternas e luz de freio: [ ] OK  [ ] Irregular',
+      '• *3.* Setas e pisca-alerta: [ ] OK  [ ] Irregular',
+      '• *4.* Faixas refletivas: [ ] OK  [ ] Irregular',
+      '',
+      '👉 Digite *OK* (ou *0*) se *TODOS* estiverem OK',
+      '👉 Ou digite o(s) número(s) *Irregulares* (ex: *1* ou *2, 3*)'
+    ].join('\n')
+  },
+  {
+    key: 'fleet_ck_stage_4',
+    name: 'Frota Checklist: Etapa 4 (Funilaria, Vidros & Itens)',
+    category: 'frota',
+    description: 'Perguntas da Etapa 4 do Checklist de Viagem.',
+    variables: ['{placa}', '{veiculo}'],
+    template: [
+      '4️⃣ *FUNILARIA, VIDROS & ITENS* (*{placa}*)',
+      '• *1.* Para-brisa e retrovisores sem trincas: [ ] OK  [ ] Irregular',
+      '• *2.* Lataria e para-choques sem batidas: [ ] OK  [ ] Irregular',
+      '• *3.* Kit a bordo (macaco, chave, triângulo, extintor): [ ] OK  [ ] Irregular',
+      '',
+      '👉 Digite *OK* (ou *0*) se *TODOS* estiverem OK',
+      '👉 Ou digite o(s) número(s) *Irregulares* (ex: *1* ou *2*)'
+    ].join('\n')
+  },
+  {
+    key: 'fleet_ck_success',
+    name: 'Frota Checklist: Resumo Final do Checklist de Viagem',
+    category: 'frota',
+    description: 'Resumo completo enviado ao motorista ao concluir o Checklist de Viagem.',
+    variables: ['{placa}', '{veiculo}', '{motorista}', '{horario}', '{x_saida}', '{x_chegada}', '{km}', '{resumo_etapas}', '{resumo_fotos}', '{observacoes}', '{os_gerada}'],
+    template: [
+      '📋 *CHECKLIST DE VIAGEM — FROTA CONCLUÍDO!*',
+      '━━━━━━━━━━━━━━━━━━━━━━',
+      '🚛 *Placa do Veículo:* {placa} ({veiculo})',
+      '👤 *Motorista:* {motorista}',
+      '📅 *Data/Hora:* {horario}',
+      '📍 *Tipo:* ({x_saida}) Saída  ({x_chegada}) Chegada',
+      '📏 *Hodômetro:* {km} km',
+      '',
+      '{resumo_etapas}',
+      '',
+      '📸 *Fotos Registradas:*',
+      '{resumo_fotos}',
+      '',
+      '⚠️ *Observações / Avarias encontradas:*',
+      '{observacoes}',
+      '{os_gerada}',
+      '━━━━━━━━━━━━━━━━━━━━━━'
+    ].join('\n')
   }
 ];
 
@@ -685,6 +812,10 @@ export async function processIncomingWhatsAppMessage(db, {
   };
 
   const lowerText = rawText.toLowerCase();
+  const isCheckCommand =
+    ['chek', 'check', 'checklist', 'cheklist', '!chek', '!check', '!checklist', '#chek', '#check'].includes(lowerText) ||
+    /^(?:!chek|#chek|!check|chek|check|checklist|cheklist)\s+/i.test(rawText);
+
   const isFleetCommand =
     forceFleetMode ||
     ['frota', '!frota', '#frota', 'os frota', 'abrir frota', 'caminhao', 'caminhão', 'veiculo', 'veículo'].includes(lowerText) ||
@@ -693,6 +824,11 @@ export async function processIncomingWhatsAppMessage(db, {
   // 1. Mensagens em Grupos do WhatsApp
   if (isGroup) {
     const lower = rawText.toLowerCase();
+    if (isCheckCommand) {
+      const resp = `📋 Olá *${pushName || 'colega'}*! Para fazer o *Checklist de Viagem da Frota*, envie a palavra *Chek* diretamente para este número no *privado*.`;
+      await sendReply(resp);
+      return { handled: true, action: 'group_redirect_fleet_ck', response: resp };
+    }
     if (lower.startsWith('!frota') || lower === 'frota' || lower === '#frota') {
       const resp = `🚚 Olá *${pushName || 'colega'}*! Para abrir uma Ordem de Serviço da *Frota* pela placa do veículo, envie *frota* diretamente para este número no *privado*.`;
       await sendReply(resp);
@@ -722,12 +858,20 @@ export async function processIncomingWhatsAppMessage(db, {
   let session = getSession(db, phone);
   let user = findUserByPhone(db, phone);
 
+  // Se o usuário digitar explicitamente "Chek" (ou "Chek PLACA"), reinicia e entra direto no Checklist de Viagem da Frota!
+  if (isCheckCommand) {
+    if (session) {
+      deleteSession(db, phone);
+      session = null;
+    }
+  }
+
   // Se o usuário digitar explicitamente "frota" (ou "frota PLACA") a qualquer momento (inclusive sem vínculo prévio ou no meio de outra conversa), inicia o fluxo de Frota!
   if (
     ['frota', '!frota', '#frota', 'os frota', 'abrir frota'].includes(lowerText) ||
     lowerText.startsWith('frota ')
   ) {
-    if (session && !session.step.startsWith('FLEET_')) {
+    if (session && (!session.step.startsWith('FLEET_') || session.step.startsWith('FLEET_CK_'))) {
       deleteSession(db, phone);
       session = null;
     }
@@ -740,19 +884,30 @@ export async function processIncomingWhatsAppMessage(db, {
     if (prevMode === 'fleet') forceFleetMode = true;
   }
 
-  // Para o fluxo da Frota, se o número não estiver na tabela users, tenta localizar em fleet_drivers ou usa solicitante padrão
+  // Para o fluxo da Frota, se o número não estiver na tabela users, tenta localizar em fleet_drivers ou usa solicitante da frota / admin
   const resolveFleetRequester = () => {
     if (user) return user;
+    const fleetFallbackSql = `
+      SELECT id, name FROM users
+      WHERE active = 1
+      ORDER BY CASE
+        WHEN fleet_role = 'motorista' THEN 1
+        WHEN fleet_role IS NOT NULL THEN 2
+        WHEN role IN ('admin', 'superadmin', 'gerente') THEN 3
+        ELSE 4
+      END
+      LIMIT 1
+    `;
     try {
       const drivers = db.prepare("SELECT * FROM fleet_drivers WHERE active = 1 AND phone IS NOT NULL AND phone != ''").all();
       for (const d of drivers) {
         if (matchBrazilianPhones(d.phone, phone)) {
-          const fallbackU = db.prepare("SELECT id FROM users WHERE active = 1 ORDER BY CASE role WHEN 'solicitante' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END LIMIT 1").get();
+          const fallbackU = db.prepare(fleetFallbackSql).get();
           return { id: d.user_id || fallbackU?.id || 'u-admin', name: d.name, username: 'motorista' };
         }
       }
     } catch (_) {}
-    const fallbackU = db.prepare("SELECT id, name FROM users WHERE active = 1 ORDER BY CASE role WHEN 'solicitante' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END LIMIT 1").get();
+    const fallbackU = db.prepare(fleetFallbackSql).get();
     return {
       id: fallbackU?.id || 'u-admin',
       name: pushName && pushName !== 'Simulador' ? `${pushName} (${phone})` : (pushName || `Motorista (${phone})`),
@@ -778,6 +933,54 @@ export async function processIncomingWhatsAppMessage(db, {
 
   // Se não houver sessão ativa
   if (!session) {
+    // =========================================================================
+    // ENTRADA NO FLUXO DE CHECKLIST DE VIAGEM DA FROTA (gatilho "Chek")
+    // =========================================================================
+    if (isCheckCommand) {
+      const fleetUser = resolveFleetRequester();
+      const afterCk = rawText.replace(/^(?:!chek|#chek|!check|#check|!checklist|checklist|cheklist|check|chek)\s*/i, '').trim();
+      if (afterCk && afterCk.toLowerCase() !== rawText.toLowerCase()) {
+        const v = findFleetVehicle(afterCk);
+        if (v) {
+          const vehLabel = [v.brand, v.model, v.nickname ? `(${v.nickname})` : ''].filter(Boolean).join(' ').trim() || v.plate;
+          const horario = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          saveSession(db, phone, 'FLEET_CK_AWAITING_TYPE', {
+            mode: 'fleet_ck',
+            requester_id: fleetUser.id,
+            requester_name: fleetUser.name,
+            vehicle_id: v.id,
+            plate: v.plate,
+            vehicle_label: vehLabel,
+            current_km: v.odometer_km || 0,
+            stage_irregulars: {},
+            photos: {},
+          }, fleetUser.id);
+          const msg = renderTemplate(db, 'fleet_ck_ask_type', {
+            placa: v.plate,
+            veiculo: vehLabel,
+            motorista: fleetUser.name,
+            horario,
+          });
+          await sendReply(msg);
+          return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+        }
+      }
+
+      saveSession(db, phone, 'FLEET_CK_AWAITING_PLATE', {
+        mode: 'fleet_ck',
+        requester_id: fleetUser.id,
+        requester_name: fleetUser.name,
+        stage_irregulars: {},
+        photos: {},
+      }, fleetUser.id);
+      const msg = renderTemplate(db, 'fleet_ck_welcome', {
+        nome: fleetUser.name,
+        telefone: phone,
+      });
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_AWAITING_PLATE', response: msg };
+    }
+
     // =========================================================================
     // ENTRADA NO FLUXO EXCLUSIVO DA FROTA (por palavra "frota" ou canal exclusivo)
     // =========================================================================
@@ -1719,6 +1922,542 @@ export async function processIncomingWhatsAppMessage(db, {
       woId,
       number: osNumber,
       response: successMsg,
+    };
+  }
+
+  // =========================================================================
+  // MÁQUINA DE ESTADOS DO CHECKLIST DE VIAGEM DA FROTA (COMANDO "Chek")
+  // =========================================================================
+  const extractCkPhotoUrl = () => {
+    if (mediaAttachment?.file) return `/uploads/${mediaAttachment.file}`;
+    if (['foto', '[foto]', 'simular foto', 'imagem'].includes(lowerText)) {
+      return '/uploads/simulated-ck-photo.jpg';
+    }
+    return null;
+  };
+
+  const parseStageIrregularNumbers = (input, maxItems) => {
+    const clean = String(input || '').trim().toLowerCase();
+    if (['ok', '0', 'tudo ok', 'todos ok', 'normal', 'nenhum', 'nada'].includes(clean)) {
+      return { valid: true, irregulars: [] };
+    }
+    const nums = (clean.match(/\d+/g) || []).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= maxItems);
+    if (nums.length > 0) {
+      return { valid: true, irregulars: [...new Set(nums)] };
+    }
+    return { valid: false, irregulars: [] };
+  };
+
+  if (step === 'FLEET_CK_AWAITING_PLATE') {
+    if (['lista', '2', 'ver lista'].includes(lowerText)) {
+      const vehicles = db.prepare('SELECT id, plate, brand, model, nickname, odometer_km FROM fleet_vehicles WHERE active = 1 ORDER BY plate').all();
+      data.vehicles_list = vehicles.map((v) => ({
+        id: v.id,
+        plate: v.plate,
+        label: [v.brand, v.model, v.nickname ? `(${v.nickname})` : ''].filter(Boolean).join(' ').trim() || v.plate,
+        km: v.odometer_km || 0,
+      }));
+      saveSession(db, phone, 'FLEET_CK_SELECTING_VEHICLE', data, session.user_id);
+      const listStr = data.vehicles_list.map((v, i) => `*${i + 1}* - *${v.plate}* • ${v.label}`).join('\n');
+      const msg = renderTemplate(db, 'fleet_bot_choose_vehicle', { lista_veiculos: listStr });
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_SELECTING_VEHICLE', response: msg };
+    }
+
+    const v = findFleetVehicle(rawText);
+    if (v) {
+      const vehLabel = [v.brand, v.model, v.nickname ? `(${v.nickname})` : ''].filter(Boolean).join(' ').trim() || v.plate;
+      data.vehicle_id = v.id;
+      data.plate = v.plate;
+      data.vehicle_label = vehLabel;
+      data.current_km = v.odometer_km || 0;
+      saveSession(db, phone, 'FLEET_CK_AWAITING_TYPE', data, session.user_id);
+      const msg = renderTemplate(db, 'fleet_ck_ask_type', {
+        placa: v.plate,
+        veiculo: vehLabel,
+        motorista: data.requester_name || 'Motorista',
+        horario: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      });
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+    }
+
+    const msg = `⚠️ Placa *"${rawText.toUpperCase()}"* não localizada na Frota.\n\nDigite a *PLACA* novamente ou digite *lista* para ver os veículos cadastrados:`;
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_AWAITING_PLATE', response: msg };
+  }
+
+  if (step === 'FLEET_CK_SELECTING_VEHICLE') {
+    const choice = parseInt(rawText, 10);
+    const list = data.vehicles_list || [];
+    let sel = null;
+    if (!isNaN(choice) && choice >= 1 && choice <= list.length) {
+      sel = list[choice - 1];
+    } else {
+      const byPlate = findFleetVehicle(rawText);
+      if (byPlate) {
+        sel = {
+          id: byPlate.id,
+          plate: byPlate.plate,
+          label: [byPlate.brand, byPlate.model, byPlate.nickname ? `(${byPlate.nickname})` : ''].filter(Boolean).join(' ').trim() || byPlate.plate,
+          km: byPlate.odometer_km || 0,
+        };
+      }
+    }
+    if (!sel) {
+      const msg = `Opção inválida. Digite o número do veículo (1 a ${list.length}) ou a Placa:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_SELECTING_VEHICLE', response: msg };
+    }
+    delete data.vehicles_list;
+    data.vehicle_id = sel.id;
+    data.plate = sel.plate;
+    data.vehicle_label = sel.label;
+    data.current_km = sel.km || 0;
+    saveSession(db, phone, 'FLEET_CK_AWAITING_TYPE', data, session.user_id);
+    const msg = renderTemplate(db, 'fleet_ck_ask_type', {
+      placa: data.plate,
+      veiculo: data.vehicle_label,
+      motorista: data.requester_name || 'Motorista',
+      horario: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+    });
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+  }
+
+  if (step === 'FLEET_CK_AWAITING_TYPE') {
+    if (['1', 'saida', 'saída', 's'].includes(lowerText)) {
+      data.ck_type = 'saida';
+    } else if (['2', 'chegada', 'retorno', 'c', 'r'].includes(lowerText)) {
+      data.ck_type = 'retorno';
+    } else {
+      const msg = `📍 Informe o tipo do Checklist:\n*1* - ( ) Saída\n*2* - ( ) Chegada`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+    }
+    saveSession(db, phone, 'FLEET_CK_AWAITING_KM', data, session.user_id);
+    const msg = `📏 Qual a *Quilometragem (Km) atual* no painel do veículo *${data.plate}*?\n_(Último registrado: *${Number(data.current_km || 0).toLocaleString('pt-BR')} km*)_`;
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_AWAITING_KM', response: msg };
+  }
+
+  if (step === 'FLEET_CK_AWAITING_KM') {
+    const cleanNum = rawText.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
+    const parsedKm = cleanNum !== '' ? Number(cleanNum) : NaN;
+    if (isNaN(parsedKm) || parsedKm < 0) {
+      const msg = `Por favor, digite apenas os números do Km atual (ex: *158400*):`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_AWAITING_KM', response: msg };
+    }
+    if (parsedKm > 0 && parsedKm < (data.current_km || 0)) {
+      const msg = `⚠️ O Km informado (*${parsedKm.toLocaleString('pt-BR')} km*) é menor que o último registrado (*${Number(data.current_km).toLocaleString('pt-BR')} km*).\nDigite o Km correto no painel ou envie *0* para manter o atual:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_AWAITING_KM', response: msg };
+    }
+    data.informed_km = parsedKm > 0 ? Math.round(parsedKm) : (data.current_km || 0);
+    saveSession(db, phone, 'FLEET_CK_STAGE_1_ANSWERS', data, session.user_id);
+    const msg = renderTemplate(db, 'fleet_ck_stage_1', { placa: data.plate, veiculo: data.vehicle_label });
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_1_ANSWERS', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_1_ANSWERS') {
+    const parsed = parseStageIrregularNumbers(rawText, 4);
+    if (!parsed.valid) {
+      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 4 itens de *1️⃣ CABINE & PAINEL* estiverem OK, ou digite o número do item Irregular (de *1* a *4*):`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_1_ANSWERS', response: msg };
+    }
+    if (!data.stage_irregulars) data.stage_irregulars = {};
+    data.stage_irregulars.s1 = parsed.irregulars;
+    saveSession(db, phone, 'FLEET_CK_STAGE_1_PHOTO', data, session.user_id);
+    const msg = [
+      '📸 *Foto OBRIGATÓRIA — 1️⃣ CABINE & PAINEL:*',
+      'Envie agora uma *FOTO do Painel com motor ligado* (mostrando Km, combustível e alertas):'
+    ].join('\n');
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_1_PHOTO', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_1_PHOTO') {
+    const photoUrl = extractCkPhotoUrl();
+    if (!photoUrl) {
+      const msg = `📸 *Esta foto é obrigatória!*\nPor favor, envie a *FOTO do Painel com motor ligado* (mostrando Km, combustível e alertas) para prosseguir:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_1_PHOTO', response: msg };
+    }
+    if (!data.photos) data.photos = {};
+    data.photos.painel = photoUrl;
+    saveSession(db, phone, 'FLEET_CK_STAGE_2_ANSWERS', data, session.user_id);
+    const stage2Msg = renderTemplate(db, 'fleet_ck_stage_2', { placa: data.plate, veiculo: data.vehicle_label });
+    const msg = `✅ Foto do painel registrada!\n\n${stage2Msg}`;
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_2_ANSWERS', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_2_ANSWERS') {
+    const parsed = parseStageIrregularNumbers(rawText, 4);
+    if (!parsed.valid) {
+      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 4 itens de *2️⃣ PNEUS & RODAGEM* estiverem OK, ou digite o número do item Irregular (de *1* a *4*):`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_2_ANSWERS', response: msg };
+    }
+    if (!data.stage_irregulars) data.stage_irregulars = {};
+    data.stage_irregulars.s2 = parsed.irregulars;
+    saveSession(db, phone, 'FLEET_CK_STAGE_2_PHOTO', data, session.user_id);
+    const msg = parsed.irregulars.length > 0
+      ? '📸 *Foto OBRIGATÓRIA — 2️⃣ PNEUS & RODAGEM:*\nComo você marcou item Irregular nos pneus, envie agora a *FOTO* do corte, pneu murcho ou defeito:'
+      : '📸 *Foto — 2️⃣ PNEUS & RODAGEM:*\nEnvie uma *FOTO* dos pneus ou digite *OK* caso não haja corte, pneu murcho ou defeito:';
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_2_PHOTO', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_2_PHOTO') {
+    const photoUrl = extractCkPhotoUrl();
+    const needPhoto = (data.stage_irregulars?.s2 || []).length > 0;
+    const isSkip = ['ok', '0', 'pular', 'nao', 'não', 'sem defeito'].includes(lowerText);
+    if (!photoUrl && (needPhoto || !isSkip)) {
+      const msg = needPhoto
+        ? `📸 Como há irregularidade em *Pneus & Rodagem*, envie a *FOTO* do pneu/defeito para avançar:`
+        : `📸 Envie uma *FOTO* dos pneus ou digite *OK* para avançar para a etapa 3:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_2_PHOTO', response: msg };
+    }
+    if (photoUrl) {
+      if (!data.photos) data.photos = {};
+      data.photos.pneus = photoUrl;
+    }
+    saveSession(db, phone, 'FLEET_CK_STAGE_3_ANSWERS', data, session.user_id);
+    const stage3Msg = renderTemplate(db, 'fleet_ck_stage_3', { placa: data.plate, veiculo: data.vehicle_label });
+    const msg = `${photoUrl ? '✅ Foto de pneus registrada!\n\n' : ''}${stage3Msg}`;
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_3_ANSWERS', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_3_ANSWERS') {
+    const parsed = parseStageIrregularNumbers(rawText, 4);
+    if (!parsed.valid) {
+      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 4 itens de *3️⃣ ILUMINAÇÃO & SINALIZAÇÃO* estiverem OK, ou digite o número do item Irregular (de *1* a *4*):`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_3_ANSWERS', response: msg };
+    }
+    if (!data.stage_irregulars) data.stage_irregulars = {};
+    data.stage_irregulars.s3 = parsed.irregulars;
+    saveSession(db, phone, 'FLEET_CK_STAGE_3_PHOTO', data, session.user_id);
+    const msg = parsed.irregulars.length > 0
+      ? '📸 *Foto OBRIGATÓRIA — 3️⃣ ILUMINAÇÃO & SINALIZAÇÃO:*\nComo você marcou item Irregular na iluminação, envie agora a *FOTO* da lâmpada queimada ou quebra:'
+      : '📸 *Foto — 3️⃣ ILUMINAÇÃO & SINALIZAÇÃO:*\nEnvie uma *FOTO* da iluminação ou digite *OK* caso não haja lâmpada queimada ou quebra:';
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_3_PHOTO', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_3_PHOTO') {
+    const photoUrl = extractCkPhotoUrl();
+    const needPhoto = (data.stage_irregulars?.s3 || []).length > 0;
+    const isSkip = ['ok', '0', 'pular', 'nao', 'não', 'sem defeito'].includes(lowerText);
+    if (!photoUrl && (needPhoto || !isSkip)) {
+      const msg = needPhoto
+        ? `📸 Como há irregularidade em *Iluminação & Sinalização*, envie a *FOTO* do defeito para avançar:`
+        : `📸 Envie uma *FOTO* da iluminação ou digite *OK* para avançar para a etapa 4:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_3_PHOTO', response: msg };
+    }
+    if (photoUrl) {
+      if (!data.photos) data.photos = {};
+      data.photos.iluminacao = photoUrl;
+    }
+    saveSession(db, phone, 'FLEET_CK_STAGE_4_ANSWERS', data, session.user_id);
+    const stage4Msg = renderTemplate(db, 'fleet_ck_stage_4', { placa: data.plate, veiculo: data.vehicle_label });
+    const msg = `${photoUrl ? '✅ Foto de iluminação registrada!\n\n' : ''}${stage4Msg}`;
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_STAGE_4_ANSWERS', response: msg };
+  }
+
+  if (step === 'FLEET_CK_STAGE_4_ANSWERS') {
+    const parsed = parseStageIrregularNumbers(rawText, 3);
+    if (!parsed.valid) {
+      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 3 itens de *4️⃣ FUNILARIA, VIDROS & ITENS* estiverem OK, ou digite o número do item Irregular (de *1* a *3*):`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_STAGE_4_ANSWERS', response: msg };
+    }
+    if (!data.stage_irregulars) data.stage_irregulars = {};
+    data.stage_irregulars.s4 = parsed.irregulars;
+    saveSession(db, phone, 'FLEET_CK_PHOTO_FRENTE', data, session.user_id);
+    const msg = [
+      '📸 *Fotos OBRIGATÓRIAS (4 fotos gerais do caminhão) — 1/4:*',
+      '',
+      `Envie agora a foto da *FRENTE* do veículo *${data.plate}*:`
+    ].join('\n');
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_PHOTO_FRENTE', response: msg };
+  }
+
+  if (step === 'FLEET_CK_PHOTO_FRENTE') {
+    const photoUrl = extractCkPhotoUrl();
+    if (!photoUrl) {
+      const msg = `📸 *Foto 1/4 Obrigatória:* Envie a foto da *FRENTE* do veículo *${data.plate}*:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_PHOTO_FRENTE', response: msg };
+    }
+    if (!data.photos) data.photos = {};
+    data.photos.frente = photoUrl;
+    saveSession(db, phone, 'FLEET_CK_PHOTO_TRASEIRA', data, session.user_id);
+    const msg = [
+      '✅ Foto da Frente recebida!',
+      '',
+      '📸 *Fotos OBRIGATÓRIAS (4 fotos gerais do caminhão) — 2/4:*',
+      `Envie agora a foto da *TRASEIRA* do veículo *${data.plate}*:`
+    ].join('\n');
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_PHOTO_TRASEIRA', response: msg };
+  }
+
+  if (step === 'FLEET_CK_PHOTO_TRASEIRA') {
+    const photoUrl = extractCkPhotoUrl();
+    if (!photoUrl) {
+      const msg = `📸 *Foto 2/4 Obrigatória:* Envie a foto da *TRASEIRA* do veículo *${data.plate}*:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_PHOTO_TRASEIRA', response: msg };
+    }
+    if (!data.photos) data.photos = {};
+    data.photos.traseira = photoUrl;
+    saveSession(db, phone, 'FLEET_CK_PHOTO_LAT_DIR', data, session.user_id);
+    const msg = [
+      '✅ Foto da Traseira recebida!',
+      '',
+      '📸 *Fotos OBRIGATÓRIAS (4 fotos gerais do caminhão) — 3/4:*',
+      `Envie agora a foto da *LATERAL DIREITA* do veículo *${data.plate}*:`
+    ].join('\n');
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_PHOTO_LAT_DIR', response: msg };
+  }
+
+  if (step === 'FLEET_CK_PHOTO_LAT_DIR') {
+    const photoUrl = extractCkPhotoUrl();
+    if (!photoUrl) {
+      const msg = `📸 *Foto 3/4 Obrigatória:* Envie a foto da *LATERAL DIREITA* do veículo *${data.plate}*:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_PHOTO_LAT_DIR', response: msg };
+    }
+    if (!data.photos) data.photos = {};
+    data.photos.lateral_direita = photoUrl;
+    saveSession(db, phone, 'FLEET_CK_PHOTO_LAT_ESQ', data, session.user_id);
+    const msg = [
+      '✅ Foto da Lateral Direita recebida!',
+      '',
+      '📸 *Fotos OBRIGATÓRIAS (4 fotos gerais do caminhão) — 4/4:*',
+      `Envie agora a foto da *LATERAL ESQUERDA* do veículo *${data.plate}*:`
+    ].join('\n');
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_PHOTO_LAT_ESQ', response: msg };
+  }
+
+  if (step === 'FLEET_CK_PHOTO_LAT_ESQ') {
+    const photoUrl = extractCkPhotoUrl();
+    if (!photoUrl) {
+      const msg = `📸 *Foto 4/4 Obrigatória:* Envie a foto da *LATERAL ESQUERDA* do veículo *${data.plate}*:`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_PHOTO_LAT_ESQ', response: msg };
+    }
+    if (!data.photos) data.photos = {};
+    data.photos.lateral_esquerda = photoUrl;
+
+    const totalIrregular =
+      (data.stage_irregulars?.s1?.length || 0) +
+      (data.stage_irregulars?.s2?.length || 0) +
+      (data.stage_irregulars?.s3?.length || 0) +
+      (data.stage_irregulars?.s4?.length || 0);
+
+    saveSession(db, phone, 'FLEET_CK_AWAITING_NOTES', data, session.user_id);
+    const msg = totalIrregular > 0
+      ? [
+          '✅ Todas as 4 fotos gerais do caminhão foram recebidas!',
+          '',
+          '⚠️ *Observações / Avarias encontradas:*',
+          `Você marcou *${totalIrregular} item(ns) Irregular(es)*.`,
+          'Descreva abaixo as avarias ou problemas encontrados:'
+        ].join('\n')
+      : [
+          '✅ Todas as 4 fotos gerais do caminhão foram recebidas!',
+          '',
+          '⚠️ *Observações / Avarias encontradas:*',
+          'Deseja registrar alguma observação adicional?',
+          '_(Digite a observação ou envie *OK* para finalizar o checklist)_'
+        ].join('\n');
+    await sendReply(msg);
+    return { handled: true, step: 'FLEET_CK_AWAITING_NOTES', response: msg };
+  }
+
+  if (step === 'FLEET_CK_AWAITING_NOTES') {
+    const totalIrregular =
+      (data.stage_irregulars?.s1?.length || 0) +
+      (data.stage_irregulars?.s2?.length || 0) +
+      (data.stage_irregulars?.s3?.length || 0) +
+      (data.stage_irregulars?.s4?.length || 0);
+
+    const isSkip = ['ok', '0', 'nenhuma', 'nada', 'sem observacao', 'sem observações'].includes(lowerText);
+    if (totalIrregular > 0 && (isSkip || rawText.trim().length < 3)) {
+      const msg = `⚠️ Como você marcou item(ns) *Irregular(es)*, descreva brevemente a avaria encontrada (mínimo 3 caracteres):`;
+      await sendReply(msg);
+      return { handled: true, step: 'FLEET_CK_AWAITING_NOTES', response: msg };
+    }
+
+    const notes = isSkip ? null : rawText.trim().slice(0, 500);
+    const veh = db.prepare('SELECT * FROM fleet_vehicles WHERE id = ?').get(data.vehicle_id);
+    if (!veh) {
+      deleteSession(db, phone);
+      const errMsg = '❌ Veículo não encontrado. Digite *Chek* para iniciar novamente.';
+      await sendReply(errMsg);
+      return { error: 'Veículo não encontrado', response: errMsg };
+    }
+
+    const items = db.prepare('SELECT * FROM fleet_checklist_items WHERE active = 1 ORDER BY sort_order, label').all();
+    const s1 = new Set(data.stage_irregulars?.s1 || []);
+    const s2 = new Set(data.stage_irregulars?.s2 || []);
+    const s3 = new Set(data.stage_irregulars?.s3 || []);
+    const s4 = new Set(data.stage_irregulars?.s4 || []);
+
+    // Mapeia os itens por categoria na ordem
+    const byCat = [
+      items.filter((i) => String(i.category || '').startsWith('1')),
+      items.filter((i) => String(i.category || '').startsWith('2')),
+      items.filter((i) => String(i.category || '').startsWith('3')),
+      items.filter((i) => String(i.category || '').startsWith('4')),
+    ];
+    const sets = [s1, s2, s3, s4];
+    const stagePhotoKeys = ['painel', 'pneus', 'iluminacao', 'frente'];
+
+    const answers = [];
+    byCat.forEach((group, gIdx) => {
+      const irrSet = sets[gIdx];
+      group.forEach((it, idx) => {
+        const isIrr = irrSet.has(idx + 1);
+        answers.push({
+          item_id: it.id,
+          label: it.label,
+          category: it.category,
+          critical: it.critical,
+          status: isIrr ? 'problema' : 'ok',
+          note: isIrr ? (notes || 'Irregularidade apontada via WhatsApp') : null,
+          photo_url: isIrr ? (data.photos?.[stagePhotoKeys[gIdx]] || null) : null,
+        });
+      });
+    });
+
+    const problems = answers.filter((a) => a.status === 'problema');
+    const critical = problems.filter((a) => a.critical);
+    const ckId = randomUUID();
+    const at = new Date().toISOString();
+    let requesterId = data.requester_id || session.user_id;
+    if (!requesterId) {
+      const fb = db.prepare("SELECT id FROM users WHERE active = 1 ORDER BY CASE WHEN fleet_role IS NOT NULL THEN 1 ELSE 2 END LIMIT 1").get();
+      requesterId = fb?.id || 'u-admin';
+    }
+    const drv = db.prepare('SELECT * FROM fleet_drivers WHERE user_id = ? AND active = 1').get(requesterId) || null;
+
+    tx(db, () => {
+      insertRow(db, 'fleet_checklists', {
+        id: ckId,
+        vehicle_id: veh.id,
+        driver_id: drv?.id || null,
+        user_id: requesterId,
+        type: data.ck_type || 'saida',
+        km: data.informed_km || veh.odometer_km || 0,
+        answers_json: JSON.stringify(answers),
+        photos_json: JSON.stringify(data.photos || {}),
+        has_issues: problems.length ? 1 : 0,
+        critical_issues: critical.length,
+        notes: notes || null,
+        created_at: at,
+      });
+      if (data.informed_km && data.informed_km > (veh.odometer_km || 0)) {
+        try { setOdometer(db, veh, data.informed_km, 'checklist_whatsapp', requesterId, 'Checklist via WhatsApp'); } catch (_) {}
+      }
+      if (critical.length && veh.status === 'ativo') {
+        db.prepare("UPDATE fleet_vehicles SET status = 'manutencao', updated_at = ? WHERE id = ?").run(at, veh.id);
+      }
+    });
+
+    let createdWo = null;
+    if (problems.length > 0) {
+      try {
+        const text = problems.map((p) => `• ${p.label}: ${p.note}`).join('\n');
+        const allPhotoUrls = Object.values(data.photos || {}).filter(Boolean);
+        const woAttachments = allPhotoUrls.map((u) => {
+          const fname = String(u).replace(/^\/uploads\//, '');
+          return fname ? { id: randomUUID(), file: fname, mime: 'image/jpeg', size: 0 } : null;
+        }).filter(Boolean);
+
+        const r = openWorkOrder(db, { id: requesterId }, veh, {
+          description: `Checklist WhatsApp (${data.ck_type === 'retorno' ? 'Chegada' : 'Saída'}) — ${veh.plate} (${data.requester_name || 'Motorista'}):\n${text}`.slice(0, 900),
+          priority: critical.length ? 'urgente' : 'media',
+          stopped: critical.length > 0,
+          title: `Frota ${veh.plate}: avaria no checklist`,
+          attachments: woAttachments,
+          origin: 'whatsapp_fleet_bot',
+        });
+        db.prepare('UPDATE fleet_checklists SET wo_id = ? WHERE id = ?').run(r.woId, ckId);
+        createdWo = { id: r.woId, number: r.number };
+      } catch (_) {}
+
+      const ids = fleetUserIds(db, ['gestor', 'mecanico']).filter((u) => u !== requesterId);
+      if (ids.length) {
+        notify(db, ids, {
+          woId: createdWo?.id || null,
+          kind: 'frota_checklist',
+          title: `${critical.length ? '🛑' : '⚠️'} Checklist WhatsApp c/ Irregularidade — ${veh.plate}`,
+          body: `${problems.length} item(ns) irregular(es) apontado(s) por ${data.requester_name || 'Motorista'}. ${notes || ''}`.slice(0, 300),
+        });
+      }
+    }
+
+    deleteSession(db, phone);
+
+    const fmtItemLine = (it) => `• ${it.label}: ${it.status === 'ok' ? '[X] OK  [ ] Irregular' : '[ ] OK  [X] Irregular ⚠️'}`;
+    const resumoEtapas = [
+      '1️⃣ *CABINE & PAINEL*',
+      ...answers.filter((a) => String(a.category || '').startsWith('1')).map(fmtItemLine),
+      '',
+      '2️⃣ *PNEUS & RODAGEM*',
+      ...answers.filter((a) => String(a.category || '').startsWith('2')).map(fmtItemLine),
+      '',
+      '3️⃣ *ILUMINAÇÃO & SINALIZAÇÃO*',
+      ...answers.filter((a) => String(a.category || '').startsWith('3')).map(fmtItemLine),
+      '',
+      '4️⃣ *FUNILARIA, VIDROS & ITENS*',
+      ...answers.filter((a) => String(a.category || '').startsWith('4')).map(fmtItemLine),
+    ].join('\n');
+
+    const resumoFotos = [
+      data.photos?.painel ? '✅ Painel c/ motor ligado' : '',
+      data.photos?.pneus ? '✅ Pneus & Rodagem' : '',
+      data.photos?.iluminacao ? '✅ Iluminação & Sinalização' : '',
+      '✅ 4 Fotos Gerais (Frente, Traseira, Lat. Direita e Lat. Esquerda)',
+    ].filter(Boolean).join('\n');
+
+    const summaryMsg = renderTemplate(db, 'fleet_ck_success', {
+      placa: data.plate,
+      veiculo: data.vehicle_label,
+      motorista: data.requester_name || 'Motorista',
+      horario: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      x_saida: data.ck_type === 'retorno' ? ' ' : 'X',
+      x_chegada: data.ck_type === 'retorno' ? 'X' : ' ',
+      km: Number(data.informed_km || 0).toLocaleString('pt-BR'),
+      resumo_etapas: resumoEtapas,
+      resumo_fotos: resumoFotos,
+      observacoes: notes || 'Nenhuma irregularidade / Tudo OK',
+      os_gerada: createdWo ? `\n🔧 *OS DE FROTA #${createdWo.number} ABERTA AUTOMATICAMENTE!*` : '',
+    });
+
+    await sendReply(summaryMsg);
+    return {
+      handled: true,
+      step: 'COMPLETED',
+      checklistCreated: true,
+      checklistId: ckId,
+      orderCreated: Boolean(createdWo),
+      workOrder: createdWo,
+      response: summaryMsg,
     };
   }
 

@@ -70,9 +70,11 @@ async function main() {
   r = await call('POST', '/api/fleet/fuel', { vehicle_id: V.id, km: 101400, liters: 900, price_per_l: 6 }, tJoao); assert.ok(r.warnings.length); ok('aviso de litros acima do tanque');
 
   console.log('Checklist (bloqueio + OS automática)');
-  const items = (await call('GET', '/api/fleet/checklist-items', null, tJoao)).items; assert.ok(items.length >= 20);
+  const items = (await call('GET', '/api/fleet/checklist-items', null, tJoao)).items; assert.equal(items.length, 15);
   r = await call('POST', '/api/fleet/checklists', { vehicle_id: V.id, type: 'saida', answers: [] }, tJoao); assert.equal(r.status, 400); ok('checklist incompleto é recusado');
   const answers = items.map((i, idx) => ({ item_id: i.id, status: idx === 0 ? 'problema' : 'ok', note: idx === 0 ? 'Pneu dianteiro careca' : '' }));
+  r = await call('POST', '/api/fleet/checklists', { vehicle_id: V.id, type: 'saida', km: 101400, answers, require_photos: true }, tJoao);
+  assert.equal(r.status, 400); ok('checklist mobile exige foto obrigatória do painel e 4 fotos do caminhão');
   assert.ok(items[0].critical);
   r = await call('POST', '/api/fleet/checklists', { vehicle_id: V.id, type: 'saida', km: 101400, answers }, tJoao);
   assert.equal(r.status, 201, JSON.stringify(r)); assert.equal(r.blocked, true); assert.ok(r.wo?.number); ok(`problema crítico bloqueia o veículo e abre OS ${r.wo.number}`);
@@ -234,6 +236,66 @@ async function main() {
   r = await call('GET', '/api/workorders', null, tMec);
   assert.equal(r.workOrders.some((w) => w.id === fleetWoId), true);
   ok('motorista e mecânico da frota visualizam as OS abertas da frota');
+
+  // 5) Fluxo completo de Checklist pelo WhatsApp ao digitar "Chek"
+  console.log('Robô WhatsApp — Checklist de Viagem ("Chek") com fotos por etapa');
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'Chek' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /CHECKLIST DE VIAGEM.*PLACA/is);
+  ok('digitar "Chek" inicia automaticamente o Checklist de Viagem pedindo a Placa');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'RMI1A95' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /Saída.*Chegada/is);
+  ok('placa RMI1A95 identificada e pergunta se é Saída ou Chegada');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '1' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /Quilometragem/i);
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '158600' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /1️⃣.*CABINE & PAINEL/is);
+  ok('etapa 1 (Cabine & Painel) enviada após informar tipo e Km');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'OK' }, adm);
+  assert.match(r.reply, /Foto OBRIGATÓRIA.*Painel com motor ligado/is);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'texto sem foto' }, adm);
+  assert.match(r.reply, /obrigatória/i);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'foto' }, adm);
+  assert.match(r.reply, /2️⃣.*PNEUS & RODAGEM/is);
+  ok('foto obrigatória do painel exigida e validada na etapa 1');
+
+  // Marca item 1 de Pneus como irregular -> deve exigir foto do pneu
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '1' }, adm);
+  assert.match(r.reply, /Foto OBRIGATÓRIA.*PNEUS/is);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'foto' }, adm);
+  assert.match(r.reply, /3️⃣.*ILUMINAÇÃO & SINALIZAÇÃO/is);
+  ok('etapa 2 exige foto quando há pneu irregular e avança para etapa 3');
+
+  // Etapa 3 toda OK -> foto opcional (pode digitar OK)
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'OK' }, adm);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'OK' }, adm);
+  assert.match(r.reply, /4️⃣.*FUNILARIA, VIDROS & ITENS/is);
+
+  // Etapa 4 OK -> pede as 4 fotos obrigatórias (Frente, Traseira, Lat. Direita, Lat. Esquerda)
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'OK' }, adm);
+  assert.match(r.reply, /1\/4.*FRENTE/is);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'foto' }, adm);
+  assert.match(r.reply, /2\/4.*TRASEIRA/is);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'foto' }, adm);
+  assert.match(r.reply, /3\/4.*LATERAL DIREITA/is);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'foto' }, adm);
+  assert.match(r.reply, /4\/4.*LATERAL ESQUERDA/is);
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'foto' }, adm);
+  assert.match(r.reply, /Observações \/ Avarias encontradas/is);
+  ok('4 fotos gerais obrigatórias (Frente, Traseira, Lat. Direita e Lat. Esquerda) coletadas');
+
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'Pneu dianteiro esquerdo murcho precisando calibrar/reparo' }, adm);
+  assert.equal(r.status, 200);
+  assert.match(r.reply, /CHECKLIST DE VIAGEM — FROTA CONCLUÍDO/i);
+  assert.match(r.reply, /OS DE FROTA #\d+ ABERTA AUTOMATICAMENTE/i);
+  ok('checklist via WhatsApp salvo com fotos e OS automática gerada');
 
   console.log(`\n${pass} verificações OK`);
 }

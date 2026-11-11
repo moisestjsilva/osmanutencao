@@ -3,6 +3,9 @@
 // alertas e relatórios. As rotas HTTP ficam em fleet.js.
 // ============================================================================
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { UPLOAD_DIR } from './db.js';
 import { applyOp, notify, getSetting, setSetting } from './domain.js';
 import { sendWhatsAppMessage, isWhatsAppEnabled } from './whatsapp.js';
 import { fleetAccessOf } from './auth.js';
@@ -258,33 +261,46 @@ export function updateRow(db, table, id, data, idCol = 'id') {
   db.prepare(`UPDATE ${table} SET ${cols.map((c) => `${c}=?`).join(',')} WHERE ${idCol}=?`).run(...cols.map((c) => data[c] ?? null), id);
 }
 
-const DEFAULT_CHECKLIST = [
-  ['Pneus e rodas', 'Pneus (calibragem, desgaste, cortes e bolhas)', 1],
-  ['Pneus e rodas', 'Rodas e porcas de fixação', 1],
-  ['Freios e direção', 'Freios (pedal e freio de estacionamento)', 1],
-  ['Freios e direção', 'Direção (folgas e funcionamento)', 1],
-  ['Freios e direção', 'Vazamento de ar no sistema pneumático', 1],
-  ['Motor e fluidos', 'Nível de óleo do motor', 0],
-  ['Motor e fluidos', 'Nível de água / arrefecimento', 0],
-  ['Motor e fluidos', 'Nível de fluido de freio e embreagem', 0],
-  ['Motor e fluidos', 'Vazamentos (óleo, diesel, água)', 0],
-  ['Motor e fluidos', 'Nível de ARLA 32', 0],
-  ['Elétrica e iluminação', 'Faróis, lanternas e setas', 1],
-  ['Elétrica e iluminação', 'Luz de freio e de ré', 1],
-  ['Elétrica e iluminação', 'Painel (luzes de alerta acesas)', 0],
-  ['Elétrica e iluminação', 'Buzina', 0],
-  ['Cabine e segurança', 'Cinto de segurança', 1],
-  ['Cabine e segurança', 'Espelhos retrovisores', 1],
-  ['Cabine e segurança', 'Limpador e lavador de para-brisa', 0],
-  ['Cabine e segurança', 'Extintor de incêndio (validade e carga)', 1],
-  ['Cabine e segurança', 'Triângulo, macaco e chave de rodas', 0],
-  ['Cabine e segurança', 'Documentos do veículo e do motorista', 0],
-  ['Cabine e segurança', 'Tacógrafo (disco/funcionamento)', 0],
-  ['Carroceria e carga', 'Carroceria/baú (portas, travas e assoalho)', 0],
-  ['Carroceria e carga', 'Engate / quinta roda / pino-rei', 1],
-  ['Carroceria e carga', 'Lonas, cintas e amarração da carga', 0],
-  ['Carroceria e carga', 'Limpeza geral', 0],
+export const DEFAULT_CHECKLIST = [
+  ['1️⃣ Cabine & Painel', 'Km e nível de combustível', 1],
+  ['1️⃣ Cabine & Painel', 'Luzes de alerta no painel', 1],
+  ['1️⃣ Cabine & Painel', 'Nível de Arla 32', 0],
+  ['1️⃣ Cabine & Painel', 'Cinto, buzina e limpadores', 1],
+  ['2️⃣ Pneus & Rodagem', 'Calibragem / pressão visual', 1],
+  ['2️⃣ Pneus & Rodagem', 'Desgaste dos sulcos (TWI)', 1],
+  ['2️⃣ Pneus & Rodagem', 'Porcas de roda bem fixadas', 1],
+  ['2️⃣ Pneus & Rodagem', 'Estado do estepe', 0],
+  ['3️⃣ Iluminação & Sinalização', 'Farol baixo e alto', 1],
+  ['3️⃣ Iluminação & Sinalização', 'Lanternas e luz de freio', 1],
+  ['3️⃣ Iluminação & Sinalização', 'Setas e pisca-alerta', 1],
+  ['3️⃣ Iluminação & Sinalização', 'Faixas refletivas', 0],
+  ['4️⃣ Funilaria, Vidros & Itens', 'Para-brisa e retrovisores sem trincas', 1],
+  ['4️⃣ Funilaria, Vidros & Itens', 'Lataria e para-choques sem batidas', 0],
+  ['4️⃣ Funilaria, Vidros & Itens', 'Kit a bordo (macaco, chave, triângulo, extintor)', 1],
 ];
+
+export function saveChecklistPhoto(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s) return null;
+  if (s.startsWith('/uploads/')) return s;
+  if (/^(wa-|ck-|img-)[a-zA-Z0-9._-]+$/.test(s)) return `/uploads/${s}`;
+  const m = s.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+  if (m) {
+    try {
+      const rawExt = m[1].toLowerCase();
+      const ext = rawExt === 'jpeg' ? 'jpg' : (['png', 'webp', 'gif'].includes(rawExt) ? rawExt : 'jpg');
+      const buf = Buffer.from(m[2], 'base64');
+      if (!buf.length) return null;
+      const filename = `ck-${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
+      return `/uploads/${filename}`;
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
 
 export function migrateFleet(db) {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
@@ -381,9 +397,16 @@ export function migrateFleet(db) {
   CREATE INDEX IF NOT EXISTS idx_fleet_checklists_v ON fleet_checklists(vehicle_id, created_at);
   `);
 
-  if (db.prepare('SELECT COUNT(*) n FROM fleet_checklist_items').get().n === 0) {
+  const ckCols = db.prepare('PRAGMA table_info(fleet_checklists)').all().map((c) => c.name);
+  if (!ckCols.includes('photos_json')) {
+    db.exec('ALTER TABLE fleet_checklists ADD COLUMN photos_json TEXT');
+  }
+
+  if (db.prepare('SELECT COUNT(*) n FROM fleet_checklist_items').get().n === 0 || !getSetting(db, 'fleet_checklist_v2_clean')) {
+    db.exec('DELETE FROM fleet_checklist_items');
     const ins = db.prepare('INSERT INTO fleet_checklist_items (id,label,category,critical,active,sort_order) VALUES (?,?,?,?,1,?)');
-    DEFAULT_CHECKLIST.forEach(([cat, label, crit], i) => ins.run(randomUUID(), label, cat, crit, i * 10));
+    DEFAULT_CHECKLIST.forEach(([cat, label, crit], i) => ins.run(randomUUID(), label, cat, crit, (i + 1) * 10));
+    setSetting(db, 'fleet_checklist_v2_clean', nowIso());
   }
 
   if (process.env.FLEET_SKIP_SEED !== '1' && !getSetting(db, 'fleet_initial_seed_v1')) {
@@ -573,12 +596,12 @@ export function docStatus(expiry, lead = 30) {
   return { state: days < 0 ? 'vencido' : days <= lead ? 'vencendo' : 'valido', days };
 }
 
-export function openWorkOrder(db, user, vehicle, { description, priority = 'media', stopped = false, type = 'corretiva', title = null }) {
+export function openWorkOrder(db, user, vehicle, { description, priority = 'media', stopped = false, type = 'corretiva', title = null, attachments = [], origin = 'online' }) {
   const machineId = ensureMachineForVehicle(db, vehicle);
   const woId = randomUUID();
   const r = applyOp(db, {
-    opId: randomUUID(), type: 'create_wo', userId: user.id, woId, localTime: nowIso(), origin: 'online',
-    payload: { id: woId, machineId, description, type, priority, machineStopped: stopped, title },
+    opId: randomUUID(), type: 'create_wo', userId: user.id, woId, localTime: nowIso(), origin,
+    payload: { id: woId, machineId, description, type, priority, machineStopped: stopped, title, attachments },
   });
   if (r.status !== 'ok') throw new FleetError(400, r.message || 'Não foi possível abrir a OS');
   return r;
