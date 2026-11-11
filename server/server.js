@@ -958,6 +958,10 @@ app.get('/whatsapp-frota', (req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'whatsapp-frota.html'));
 });
 
+app.get('/checklist-frota', (req, res) => {
+  res.sendFile(path.join(ROOT, 'public', 'checklist-frota.html'));
+});
+
 // ---------- APIs Exclusivas da Central WhatsApp da Frota ----------
 app.get('/api/whatsapp-frota/status', (req, res) => {
   const fb = getFleetBaileysStatus();
@@ -1086,6 +1090,8 @@ app.post('/api/whatsapp-frota/simulate', async (req, res) => {
       result,
       orderCreated: Boolean(result?.orderCreated),
       workOrder: result?.workOrder || null,
+      poll: result?.poll || null,
+      quickLink: result?.quickLink?.url || result?.quickLink || null,
       reply: capturedReply || result?.response || 'Mensagem processada.',
       response: capturedReply || result?.response || 'Mensagem processada.',
     });
@@ -1344,6 +1350,8 @@ app.post('/api/whatsapp/simulate', async (req, res) => {
       result,
       orderCreated: Boolean(result?.orderCreated),
       workOrder: result?.workOrder || null,
+      poll: result?.poll || null,
+      quickLink: result?.quickLink?.url || result?.quickLink || null,
       reply: capturedReply || result?.response || 'Mensagem processada.',
       response: capturedReply || result?.response || 'Mensagem processada.',
     });

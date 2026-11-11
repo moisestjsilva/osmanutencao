@@ -1,8 +1,8 @@
 // Service worker: guarda o "casco" do app para abrir mesmo sem internet
 // e gerencia Web Push em segundo plano com celular bloqueado ou minimizado.
-const VERSION = 'nova-os-v26';
+const VERSION = 'nova-os-v27';
 const SHELL = [
-  '/', '/index.html', '/css/styles.css', '/js/app.js', '/js/store.js', '/js/ui.js', '/js/views.js', '/js/fleet.js', '/js/scanner.js',
+  '/', '/index.html', '/checklist-frota.html', '/css/styles.css', '/js/app.js', '/js/store.js', '/js/ui.js', '/js/views.js', '/js/fleet.js', '/js/scanner.js',
   '/manifest.webmanifest', '/icons/icon.svg', '/vendor/jsQR.js',
 ];
 

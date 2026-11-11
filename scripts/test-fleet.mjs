@@ -247,18 +247,23 @@ async function main() {
   r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'RMI1A95' }, adm);
   assert.equal(r.status, 200);
   assert.match(r.reply, /Saída.*Chegada/is);
-  ok('placa RMI1A95 identificada e pergunta se é Saída ou Chegada');
+  assert.equal(Boolean(r.quickLink && r.quickLink.includes('/checklist-frota.html?placa=RMI1A95')), true);
+  assert.equal(Boolean(r.poll && Array.isArray(r.poll.values) && r.poll.values.length === 2), true);
+  ok('placa RMI1A95 retorna tanto o Link 1-Toque (Caso 1) quanto a Enquete Clicável (Caso 2)');
 
-  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '1' }, adm);
+  // Testar resposta clicando na opção da Enquete (Poll): "1 - 📤 Saída (Início de Viagem)"
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '1 - 📤 Saída (Início de Viagem)' }, adm);
   assert.equal(r.status, 200);
   assert.match(r.reply, /Quilometragem/i);
 
   r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: '158600' }, adm);
   assert.equal(r.status, 200);
   assert.match(r.reply, /1️⃣.*CABINE & PAINEL/is);
-  ok('etapa 1 (Cabine & Painel) enviada após informar tipo e Km');
+  assert.equal(Boolean(r.poll && Array.isArray(r.poll.values) && r.poll.values[0].startsWith('OK -')), true);
+  ok('etapa 1 (Cabine & Painel) enviada com Enquete Clicável após informar tipo e Km');
 
-  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'OK' }, adm);
+  // Testar resposta clicando na opção da Enquete da Etapa 1: "OK - ✅ Tudo OK nesta etapa"
+  r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'OK - ✅ Tudo OK nesta etapa' }, adm);
   assert.match(r.reply, /Foto OBRIGATÓRIA.*Painel com motor ligado/is);
   r = await call('POST', '/api/whatsapp-frota/simulate', { phone: '5532999990009', text: 'texto sem foto' }, adm);
   assert.match(r.reply, /obrigatória/i);
@@ -296,6 +301,35 @@ async function main() {
   assert.match(r.reply, /CHECKLIST DE VIAGEM — FROTA CONCLUÍDO/i);
   assert.match(r.reply, /OS DE FROTA #\d+ ABERTA AUTOMATICAMENTE/i);
   ok('checklist via WhatsApp salvo com fotos e OS automática gerada');
+
+  // 6) Caso 1: Teste da página e API do Link Direto 1-Toque (/checklist-frota.html & /api/fleet/quick-checklist)
+  console.log('Caso 1 — Link Direto 1-Toque (/checklist-frota.html)');
+  r = await call('GET', '/api/fleet/quick-checklist?placa=RMI1A95');
+  assert.equal(r.status, 200);
+  assert.equal(r.selected?.plate, 'RMI1A95');
+  assert.equal(Array.isArray(r.items) && r.items.length >= 15, true);
+  ok('GET /api/fleet/quick-checklist?placa=RMI1A95 carrega veículo pré-selecionado sem exigir login');
+
+  const fakePhoto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+  const quickAnswers = r.items.map((i) => ({ item_id: i.id, status: 'ok', note: '', photo_url: '' }));
+  r = await call('POST', '/api/fleet/quick-checklist', {
+    plate: 'RMI1A95',
+    driver_name: 'Motorista Link 1-Toque',
+    type: 'chegada',
+    odometer_km: 158950,
+    answers: quickAnswers,
+    stage_photos: {
+      painel: fakePhoto,
+      frente: fakePhoto,
+      traseira: fakePhoto,
+      lateral_direita: fakePhoto,
+      lateral_esquerda: fakePhoto,
+    },
+    notes: 'Chegada de viagem via Link 1-Toque OK',
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.overall_status, 'ok');
+  ok('POST /api/fleet/quick-checklist salva checklist 1-toque com fotos obrigatórias direto pelo celular');
 
   console.log(`\n${pass} verificações OK`);
 }

@@ -208,7 +208,7 @@ async function sendViaWApi({ to, text }) {
 /**
  * Adaptador para envio via Evolution API v2 (Docker / CloudPanel)
  */
-async function sendViaEvolution({ to, text }) {
+async function sendViaEvolution({ to, text, poll }) {
   const baseUrl = (process.env.EVOLUTION_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
   const instance = process.env.EVOLUTION_INSTANCE_NAME || 'manutencao';
   const apiKey = process.env.EVOLUTION_API_KEY;
@@ -217,26 +217,35 @@ async function sendViaEvolution({ to, text }) {
     throw new Error('EVOLUTION_API_KEY não foi configurada nas variáveis de ambiente');
   }
 
-  const endpoint = `${baseUrl}/message/sendText/${encodeURIComponent(instance)}`;
-  const body = {
-    number: to,
-    text: text,
-  };
+  let responseData = null;
+  if (text) {
+    const endpoint = `${baseUrl}/message/sendText/${encodeURIComponent(instance)}`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+      body: JSON.stringify({ number: to, text }),
+    });
+    responseData = await response.json().catch(() => null);
+    if (!response.ok) {
+      const errorDetail = responseData?.message || responseData?.error || `HTTP ${response.status} ${response.statusText}`;
+      throw new Error(`[Evolution API] Erro no envio (${errorDetail})`);
+    }
+  }
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': apiKey,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const responseData = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const errorDetail = responseData?.message || responseData?.error || `HTTP ${response.status} ${response.statusText}`;
-    throw new Error(`[Evolution API] Erro no envio (${errorDetail})`);
+  if (poll && Array.isArray(poll.values) && poll.values.length >= 2) {
+    try {
+      const pollEndpoint = `${baseUrl}/message/sendPoll/${encodeURIComponent(instance)}`;
+      await fetch(pollEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+        body: JSON.stringify({
+          number: to,
+          name: poll.name || 'Selecione uma opção:',
+          selectableCount: poll.selectableCount || 1,
+          values: poll.values,
+        }),
+      });
+    } catch (_) {}
   }
 
   return { success: true, provider: 'evolution', data: responseData };
@@ -246,7 +255,7 @@ async function sendViaEvolution({ to, text }) {
  * Função central de envio de mensagem de texto.
  * Roteia automaticamente para o provedor selecionado no .env
  */
-export async function sendWhatsAppMessage({ to, text, image = null }) {
+export async function sendWhatsAppMessage({ to, text, image = null, poll = null }) {
   const bState = getBaileysStatus();
   const provider = getWhatsAppProvider();
 
@@ -267,9 +276,9 @@ export async function sendWhatsAppMessage({ to, text, image = null }) {
   try {
     let result;
     if (provider === 'baileys') {
-      result = await sendBaileysMessage({ to: target, text, image });
+      result = await sendBaileysMessage({ to: target, text, image, poll });
     } else if (provider === 'evolution') {
-      result = await sendViaEvolution({ to: target, text });
+      result = await sendViaEvolution({ to: target, text, poll });
     } else {
       result = await sendViaWApi({ to: target, text });
     }
@@ -376,7 +385,7 @@ export {
  * 2) Se Aparelho Baileys exclusivo da Frota estiver conectado -> envia via Baileys da Frota
  * 3) Caso contrário -> usa o WhatsApp principal da Manutenção como fallback transparente
  */
-export async function sendFleetWhatsAppMessage({ to, text, image = null }, db = null) {
+export async function sendFleetWhatsAppMessage({ to, text, image = null, poll = null }, db = null) {
   const fleetGroup = db ? getSetting(db, 'fleet_whatsapp_group_id', '') : '';
   const mainGroup = db ? getSetting(db, 'whatsapp_group_id', process.env.WHATSAPP_GROUP_ID || '') : (process.env.WHATSAPP_GROUP_ID || '');
   const target = normalizeRecipient(to || fleetGroup || mainGroup);
@@ -391,15 +400,33 @@ export async function sendFleetWhatsAppMessage({ to, text, image = null }, db = 
   const evoKey = (db ? getSetting(db, 'fleet_evolution_apikey', '') : '') || process.env.FLEET_EVOLUTION_API_KEY || '';
 
   if (evoEnabled && evoUrl && evoInstance && evoKey) {
-    const endpoint = `${evoUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(evoInstance)}`;
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: evoKey },
-      body: JSON.stringify({ number: target, text }),
-    });
-    const responseData = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(`[Evolution-Frota] Erro no envio (${responseData?.message || response.status})`);
+    let responseData = null;
+    if (text) {
+      const endpoint = `${evoUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(evoInstance)}`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: evoKey },
+        body: JSON.stringify({ number: target, text }),
+      });
+      responseData = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(`[Evolution-Frota] Erro no envio (${responseData?.message || response.status})`);
+      }
+    }
+    if (poll && Array.isArray(poll.values) && poll.values.length >= 2) {
+      try {
+        const pollEndpoint = `${evoUrl.replace(/\/+$/, '')}/message/sendPoll/${encodeURIComponent(evoInstance)}`;
+        await fetch(pollEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: evoKey },
+          body: JSON.stringify({
+            number: target,
+            name: poll.name || 'Selecione uma opção:',
+            selectableCount: poll.selectableCount || 1,
+            values: poll.values,
+          }),
+        });
+      } catch (_) {}
     }
     return { success: true, provider: 'evolution-fleet', data: responseData };
   }
@@ -407,11 +434,11 @@ export async function sendFleetWhatsAppMessage({ to, text, image = null }, db = 
   // 2. Baileys dedicado da Frota (segundo telefone conectado em /whatsapp-frota)
   const fb = getFleetBaileysStatus();
   if (fb && fb.status === 'connected') {
-    return sendFleetBaileysMessage({ to: target, text, image });
+    return sendFleetBaileysMessage({ to: target, text, image, poll });
   }
 
   // 3. Fallback: usa o WhatsApp principal (mesmo número da manutenção)
-  return sendWhatsAppMessage({ to: target, text, image });
+  return sendWhatsAppMessage({ to: target, text, image, poll });
 }
 
 export function formatFleetOrderMessage({

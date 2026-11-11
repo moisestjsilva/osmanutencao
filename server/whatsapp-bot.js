@@ -793,8 +793,8 @@ export async function processIncomingWhatsAppMessage(db, {
   const phone = cleanDigits(from);
   if (!phone) return null;
 
-  // Helper para enviar a resposta de volta com delay e presença humanizada
-  const sendReply = async (replyText) => {
+  // Helper para enviar a resposta de volta com delay e presença humanizada (suporta Poll clicável e Link rápido)
+  const sendReply = async (replyText, opts = {}) => {
     if (typeof replyFn === 'function') {
       const delaySec = Number(getSetting(db, 'whatsapp_bot_delay', '2'));
       if (delaySec > 0) {
@@ -806,9 +806,87 @@ export async function processIncomingWhatsAppMessage(db, {
           try { await presenceFn('paused'); } catch (_) {}
         }
       }
-      return await replyFn(replyText);
+      return await replyFn(replyText, opts);
     }
-    return { ok: true, text: replyText };
+    return { ok: true, text: replyText, ...opts };
+  };
+
+  const baseAppUrl = (process.env.PUBLIC_URL || 'https://os.moveisrufato.com.br').replace(/\/+$/, '');
+  const buildQuickChecklistLink = (plate, driverName) => {
+    const qs = `placa=${encodeURIComponent(plate || '')}&motorista=${encodeURIComponent(driverName || 'Motorista')}&phone=${encodeURIComponent(phone || '')}`;
+    return {
+      url: `${baseAppUrl}/checklist-frota.html?${qs}`,
+      relativeUrl: `/checklist-frota.html?${qs}`,
+      label: `📲 Preencher Checklist de ${plate} em 1 Toque`,
+    };
+  };
+
+  const CK_POLLS = {
+    type: (plate) => ({
+      name: `📍 Tipo do Checklist (${plate}):`,
+      selectableCount: 1,
+      values: [
+        '1 - 📤 Saída (Início de Viagem)',
+        '2 - 📥 Chegada (Retorno de Viagem)',
+      ],
+    }),
+    stage1: (plate) => ({
+      name: `1️⃣ CABINE & PAINEL (${plate}) — Toque na opção:`,
+      selectableCount: 1,
+      values: [
+        'OK - ✅ Tudo OK nesta etapa',
+        '1 - ⚠️ Irregular: Km e nível de combustível',
+        '2 - ⚠️ Irregular: Luzes de alerta no painel',
+        '3 - ⚠️ Irregular: Nível de Arla 32',
+        '4 - ⚠️ Irregular: Cinto, buzina e limpadores',
+      ],
+    }),
+    stage2: (plate) => ({
+      name: `2️⃣ PNEUS & RODAGEM (${plate}) — Toque na opção:`,
+      selectableCount: 1,
+      values: [
+        'OK - ✅ Tudo OK nesta etapa',
+        '1 - ⚠️ Irregular: Calibragem / pressão visual',
+        '2 - ⚠️ Irregular: Desgaste dos sulcos (TWI)',
+        '3 - ⚠️ Irregular: Porcas de roda bem fixadas',
+        '4 - ⚠️ Irregular: Estado do estepe',
+      ],
+    }),
+    stage3: (plate) => ({
+      name: `3️⃣ ILUMINAÇÃO & SINALIZAÇÃO (${plate}) — Toque na opção:`,
+      selectableCount: 1,
+      values: [
+        'OK - ✅ Tudo OK nesta etapa',
+        '1 - ⚠️ Irregular: Farol baixo e alto',
+        '2 - ⚠️ Irregular: Lanternas e luz de freio',
+        '3 - ⚠️ Irregular: Setas e pisca-alerta',
+        '4 - ⚠️ Irregular: Faixas refletivas',
+      ],
+    }),
+    stage4: (plate) => ({
+      name: `4️⃣ FUNILARIA, VIDROS & ITENS (${plate}) — Toque na opção:`,
+      selectableCount: 1,
+      values: [
+        'OK - ✅ Tudo OK nesta etapa',
+        '1 - ⚠️ Irregular: Para-brisa e retrovisores',
+        '2 - ⚠️ Irregular: Lataria e para-choques',
+        '3 - ⚠️ Irregular: Kit a bordo (macaco/extintor)',
+      ],
+    }),
+    photoOptional: (stageName) => ({
+      name: `📸 Foto de ${stageName}:`,
+      selectableCount: 1,
+      values: [
+        'OK - ➡️ Sem defeito (Avançar sem foto)',
+      ],
+    }),
+    notesOptional: () => ({
+      name: '⚠️ Observações / Avarias finais:',
+      selectableCount: 1,
+      values: [
+        'OK - ✅ Nenhuma observação (Finalizar Checklist)',
+      ],
+    }),
   };
 
   const lowerText = rawText.toLowerCase();
@@ -955,14 +1033,17 @@ export async function processIncomingWhatsAppMessage(db, {
             stage_irregulars: {},
             photos: {},
           }, fleetUser.id);
-          const msg = renderTemplate(db, 'fleet_ck_ask_type', {
+          const baseMsg = renderTemplate(db, 'fleet_ck_ask_type', {
             placa: v.plate,
             veiculo: vehLabel,
             motorista: fleetUser.name,
             horario,
           });
-          await sendReply(msg);
-          return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+          const quickLink = buildQuickChecklistLink(v.plate, fleetUser.name);
+          const poll = CK_POLLS.type(v.plate);
+          const msg = `${baseMsg}\n\n🔗 *OPÇÃO 1 — PREENCHER PELO LINK RÁPIDO (1 TOQUE):*\n${quickLink.url}\n\n📊 *OPÇÃO 2 — CONTINUAR AQUI PELA ENQUETE CLICÁVEL ABAIXO:*`;
+          await sendReply(msg, { poll, quickLink });
+          return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg, poll, quickLink };
         }
       }
 
@@ -1938,8 +2019,18 @@ export async function processIncomingWhatsAppMessage(db, {
 
   const parseStageIrregularNumbers = (input, maxItems) => {
     const clean = String(input || '').trim().toLowerCase();
-    if (['ok', '0', 'tudo ok', 'todos ok', 'normal', 'nenhum', 'nada'].includes(clean)) {
+    if (
+      ['ok', '0', 'tudo ok', 'todos ok', 'normal', 'nenhum', 'nada'].includes(clean) ||
+      /^ok\b/i.test(clean) ||
+      clean.includes('tudo ok nesta etapa')
+    ) {
       return { valid: true, irregulars: [] };
+    }
+    // Se veio de uma opção de enquete do tipo "1 - ⚠️ Irregular: ...", extrai apenas o número inicial antes do hífen
+    const pollPrefix = clean.match(/^(\d+)\s*-/);
+    if (pollPrefix) {
+      const n = parseInt(pollPrefix[1], 10);
+      if (n >= 1 && n <= maxItems) return { valid: true, irregulars: [n] };
     }
     const nums = (clean.match(/\d+/g) || []).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= maxItems);
     if (nums.length > 0) {
@@ -1972,14 +2063,17 @@ export async function processIncomingWhatsAppMessage(db, {
       data.vehicle_label = vehLabel;
       data.current_km = v.odometer_km || 0;
       saveSession(db, phone, 'FLEET_CK_AWAITING_TYPE', data, session.user_id);
-      const msg = renderTemplate(db, 'fleet_ck_ask_type', {
+      const baseMsg = renderTemplate(db, 'fleet_ck_ask_type', {
         placa: v.plate,
         veiculo: vehLabel,
         motorista: data.requester_name || 'Motorista',
         horario: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       });
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+      const quickLink = buildQuickChecklistLink(v.plate, data.requester_name || 'Motorista');
+      const poll = CK_POLLS.type(v.plate);
+      const msg = `${baseMsg}\n\n🔗 *OPÇÃO 1 — PREENCHER PELO LINK RÁPIDO (1 TOQUE):*\n${quickLink.url}\n\n📊 *OPÇÃO 2 — CONTINUAR AQUI PELA ENQUETE CLICÁVEL ABAIXO:*`;
+      await sendReply(msg, { poll, quickLink });
+      return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg, poll, quickLink };
     }
 
     const msg = `⚠️ Placa *"${rawText.toUpperCase()}"* não localizada na Frota.\n\nDigite a *PLACA* novamente ou digite *lista* para ver os veículos cadastrados:`;
@@ -2015,25 +2109,29 @@ export async function processIncomingWhatsAppMessage(db, {
     data.vehicle_label = sel.label;
     data.current_km = sel.km || 0;
     saveSession(db, phone, 'FLEET_CK_AWAITING_TYPE', data, session.user_id);
-    const msg = renderTemplate(db, 'fleet_ck_ask_type', {
+    const baseMsg = renderTemplate(db, 'fleet_ck_ask_type', {
       placa: data.plate,
       veiculo: data.vehicle_label,
       motorista: data.requester_name || 'Motorista',
       horario: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
     });
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+    const quickLink = buildQuickChecklistLink(data.plate, data.requester_name || 'Motorista');
+    const poll = CK_POLLS.type(data.plate);
+    const msg = `${baseMsg}\n\n🔗 *OPÇÃO 1 — PREENCHER PELO LINK RÁPIDO (1 TOQUE):*\n${quickLink.url}\n\n📊 *OPÇÃO 2 — CONTINUAR AQUI PELA ENQUETE CLICÁVEL ABAIXO:*`;
+    await sendReply(msg, { poll, quickLink });
+    return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg, poll, quickLink };
   }
 
   if (step === 'FLEET_CK_AWAITING_TYPE') {
-    if (['1', 'saida', 'saída', 's'].includes(lowerText)) {
+    if (['1', 'saida', 'saída', 's'].includes(lowerText) || /^1\s*-/.test(lowerText) || lowerText.includes('saída') || lowerText.includes('saida')) {
       data.ck_type = 'saida';
-    } else if (['2', 'chegada', 'retorno', 'c', 'r'].includes(lowerText)) {
+    } else if (['2', 'chegada', 'retorno', 'c', 'r'].includes(lowerText) || /^2\s*-/.test(lowerText) || lowerText.includes('chegada') || lowerText.includes('retorno')) {
       data.ck_type = 'retorno';
     } else {
-      const msg = `📍 Informe o tipo do Checklist:\n*1* - ( ) Saída\n*2* - ( ) Chegada`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg };
+      const poll = CK_POLLS.type(data.plate);
+      const msg = `📍 Informe o tipo do Checklist tocando na enquete abaixo ou digitando *1* (Saída) / *2* (Chegada):`;
+      await sendReply(msg, { poll });
+      return { handled: true, step: 'FLEET_CK_AWAITING_TYPE', response: msg, poll };
     }
     saveSession(db, phone, 'FLEET_CK_AWAITING_KM', data, session.user_id);
     const msg = `📏 Qual a *Quilometragem (Km) atual* no painel do veículo *${data.plate}*?\n_(Último registrado: *${Number(data.current_km || 0).toLocaleString('pt-BR')} km*)_`;
@@ -2057,16 +2155,18 @@ export async function processIncomingWhatsAppMessage(db, {
     data.informed_km = parsedKm > 0 ? Math.round(parsedKm) : (data.current_km || 0);
     saveSession(db, phone, 'FLEET_CK_STAGE_1_ANSWERS', data, session.user_id);
     const msg = renderTemplate(db, 'fleet_ck_stage_1', { placa: data.plate, veiculo: data.vehicle_label });
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_STAGE_1_ANSWERS', response: msg };
+    const poll = CK_POLLS.stage1(data.plate);
+    await sendReply(msg, { poll });
+    return { handled: true, step: 'FLEET_CK_STAGE_1_ANSWERS', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_STAGE_1_ANSWERS') {
     const parsed = parseStageIrregularNumbers(rawText, 4);
     if (!parsed.valid) {
-      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 4 itens de *1️⃣ CABINE & PAINEL* estiverem OK, ou digite o número do item Irregular (de *1* a *4*):`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_STAGE_1_ANSWERS', response: msg };
+      const poll = CK_POLLS.stage1(data.plate);
+      const msg = `⚠️ Toque em uma opção da enquete abaixo ou digite *OK* / o número do item Irregular (de *1* a *4*):`;
+      await sendReply(msg, { poll });
+      return { handled: true, step: 'FLEET_CK_STAGE_1_ANSWERS', response: msg, poll };
     }
     if (!data.stage_irregulars) data.stage_irregulars = {};
     data.stage_irregulars.s1 = parsed.irregulars;
@@ -2091,37 +2191,42 @@ export async function processIncomingWhatsAppMessage(db, {
     saveSession(db, phone, 'FLEET_CK_STAGE_2_ANSWERS', data, session.user_id);
     const stage2Msg = renderTemplate(db, 'fleet_ck_stage_2', { placa: data.plate, veiculo: data.vehicle_label });
     const msg = `✅ Foto do painel registrada!\n\n${stage2Msg}`;
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_STAGE_2_ANSWERS', response: msg };
+    const poll = CK_POLLS.stage2(data.plate);
+    await sendReply(msg, { poll });
+    return { handled: true, step: 'FLEET_CK_STAGE_2_ANSWERS', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_STAGE_2_ANSWERS') {
     const parsed = parseStageIrregularNumbers(rawText, 4);
     if (!parsed.valid) {
-      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 4 itens de *2️⃣ PNEUS & RODAGEM* estiverem OK, ou digite o número do item Irregular (de *1* a *4*):`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_STAGE_2_ANSWERS', response: msg };
+      const poll = CK_POLLS.stage2(data.plate);
+      const msg = `⚠️ Toque em uma opção da enquete abaixo ou digite *OK* / o número do item Irregular (de *1* a *4*):`;
+      await sendReply(msg, { poll });
+      return { handled: true, step: 'FLEET_CK_STAGE_2_ANSWERS', response: msg, poll };
     }
     if (!data.stage_irregulars) data.stage_irregulars = {};
     data.stage_irregulars.s2 = parsed.irregulars;
     saveSession(db, phone, 'FLEET_CK_STAGE_2_PHOTO', data, session.user_id);
-    const msg = parsed.irregulars.length > 0
+    const hasIrr = parsed.irregulars.length > 0;
+    const poll = hasIrr ? null : CK_POLLS.photoOptional('2️⃣ Pneus & Rodagem');
+    const msg = hasIrr
       ? '📸 *Foto OBRIGATÓRIA — 2️⃣ PNEUS & RODAGEM:*\nComo você marcou item Irregular nos pneus, envie agora a *FOTO* do corte, pneu murcho ou defeito:'
-      : '📸 *Foto — 2️⃣ PNEUS & RODAGEM:*\nEnvie uma *FOTO* dos pneus ou digite *OK* caso não haja corte, pneu murcho ou defeito:';
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_STAGE_2_PHOTO', response: msg };
+      : '📸 *Foto — 2️⃣ PNEUS & RODAGEM:*\nEnvie uma *FOTO* dos pneus ou toque em *OK* abaixo caso não haja corte, pneu murcho ou defeito:';
+    await sendReply(msg, poll ? { poll } : {});
+    return { handled: true, step: 'FLEET_CK_STAGE_2_PHOTO', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_STAGE_2_PHOTO') {
     const photoUrl = extractCkPhotoUrl();
     const needPhoto = (data.stage_irregulars?.s2 || []).length > 0;
-    const isSkip = ['ok', '0', 'pular', 'nao', 'não', 'sem defeito'].includes(lowerText);
+    const isSkip = ['ok', '0', 'pular', 'nao', 'não', 'sem defeito'].includes(lowerText) || /^ok\b/i.test(lowerText);
     if (!photoUrl && (needPhoto || !isSkip)) {
+      const poll = needPhoto ? null : CK_POLLS.photoOptional('2️⃣ Pneus & Rodagem');
       const msg = needPhoto
         ? `📸 Como há irregularidade em *Pneus & Rodagem*, envie a *FOTO* do pneu/defeito para avançar:`
-        : `📸 Envie uma *FOTO* dos pneus ou digite *OK* para avançar para a etapa 3:`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_STAGE_2_PHOTO', response: msg };
+        : `📸 Envie uma *FOTO* dos pneus ou toque em *OK* para avançar para a etapa 3:`;
+      await sendReply(msg, poll ? { poll } : {});
+      return { handled: true, step: 'FLEET_CK_STAGE_2_PHOTO', response: msg, poll };
     }
     if (photoUrl) {
       if (!data.photos) data.photos = {};
@@ -2130,37 +2235,42 @@ export async function processIncomingWhatsAppMessage(db, {
     saveSession(db, phone, 'FLEET_CK_STAGE_3_ANSWERS', data, session.user_id);
     const stage3Msg = renderTemplate(db, 'fleet_ck_stage_3', { placa: data.plate, veiculo: data.vehicle_label });
     const msg = `${photoUrl ? '✅ Foto de pneus registrada!\n\n' : ''}${stage3Msg}`;
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_STAGE_3_ANSWERS', response: msg };
+    const poll = CK_POLLS.stage3(data.plate);
+    await sendReply(msg, { poll });
+    return { handled: true, step: 'FLEET_CK_STAGE_3_ANSWERS', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_STAGE_3_ANSWERS') {
     const parsed = parseStageIrregularNumbers(rawText, 4);
     if (!parsed.valid) {
-      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 4 itens de *3️⃣ ILUMINAÇÃO & SINALIZAÇÃO* estiverem OK, ou digite o número do item Irregular (de *1* a *4*):`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_STAGE_3_ANSWERS', response: msg };
+      const poll = CK_POLLS.stage3(data.plate);
+      const msg = `⚠️ Toque em uma opção da enquete abaixo ou digite *OK* / o número do item Irregular (de *1* a *4*):`;
+      await sendReply(msg, { poll });
+      return { handled: true, step: 'FLEET_CK_STAGE_3_ANSWERS', response: msg, poll };
     }
     if (!data.stage_irregulars) data.stage_irregulars = {};
     data.stage_irregulars.s3 = parsed.irregulars;
     saveSession(db, phone, 'FLEET_CK_STAGE_3_PHOTO', data, session.user_id);
-    const msg = parsed.irregulars.length > 0
+    const hasIrr = parsed.irregulars.length > 0;
+    const poll = hasIrr ? null : CK_POLLS.photoOptional('3️⃣ Iluminação & Sinalização');
+    const msg = hasIrr
       ? '📸 *Foto OBRIGATÓRIA — 3️⃣ ILUMINAÇÃO & SINALIZAÇÃO:*\nComo você marcou item Irregular na iluminação, envie agora a *FOTO* da lâmpada queimada ou quebra:'
-      : '📸 *Foto — 3️⃣ ILUMINAÇÃO & SINALIZAÇÃO:*\nEnvie uma *FOTO* da iluminação ou digite *OK* caso não haja lâmpada queimada ou quebra:';
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_STAGE_3_PHOTO', response: msg };
+      : '📸 *Foto — 3️⃣ ILUMINAÇÃO & SINALIZAÇÃO:*\nEnvie uma *FOTO* da iluminação ou toque em *OK* abaixo caso não haja lâmpada queimada ou quebra:';
+    await sendReply(msg, poll ? { poll } : {});
+    return { handled: true, step: 'FLEET_CK_STAGE_3_PHOTO', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_STAGE_3_PHOTO') {
     const photoUrl = extractCkPhotoUrl();
     const needPhoto = (data.stage_irregulars?.s3 || []).length > 0;
-    const isSkip = ['ok', '0', 'pular', 'nao', 'não', 'sem defeito'].includes(lowerText);
+    const isSkip = ['ok', '0', 'pular', 'nao', 'não', 'sem defeito'].includes(lowerText) || /^ok\b/i.test(lowerText);
     if (!photoUrl && (needPhoto || !isSkip)) {
+      const poll = needPhoto ? null : CK_POLLS.photoOptional('3️⃣ Iluminação & Sinalização');
       const msg = needPhoto
         ? `📸 Como há irregularidade em *Iluminação & Sinalização*, envie a *FOTO* do defeito para avançar:`
-        : `📸 Envie uma *FOTO* da iluminação ou digite *OK* para avançar para a etapa 4:`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_STAGE_3_PHOTO', response: msg };
+        : `📸 Envie uma *FOTO* da iluminação ou toque em *OK* para avançar para a etapa 4:`;
+      await sendReply(msg, poll ? { poll } : {});
+      return { handled: true, step: 'FLEET_CK_STAGE_3_PHOTO', response: msg, poll };
     }
     if (photoUrl) {
       if (!data.photos) data.photos = {};
@@ -2169,16 +2279,18 @@ export async function processIncomingWhatsAppMessage(db, {
     saveSession(db, phone, 'FLEET_CK_STAGE_4_ANSWERS', data, session.user_id);
     const stage4Msg = renderTemplate(db, 'fleet_ck_stage_4', { placa: data.plate, veiculo: data.vehicle_label });
     const msg = `${photoUrl ? '✅ Foto de iluminação registrada!\n\n' : ''}${stage4Msg}`;
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_STAGE_4_ANSWERS', response: msg };
+    const poll = CK_POLLS.stage4(data.plate);
+    await sendReply(msg, { poll });
+    return { handled: true, step: 'FLEET_CK_STAGE_4_ANSWERS', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_STAGE_4_ANSWERS') {
     const parsed = parseStageIrregularNumbers(rawText, 3);
     if (!parsed.valid) {
-      const msg = `⚠️ Resposta inválida.\nDigite *OK* se todos os 3 itens de *4️⃣ FUNILARIA, VIDROS & ITENS* estiverem OK, ou digite o número do item Irregular (de *1* a *3*):`;
-      await sendReply(msg);
-      return { handled: true, step: 'FLEET_CK_STAGE_4_ANSWERS', response: msg };
+      const poll = CK_POLLS.stage4(data.plate);
+      const msg = `⚠️ Toque em uma opção da enquete abaixo ou digite *OK* / o número do item Irregular (de *1* a *3*):`;
+      await sendReply(msg, { poll });
+      return { handled: true, step: 'FLEET_CK_STAGE_4_ANSWERS', response: msg, poll };
     }
     if (!data.stage_irregulars) data.stage_irregulars = {};
     data.stage_irregulars.s4 = parsed.irregulars;
@@ -2269,6 +2381,7 @@ export async function processIncomingWhatsAppMessage(db, {
       (data.stage_irregulars?.s4?.length || 0);
 
     saveSession(db, phone, 'FLEET_CK_AWAITING_NOTES', data, session.user_id);
+    const poll = totalIrregular > 0 ? null : CK_POLLS.notesOptional();
     const msg = totalIrregular > 0
       ? [
           '✅ Todas as 4 fotos gerais do caminhão foram recebidas!',
@@ -2282,10 +2395,10 @@ export async function processIncomingWhatsAppMessage(db, {
           '',
           '⚠️ *Observações / Avarias encontradas:*',
           'Deseja registrar alguma observação adicional?',
-          '_(Digite a observação ou envie *OK* para finalizar o checklist)_'
+          '_(Digite a observação ou toque em *OK* abaixo para finalizar o checklist)_'
         ].join('\n');
-    await sendReply(msg);
-    return { handled: true, step: 'FLEET_CK_AWAITING_NOTES', response: msg };
+    await sendReply(msg, poll ? { poll } : {});
+    return { handled: true, step: 'FLEET_CK_AWAITING_NOTES', response: msg, poll };
   }
 
   if (step === 'FLEET_CK_AWAITING_NOTES') {
@@ -2295,7 +2408,7 @@ export async function processIncomingWhatsAppMessage(db, {
       (data.stage_irregulars?.s3?.length || 0) +
       (data.stage_irregulars?.s4?.length || 0);
 
-    const isSkip = ['ok', '0', 'nenhuma', 'nada', 'sem observacao', 'sem observações'].includes(lowerText);
+    const isSkip = ['ok', '0', 'nenhuma', 'nada', 'sem observacao', 'sem observações'].includes(lowerText) || /^ok\b/i.test(lowerText);
     if (totalIrregular > 0 && (isSkip || rawText.trim().length < 3)) {
       const msg = `⚠️ Como você marcou item(ns) *Irregular(es)*, descreva brevemente a avaria encontrada (mínimo 3 caracteres):`;
       await sendReply(msg);

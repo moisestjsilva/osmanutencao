@@ -13,13 +13,76 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   extractMessageContent,
+  decryptPollVote,
+  jidNormalizedUser,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+
+// Cache em memória das enquetes (Polls) enviadas para descriptografar o clique do usuário
+const sentPolls = new Map();
+
+function saveSentPoll(result, myUser) {
+  if (!result?.key?.id || !result?.message) return;
+  if (sentPolls.size > 500) {
+    const firstKey = sentPolls.keys().next().value;
+    if (firstKey) sentPolls.delete(firstKey);
+  }
+  sentPolls.set(result.key.id, {
+    key: result.key,
+    message: result.message,
+    creatorJid: myUser?.id ? jidNormalizedUser(myUser.id) : null,
+  });
+}
+
+function extractPollVoteText(m, myUser) {
+  try {
+    const pollUpdate = m.message?.pollUpdateMessage;
+    if (!pollUpdate?.vote) return '';
+    const pollMsgId = pollUpdate.pollCreationMessageKey?.id;
+    const saved = pollMsgId ? sentPolls.get(pollMsgId) : null;
+    if (!saved?.message) return '';
+
+    const pollMsg =
+      saved.message.pollCreationMessage ||
+      saved.message.pollCreationMessageV2 ||
+      saved.message.pollCreationMessageV3;
+    const options = pollMsg?.options || [];
+    const pollEncKey = saved.message.messageContextInfo?.messageSecret || pollMsg?.encKey;
+    if (!pollEncKey || !options.length) return '';
+
+    const pollCreatorJid = saved.creatorJid || (myUser?.id ? jidNormalizedUser(myUser.id) : jidNormalizedUser(pollUpdate.pollCreationMessageKey?.remoteJid || ''));
+    const voterJid = jidNormalizedUser(m.key.participant || m.key.remoteJid || '');
+
+    const decoded = decryptPollVote(pollUpdate.vote, {
+      pollCreatorJid,
+      pollMsgId,
+      pollEncKey,
+      voterJid,
+    });
+
+    const hashMap = new Map();
+    for (const opt of options) {
+      const name = opt.optionName || '';
+      const h = createHash('sha256').update(Buffer.from(name)).digest('hex');
+      hashMap.set(h, name);
+    }
+
+    const picked = [];
+    for (const sel of decoded?.selectedOptions || []) {
+      const h = Buffer.from(sel).toString('hex');
+      if (hashMap.has(h)) picked.push(hashMap.get(h));
+    }
+    return picked.join(', ');
+  } catch (err) {
+    console.warn('[WhatsApp-Baileys] Aviso ao ler voto de enquete:', err.message);
+    return '';
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -165,6 +228,7 @@ export async function initBaileys(forceNew = false) {
         content.extendedTextMessage?.text ||
         content.imageMessage?.caption ||
         content.documentMessage?.caption ||
+        extractPollVoteText(m, connectedUser) ||
         '';
 
       let mediaAttachment = null;
@@ -240,8 +304,8 @@ export async function initBaileys(forceNew = false) {
                 } catch (_) {}
               }
             },
-            reply: async (replyText) => {
-              return await sendBaileysMessage({ to: jid, text: replyText });
+            reply: async (replyText, opts = {}) => {
+              return await sendBaileysMessage({ to: jid, text: replyText, poll: opts?.poll });
             },
           });
         } catch (err) {
@@ -269,7 +333,7 @@ export function onBaileysMessage(handler) {
 /**
  * Envia mensagem via Baileys para número ou ID de grupo
  */
-export async function sendBaileysMessage({ to, text, image, caption }) {
+export async function sendBaileysMessage({ to, text, image, caption, poll }) {
   // Se estiver conectando no momento, aguarda até 4 segundos para estabilizar
   if (connectionStatus === 'connecting') {
     const start = Date.now();
@@ -299,16 +363,30 @@ export async function sendBaileysMessage({ to, text, image, caption }) {
     jid = `${cleanNumber}@s.whatsapp.net`;
   }
 
-  console.log(`[WhatsApp-Baileys] 📤 Enviando resposta para ${jid}... ${image ? '(com imagem)' : ''}`);
-  let content;
+  console.log(`[WhatsApp-Baileys] 📤 Enviando resposta para ${jid}... ${image ? '(com imagem)' : poll ? '(com enquete)' : ''}`);
+  let result;
   if (image) {
     const imgBuffer = Buffer.isBuffer(image) ? image : fs.readFileSync(image);
-    content = { image: imgBuffer, caption: caption || text || '' };
-  } else {
-    content = { text: String(text || '') };
+    result = await sock.sendMessage(jid, { image: imgBuffer, caption: caption || text || '' });
+  } else if (text) {
+    result = await sock.sendMessage(jid, { text: String(text || '') });
   }
-  const result = await sock.sendMessage(jid, content);
-  return { success: true, provider: 'baileys', messageId: result.key?.id, to: jid };
+  if (poll && Array.isArray(poll.values) && poll.values.length >= 2) {
+    try {
+      const pollRes = await sock.sendMessage(jid, {
+        poll: {
+          name: poll.name || 'Selecione uma opção:',
+          values: poll.values,
+          selectableCount: poll.selectableCount || 1,
+        },
+      });
+      saveSentPoll(pollRes, connectedUser);
+      result = pollRes;
+    } catch (pollErr) {
+      console.warn('[WhatsApp-Baileys] Falha ao enviar enquete:', pollErr.message);
+    }
+  }
+  return { success: true, provider: 'baileys', messageId: result?.key?.id, to: jid };
 }
 
 /**
@@ -501,6 +579,7 @@ export async function initFleetBaileys(forceNew = false) {
           content.extendedTextMessage?.text ||
           content.imageMessage?.caption ||
           content.documentMessage?.caption ||
+          extractPollVoteText(m, fleetUser) ||
           '';
 
         let mediaAttachment = null;
@@ -551,7 +630,7 @@ export async function initFleetBaileys(forceNew = false) {
                   } catch (_) {}
                 }
               },
-              reply: async (replyText) => sendFleetBaileysMessage({ to: jid, text: replyText }),
+              reply: async (replyText, opts = {}) => sendFleetBaileysMessage({ to: jid, text: replyText, poll: opts?.poll }),
             });
           } catch (err) {
             console.error('[WhatsApp-Frota] Erro ao processar mensagem:', err.message);
@@ -568,7 +647,7 @@ export async function initFleetBaileys(forceNew = false) {
   }
 }
 
-export async function sendFleetBaileysMessage({ to, text, image, caption }) {
+export async function sendFleetBaileysMessage({ to, text, image, caption, poll }) {
   if (fleetStatus === 'connecting') {
     const start = Date.now();
     while (fleetStatus === 'connecting' && Date.now() - start < 4000) {
@@ -591,15 +670,29 @@ export async function sendFleetBaileysMessage({ to, text, image, caption }) {
     jid = `${jid.split('@')[0].split(':')[0].replace(/\D/g, '')}@s.whatsapp.net`;
   }
 
-  let content;
+  let result;
   if (image) {
     const imgBuffer = Buffer.isBuffer(image) ? image : fs.readFileSync(image);
-    content = { image: imgBuffer, caption: caption || text || '' };
-  } else {
-    content = { text: String(text || '') };
+    result = await fleetSock.sendMessage(jid, { image: imgBuffer, caption: caption || text || '' });
+  } else if (text) {
+    result = await fleetSock.sendMessage(jid, { text: String(text || '') });
   }
-  const result = await fleetSock.sendMessage(jid, content);
-  return { success: true, provider: 'baileys-fleet', messageId: result.key?.id, to: jid };
+  if (poll && Array.isArray(poll.values) && poll.values.length >= 2) {
+    try {
+      const pollRes = await fleetSock.sendMessage(jid, {
+        poll: {
+          name: poll.name || 'Selecione uma opção:',
+          values: poll.values,
+          selectableCount: poll.selectableCount || 1,
+        },
+      });
+      saveSentPoll(pollRes, fleetUser);
+      result = pollRes;
+    } catch (pollErr) {
+      console.warn('[WhatsApp-Frota] Falha ao enviar enquete:', pollErr.message);
+    }
+  }
+  return { success: true, provider: 'baileys-fleet', messageId: result?.key?.id, to: jid };
 }
 
 export async function joinFleetGroupByInvite(inviteLinkOrCode) {

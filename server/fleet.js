@@ -31,6 +31,170 @@ const TRIP_SCHEMA = {
 };
 
 export function registerFleetRoutes(app, getDb) {
+  // =========================================================================
+  // LINK RÁPIDO DE 1 TOQUE (WHATSAPP CHECKLIST SEM LOGIN)
+  // =========================================================================
+  app.get('/api/fleet/quick-checklist', (req, res) => {
+    try {
+      const db = getDb();
+      const vehicles = db.prepare(`
+        SELECT id, plate, brand, model, nickname, odometer_km, status
+        FROM fleet_vehicles
+        WHERE active = 1
+        ORDER BY plate
+      `).all();
+      const items = db.prepare(`
+        SELECT id, label, category, critical, sort_order
+        FROM fleet_checklist_items
+        WHERE active = 1
+        ORDER BY sort_order, label
+      `).all();
+      const qPlate = String(req.query.placa || req.query.plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const selectedVehicle = qPlate
+        ? vehicles.find((v) => String(v.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') === qPlate) || null
+        : null;
+      res.json({ ok: true, vehicles, items, selectedVehicle, selected: selectedVehicle });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/fleet/quick-checklist', (req, res) => {
+    try {
+      const db = getDb();
+      const b = req.body || {};
+      let v = null;
+      if (b.vehicle_id) {
+        v = db.prepare('SELECT * FROM fleet_vehicles WHERE id = ? AND active = 1').get(b.vehicle_id);
+      }
+      if (!v && b.plate) {
+        const cleanP = String(b.plate).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        v = db.prepare("SELECT * FROM fleet_vehicles WHERE active = 1 AND REPLACE(UPPER(plate), '-', '') = ?").get(cleanP);
+      }
+      if (!v) return res.status(400).json({ error: 'Selecione a placa do veículo' });
+
+      const type = ['retorno', 'chegada'].includes(b.type) ? 'retorno' : 'saida';
+      const rawKm = b.km !== undefined && b.km !== '' && b.km !== null ? b.km : b.odometer_km;
+      const km = rawKm === undefined || rawKm === '' || rawKm === null ? (v.odometer_km || 0) : Number(String(rawKm).replace(',', '.'));
+      if (!Number.isFinite(km) || km < 0) return res.status(400).json({ error: 'Quilometragem inválida' });
+
+      const driverName = String(b.driver_name || 'Motorista').trim().slice(0, 80) || 'Motorista';
+      const generalNotes = String(b.notes || '').trim().slice(0, 500) || null;
+      const items = db.prepare('SELECT * FROM fleet_checklist_items WHERE active = 1 ORDER BY sort_order, label').all();
+      const given = new Map((Array.isArray(b.answers) ? b.answers : []).map((a) => [a.item_id || a.key || a.id, a]));
+
+      const answers = items.map((it) => {
+        const a = given.get(it.id);
+        const rawStatus = a?.status === 'irregular' || a?.status === 'problema' ? 'problema' : 'ok';
+        const note = String(a?.note || (rawStatus === 'problema' ? generalNotes : '') || '').trim().slice(0, 300);
+        if (rawStatus === 'problema' && note.length < 3) {
+          throw new FleetError(400, `Descreva a irregularidade do item: ${it.label}`);
+        }
+        const photoUrl = saveChecklistPhoto(a?.photo_url || a?.photo || null);
+        return {
+          item_id: it.id,
+          label: it.label,
+          category: it.category,
+          critical: it.critical,
+          status: rawStatus,
+          note: note || null,
+          photo_url: photoUrl,
+        };
+      });
+
+      const rawPhotos = (b.photos && typeof b.photos === 'object' ? b.photos : null) || (b.stage_photos && typeof b.stage_photos === 'object' ? b.stage_photos : {});
+      const photos = {};
+      for (const k of ['painel', 'pneus', 'iluminacao', 'frente', 'traseira', 'lateral_direita', 'lateral_esquerda']) {
+        const saved = saveChecklistPhoto(rawPhotos[k]);
+        if (saved) photos[k] = saved;
+      }
+
+      if (!photos.painel) {
+        return res.status(400).json({ error: '📸 Envie a foto obrigatória do Painel com motor ligado (Etapa 1)' });
+      }
+      const tireProb = answers.some((a) => a.status === 'problema' && String(a.category || '').includes('Pneus'));
+      const tireItemPhoto = answers.some((a) => a.photo_url && String(a.category || '').includes('Pneus'));
+      if (tireProb && !photos.pneus && !tireItemPhoto) {
+        return res.status(400).json({ error: '📸 Como houve item irregular em Pneus & Rodagem, envie a foto do pneu/defeito (Etapa 2)' });
+      }
+      const lightProb = answers.some((a) => a.status === 'problema' && String(a.category || '').includes('Ilumina'));
+      const lightItemPhoto = answers.some((a) => a.photo_url && String(a.category || '').includes('Ilumina'));
+      if (lightProb && !photos.iluminacao && !lightItemPhoto) {
+        return res.status(400).json({ error: '📸 Como houve item irregular em Iluminação & Sinalização, envie a foto do defeito (Etapa 3)' });
+      }
+      if (!photos.frente || !photos.traseira || !photos.lateral_direita || !photos.lateral_esquerda) {
+        return res.status(400).json({ error: '📸 Envie as 4 fotos obrigatórias do caminhão: Frente, Traseira, Lateral Direita e Lateral Esquerda (Etapa 4)' });
+      }
+
+      const fallbackUser = db.prepare(`
+        SELECT id, name FROM users
+        WHERE active = 1
+        ORDER BY CASE WHEN fleet_role IS NOT NULL THEN 1 WHEN role IN ('admin','superadmin','gerente') THEN 2 ELSE 3 END
+        LIMIT 1
+      `).get();
+      const requesterId = fallbackUser?.id || 'u-admin';
+
+      const problems = answers.filter((a) => a.status === 'problema');
+      const critical = problems.filter((a) => a.critical);
+      const id = randomUUID();
+      const at = nowIso();
+
+      tx(db, () => {
+        insertRow(db, 'fleet_checklists', {
+          id,
+          vehicle_id: v.id,
+          driver_id: null,
+          user_id: requesterId,
+          type,
+          km,
+          answers_json: JSON.stringify(answers),
+          photos_json: JSON.stringify(photos),
+          has_issues: problems.length ? 1 : 0,
+          critical_issues: critical.length,
+          notes: generalNotes ? `[${driverName}] ${generalNotes}` : `Motorista: ${driverName}`,
+          created_at: at,
+        });
+        if (km > (v.odometer_km || 0)) {
+          try { setOdometer(db, v, km, 'checklist_link', requesterId, `Checklist Link (${driverName})`); } catch (_) {}
+        }
+        if (critical.length && v.status === 'ativo') {
+          db.prepare("UPDATE fleet_vehicles SET status='manutencao', updated_at=? WHERE id=?").run(at, v.id);
+        }
+      });
+
+      let wo = null;
+      if (problems.length > 0) {
+        try {
+          const text = problems.map((p) => `• ${p.label}: ${p.note}`).join('\n');
+          const allPhotoUrls = [
+            ...Object.values(photos),
+            ...answers.map((a) => a.photo_url).filter(Boolean),
+          ];
+          const woAttachments = allPhotoUrls.map((u) => {
+            const fname = String(u).replace(/^\/uploads\//, '');
+            return fname ? { id: randomUUID(), file: fname, mime: 'image/jpeg', size: 0 } : null;
+          }).filter(Boolean);
+
+          const r = openWorkOrder(db, { id: requesterId }, v, {
+            description: `Checklist Rápido (${type === 'saida' ? 'Saída' : 'Chegada'}) — ${v.plate} (${driverName}):\n${text}`.slice(0, 900),
+            priority: critical.length ? 'urgente' : 'media',
+            stopped: critical.length > 0,
+            title: `Frota ${v.plate}: avaria no checklist`,
+            attachments: woAttachments,
+            origin: 'whatsapp_fleet_bot',
+          });
+          db.prepare('UPDATE fleet_checklists SET wo_id = ? WHERE id = ?').run(r.woId, id);
+          wo = { id: r.woId, number: r.number };
+        } catch (_) {}
+      }
+
+      res.status(201).json({ ok: true, checklistId: id, plate: v.plate, overall_status: problems.length ? 'irregular' : 'ok', wo });
+    } catch (e) {
+      if (e instanceof FleetError) return res.status(e.status).json({ error: e.message });
+      res.status(500).json({ error: e.message || 'Erro ao salvar checklist' });
+    }
+  });
+
   const route = (method, path, levels, fn) => {
     app[method](`/api/fleet${path}`, (req, res) => {
       try {

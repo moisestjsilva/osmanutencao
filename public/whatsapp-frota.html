@@ -457,6 +457,115 @@
       cursor: pointer;
     }
 
+    /* Enquete Nativa do WhatsApp (Poll) e Link 1-Toque no Simulador */
+    .wa-poll-card {
+      background: #1f2c34;
+      border: 1px solid rgba(0, 168, 132, 0.45);
+      border-radius: 12px;
+      padding: 12px 14px;
+      align-self: flex-start;
+      max-width: 92%;
+      width: 380px;
+      color: #e9edef;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.28);
+    }
+    .wa-poll-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #00a884;
+      margin-bottom: 4px;
+    }
+    .wa-poll-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 3px;
+    }
+    .wa-poll-sub {
+      font-size: 11px;
+      color: #8696a0;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .wa-poll-options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .wa-poll-opt {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 9px;
+      padding: 9px 11px;
+      color: #e9edef;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .wa-poll-opt:hover {
+      background: rgba(0, 168, 132, 0.15);
+      border-color: #00a884;
+    }
+    .wa-poll-opt.voted {
+      background: rgba(0, 168, 132, 0.22);
+      border-color: #00a884;
+      color: #34d399;
+    }
+    .wa-poll-radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #8696a0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 11px;
+      color: transparent;
+    }
+    .wa-poll-opt.voted .wa-poll-radio {
+      border-color: #00a884;
+      background: #00a884;
+      color: #fff;
+    }
+    .wa-quicklink-card {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(2, 132, 199, 0.18);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .wa-quicklink-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: #0284c7;
+      color: #fff !important;
+      text-decoration: none !important;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      text-align: center;
+    }
+
     .wa-toast-container {
       position: fixed;
       bottom: 24px;
@@ -695,34 +804,44 @@
       <div class="wa-card">
         <div class="wa-card-header">
           <div>
-            <span class="wa-card-title">🤖 Simulador de Abertura de OS da Frota por Placa</span>
-            <p class="wa-card-desc">Teste agora mesmo digitando <code>frota</code> ou uma placa real cadastrada (ex.: <code>RMI1A95</code>, <code>GSW0232</code>, <code>RJP7J99</code>).</p>
+            <span class="wa-card-title">🤖 Simulador do Robô da Frota (Link 1-Toque + Enquete Clicável)</span>
+            <p class="wa-card-desc">Compare os <strong>2 casos lado a lado</strong>: o <strong>Caso 1 (Link 1-Toque no Celular)</strong> e o <strong>Caso 2 (Enquete Clicável dentro do WhatsApp)</strong>.</p>
           </div>
-          <button id="btnResetSim" class="btn btn-danger" style="font-size:12px;padding:6px 12px">🗑️ Reiniciar Conversa</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a href="/checklist-frota.html?placa=RMI1A95&motorista=Motorista%20Rufato" target="_blank" class="btn btn-fleet" style="font-size:12px;padding:7px 12px">
+              🔗 Ver Caso 1: Abrir Tela 1-Toque (RMI1A95)
+            </a>
+            <button onclick="startDemoChecklist()" class="btn btn-emerald" style="font-size:12px;padding:7px 12px">
+              📊 Ver Caso 2: Iniciar Enquete no Chat (Chek RMI1A95)
+            </button>
+            <button id="btnResetSim" class="btn btn-danger" style="font-size:12px;padding:7px 12px">🗑️ Reiniciar</button>
+          </div>
         </div>
 
-        <div class="chat-sim-container">
+        <div class="chat-sim-container" style="height: 580px;">
           <div class="chat-sim-header">
             <div style="color:#fff;font-weight:600;font-size:13.5px">🚚 Assistente WhatsApp — Central de Frota Rufato</div>
+            <span style="font-size:11px;color:#34d399;font-weight:700">✓ Enquetes Nativas + Link 1-Toque Ativos</span>
           </div>
 
           <div id="simMessagesContainer" class="chat-sim-messages">
             <div class="whatsapp-bubble incoming">
-              🚚 Olá! Digite <strong>frota</strong> ou clique em um dos atalhos abaixo para testar a abertura de OS de caminhão pela Placa!
+              🚚 Olá! Clique em <strong>"📊 Ver Caso 2: Iniciar Enquete no Chat (Chek RMI1A95)"</strong> acima ou digite <strong>Chek RMI1A95</strong> para ver os <strong>2 casos funcionando juntos</strong>:<br><br>
+              1️⃣ <strong>Caso 1 (Link Rápido 1-Toque):</strong> O robô envia um cartão azul clicável que abre a tela <code>/checklist-frota.html?placa=RMI1A95</code> já com a placa selecionada.<br>
+              2️⃣ <strong>Caso 2 (Enquete Clicável no WhatsApp):</strong> Logo abaixo da mensagem aparece a <strong>Enquete Nativa</strong> onde o motorista só toca na opção desejada!
             </div>
           </div>
 
           <div class="sim-shortcuts">
-            <span style="font-size:11.5px;color:#8696a0;align-self:center">Testar:</span>
-            <button class="shortcut-chip" onclick="sendSimText('Chek')" style="border-color:#10b981;color:#34d399;font-weight:700">📋 Chek (Checklist)</button>
+            <span style="font-size:11.5px;color:#8696a0;align-self:center">Atalhos:</span>
+            <button class="shortcut-chip" onclick="startDemoChecklist()" style="border-color:#10b981;color:#34d399;font-weight:700">🧪 Chek RMI1A95 (Link + Enquete)</button>
+            <button class="shortcut-chip" onclick="sendSimText('Chek')" style="border-color:#10b981;color:#34d399">📋 Chek</button>
             <button class="shortcut-chip" onclick="sendSimText('frota')">🚚 frota (Abrir OS)</button>
             <button class="shortcut-chip" onclick="sendSimText('RMI1A95')">Placa RMI1A95</button>
             <button class="shortcut-chip" onclick="sendSimText('GSW0232')">Placa GSW0232</button>
             <button class="shortcut-chip" onclick="sendSimText('158500')">Km 158500</button>
             <button class="shortcut-chip" onclick="sendSimText('OK')" style="border-color:#38bdf8;color:#38bdf8">✅ OK (Tudo OK)</button>
             <button class="shortcut-chip" onclick="sendSimText('foto')" style="border-color:#f59e0b;color:#fbbf24">📸 Enviar Foto</button>
-            <button class="shortcut-chip" onclick="sendSimText('1')">Opção 1</button>
-            <button class="shortcut-chip" onclick="sendSimText('2')">Opção 2</button>
             <button class="shortcut-chip" onclick="sendSimText('cancelar')">cancelar</button>
           </div>
 
@@ -1014,6 +1133,54 @@
 
     // SIMULADOR DA FROTA
     const simPhone = '5532985048360';
+    function formatBubbleHtml(raw, quickLink) {
+      let html = String(raw || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
+        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" style="color:#38bdf8;text-decoration:underline;word-break:break-all">$1</a>');
+
+      if (quickLink) {
+        const localUrl = quickLink.replace(/^https?:\/\/[^/]+/, '');
+        html += `
+          <div class="wa-quicklink-card">
+            <div style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase">🔗 CASO 1 — Link Direto 1-Toque (Web Mobile)</div>
+            <div style="font-size:12px;color:#cbd5e1">O motorista toca no link abaixo e responde tudo em uma tela limpa com câmera:</div>
+            <a href="${localUrl}" target="_blank" class="wa-quicklink-btn">
+              📱 Abrir Checklist 1-Toque no Celular &rarr;
+            </a>
+          </div>
+        `;
+      }
+      return html;
+    }
+
+    function renderPollCard(poll) {
+      if (!poll || !Array.isArray(poll.values)) return null;
+      const card = document.createElement('div');
+      card.className = 'wa-poll-card';
+      card.innerHTML = `
+        <div class="wa-poll-badge">📊 CASO 2 — Enquete Clicável Nativa do WhatsApp</div>
+        <div class="wa-poll-title">${poll.name || 'Selecione uma opção:'}</div>
+        <div class="wa-poll-sub">☑️ Selecione uma opção (toque para responder sem digitar)</div>
+        <div class="wa-poll-options"></div>
+      `;
+      const optsWrap = card.querySelector('.wa-poll-options');
+      poll.values.forEach((optText) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'wa-poll-opt';
+        btn.innerHTML = `<span class="wa-poll-radio">✓</span><span>${optText}</span>`;
+        btn.addEventListener('click', () => {
+          optsWrap.querySelectorAll('.wa-poll-opt').forEach(b => b.classList.remove('voted'));
+          btn.classList.add('voted');
+          sendSimMessage(optText);
+        });
+        optsWrap.appendChild(btn);
+      });
+      return card;
+    }
+
     async function sendSimMessage(text) {
       if (!text || !text.trim()) return;
       const container = document.getElementById('simMessagesContainer');
@@ -1033,14 +1200,25 @@
       if (data.ok && data.response) {
         const b = document.createElement('div');
         b.className = 'whatsapp-bubble incoming';
-        b.innerHTML = data.response
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
-          .replace(/_(.*?)_/g, '<em>$1</em>');
+        b.innerHTML = formatBubbleHtml(data.response, data.quickLink);
         container.appendChild(b);
+
+        if (data.poll) {
+          const pollEl = renderPollCard(data.poll);
+          if (pollEl) container.appendChild(pollEl);
+        }
         container.scrollTop = container.scrollHeight;
       }
     }
+
+    window.startDemoChecklist = async function() {
+      await fetch('/api/whatsapp/sessions/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: simPhone }),
+      });
+      await sendSimMessage('Chek RMI1A95');
+    };
 
     window.sendSimText = sendSimMessage;
     document.getElementById('btnSimSend').addEventListener('click', () => sendSimMessage(document.getElementById('simInputText').value));
@@ -1055,10 +1233,20 @@
       });
       document.getElementById('simMessagesContainer').innerHTML = `
         <div class="whatsapp-bubble incoming">
-          🔄 Conversa reiniciada! Digite <strong>frota</strong> ou uma placa (ex.: <strong>RMI1A95</strong>) para testar.
+          🔄 Conversa reiniciada! Clique em <strong>"🧪 Chek RMI1A95 (Link + Enquete)"</strong> abaixo para ver os 2 casos funcionando.
         </div>
       `;
     });
+
+    // Abrir direto na aba do simulador se ?tab=sim ou #sim estiver na URL
+    if (location.search.includes('tab=sim') || location.hash === '#sim') {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      const simBtn = document.querySelector('[data-tab="tab-sim"]');
+      if (simBtn) simBtn.classList.add('active');
+      document.getElementById('tab-sim').classList.add('active');
+      setTimeout(() => startDemoChecklist(), 300);
+    }
 
     loadStatus();
     loadGroups();
