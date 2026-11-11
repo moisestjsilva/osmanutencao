@@ -238,11 +238,11 @@ export function toast(msg, kind = 'ok', ms = 3200) {
 }
 
 // Folha modal (bottom sheet no celular)
-export function sheet(html, { onMount, dismissable = true } = {}) {
+export function sheet(html, { onMount, dismissable = true, className = '' } = {}) {
   const root = $('#modal-root');
   const back = document.createElement('div');
   back.className = 'sheet-backdrop';
-  back.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grabber"></div>${html}</div>`;
+  back.innerHTML = `<div class="sheet ${className}" role="dialog" aria-modal="true"><div class="grabber"></div>${html}</div>`;
   root.appendChild(back);
   const el = back.firstElementChild;
   let closed = false;

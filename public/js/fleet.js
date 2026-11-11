@@ -792,7 +792,7 @@ export function fleetView(root, params = {}) {
   // 5. CHECKLIST DE VIAGEM — FROTA (SAÍDA / CHEGADA + FOTOS)
   // ==========================================================================
   async function renderChecklists(body, topActions) {
-    topActions.innerHTML = `<button class="btn primary" id="btn-new-ck">${icon('check', 16)} 📋 Novo Checklist de Viagem</button>`;
+    topActions.innerHTML = `<button class="btn primary" id="btn-new-ck">${icon('check', 16)} 📋 Novo Checklist</button>`;
     $('#btn-new-ck', topActions).onclick = () => openNewChecklistModal(() => renderCurrentTab());
 
     const res = await api('/api/fleet/checklists?limit=60');
@@ -800,55 +800,44 @@ export function fleetView(root, params = {}) {
     const rows = res.checklists || [];
 
     body.innerHTML = `
-      <div class="card" style="margin-bottom:14px;background:var(--surface-2);border-left:4px solid var(--info)">
-        <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="card" style="margin-bottom:14px;background:var(--surface-2);border-left:4px solid var(--info);padding:14px">
+        <div style="display:flex;flex-direction:column;gap:10px">
           <div>
-            <strong>📋 Checklist de Viagem — Frota (Celular ou WhatsApp)</strong>
-            <div class="muted xs" style="margin-top:3px">O motorista pode preencher aqui pelo aplicativo ou enviar a palavra <strong>Chek</strong> no WhatsApp da Frota para responder etapa por etapa com fotos.</div>
+            <strong style="font-size:15px;display:block">📋 Checklist de Viagem — Frota (Saída / Chegada)</strong>
+            <div class="muted xs" style="margin-top:3px">Preencha direto pelo celular abaixo ou envie a palavra <strong>Chek</strong> no WhatsApp da Frota.</div>
           </div>
-          <button class="btn sm primary" id="btn-new-ck-banner">${icon('camera', 14)} Iniciar Checklist</button>
+          <button class="btn primary block" id="btn-new-ck-banner">${icon('camera', 16)} Iniciar Preenchimento do Checklist</button>
         </div>
       </div>
       ${rows.length ? `
-        <section class="card">
-          <div class="table-wrap">
-            <table class="data">
-              <thead>
-                <tr>
-                  <th>Data/Hora</th>
-                  <th>Tipo</th>
-                  <th>Veículo</th>
-                  <th>Motorista</th>
-                  <th class="num">Hodômetro</th>
-                  <th>Fotos</th>
-                  <th>Resultado</th>
-                  <th>OS Gerada</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows.map((c) => `
-                  <tr>
-                    <td class="small">${fmtDateTime(c.created_at)}</td>
-                    <td><span class="badge ${c.type === 'saida' ? 'info' : ''}">${c.type === 'saida' ? 'Saída' : 'Chegada'}</span></td>
-                    <td>${plateBadge(c.plate, c.nickname)}</td>
-                    <td class="small">${esc(c.driver_name || '—')}</td>
-                    <td class="num">${c.km != null ? `${numFmt(c.km)} km` : '—'}</td>
-                    <td><span class="badge ${c.photo_count >= 5 ? 'ok' : ''}">📸 ${c.photo_count || 0} foto(s)</span></td>
-                    <td>
-                      ${c.has_issues
-                        ? `<span class="badge ${c.critical_issues ? 'danger' : 'warn'}">${c.critical_issues ? `${c.critical_issues} Irregular(es)` : 'Com observação'}</span>`
-                        : '<span class="badge ok">100% OK</span>'}
-                    </td>
-                    <td>${c.wo_id ? `<a class="btn sm" href="#/os/${esc(c.wo_id)}">Abrir OS</a>` : '—'}</td>
-                    <td><button class="btn sm primary" data-view-ck="${esc(c.id)}">Ver Fotos & Itens</button></td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ` : '<div class="empty"><strong>Nenhum checklist realizado</strong><p class="muted small" style="margin-top:6px">Itens críticos irregulares bloqueiam automaticamente o caminhão para manutenção e abrem uma Ordem de Serviço com as fotos anexadas.</p></div>'}
+        <div class="ck-history-cards">
+          ${rows.map((c) => `
+            <article class="ck-hist-card ${c.has_issues ? 'has-issues' : 'all-ok'}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  ${plateBadge(c.plate, c.nickname)}
+                  <span class="badge ${c.type === 'saida' ? 'info' : ''}">${c.type === 'saida' ? '📤 Saída' : '📥 Chegada'}</span>
+                </div>
+                ${c.has_issues
+                  ? `<span class="badge ${c.critical_issues ? 'danger' : 'warn'}">${c.critical_issues ? `⚠️ ${c.critical_issues} Irregular(es)` : 'Com observação'}</span>`
+                  : '<span class="badge ok">✅ 100% OK</span>'}
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12.5px;color:var(--text-2);background:var(--surface-2);padding:8px 10px;border-radius:10px">
+                <div>👤 <strong>${esc(c.driver_name || '—')}</strong></div>
+                <div>📅 ${fmtDateTime(c.created_at)}</div>
+                <div>📏 ${c.km != null ? `<strong>${numFmt(c.km)} km</strong>` : '—'}</div>
+                <div>📸 <strong>${c.photo_count || 0} foto(s)</strong></div>
+              </div>
+
+              <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+                ${c.wo_id ? `<a class="btn sm danger" href="#/os/${esc(c.wo_id)}" style="flex:1">🔧 Abrir OS</a>` : ''}
+                <button class="btn sm primary" data-view-ck="${esc(c.id)}" style="flex:1">👁️ Ver Fotos & Itens</button>
+              </div>
+            </article>
+          `).join('')}
+        </div>
+      ` : '<div class="empty"><strong>Nenhum checklist realizado</strong><p class="muted small" style="margin-top:6px">Toque em "Iniciar Preenchimento do Checklist" acima para registrar a saída ou chegada do caminhão.</p></div>'}
     `;
 
     $('#btn-new-ck-banner', body)?.addEventListener('click', () => openNewChecklistModal(() => renderCurrentTab()));
@@ -1625,129 +1614,132 @@ export function fleetView(root, params = {}) {
     const stageMeta = (cat) => {
       const c = String(cat).toUpperCase();
       if (c.includes('CABINE') || c.includes('PAINEL') || c.startsWith('1')) {
-        return { key: 'painel', mandatory: true, label: '📸 Foto OBRIGATÓRIA: Painel com motor ligado (mostrando Km, combustível e alertas).' };
+        return { key: 'painel', mandatory: true, label: '📸 Foto OBRIGATÓRIA: Painel com motor ligado (Km, combustível e alertas).' };
       }
       if (c.includes('PNEUS') || c.startsWith('2')) {
-        return { key: 'pneus', mandatory: false, label: '📸 Foto: Apenas se houver corte, pneu murcho ou defeito (ou toque para anexar).' };
+        return { key: 'pneus', mandatory: false, label: '📸 Foto: Apenas se houver corte, pneu murcho ou defeito.' };
       }
       if (c.includes('ILUMINA') || c.startsWith('3')) {
-        return { key: 'iluminacao', mandatory: false, label: '📸 Foto: Apenas se houver lâmpada queimada ou quebra (ou toque para anexar).' };
+        return { key: 'iluminacao', mandatory: false, label: '📸 Foto: Apenas se houver lâmpada queimada ou quebra.' };
       }
       return { key: 'funilaria', mandatory: true, isFourSides: true, label: '📸 Fotos OBRIGATÓRIAS (4 fotos gerais do caminhão):' };
     };
 
     const renderPhotoSlot = (slotKey, title, isMandatory = false) => `
-      <label class="ck-photo-slot" data-slot="${esc(slotKey)}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px 10px;border:2px dashed ${isMandatory ? 'var(--info)' : 'var(--border)'};border-radius:12px;background:var(--surface);cursor:pointer;text-align:center;min-height:94px;position:relative;transition:all .15s">
+      <label class="ck-photo-slot ${isMandatory ? 'mandatory' : ''}" data-slot="${esc(slotKey)}">
         <input type="file" accept="image/*" capture="environment" hidden data-slot-input="${esc(slotKey)}" />
-        <div data-slot-preview="${esc(slotKey)}" style="display:none;width:100%;height:96px;border-radius:8px;overflow:hidden;background:#000">
+        <div data-slot-preview="${esc(slotKey)}" style="display:none;width:100%;height:78px;border-radius:8px;overflow:hidden;background:#000">
           <img src="" alt="${esc(title)}" style="width:100%;height:100%;object-fit:cover;display:block" />
         </div>
         <div data-slot-empty="${esc(slotKey)}" style="display:flex;flex-direction:column;align-items:center;gap:4px">
-          <span style="font-size:22px">📷</span>
-          <strong style="font-size:12.5px;line-height:1.25">${esc(title)}</strong>
-          <span class="badge ${isMandatory ? 'info' : ''} xs" data-slot-badge="${esc(slotKey)}">${isMandatory ? 'OBRIGATÓRIA' : 'Tirar Foto'}</span>
+          <span style="font-size:20px;line-height:1">📷</span>
+          <strong>${esc(title)}</strong>
+          <span class="badge ${isMandatory ? 'info' : ''} xs" data-slot-badge="${esc(slotKey)}">${isMandatory ? 'OBRIGATÓRIA' : 'Opcional'}</span>
         </div>
-        <div data-slot-done="${esc(slotKey)}" class="hidden" style="font-size:11.5px;font-weight:700;color:var(--ok)">✅ Foto anexada (toque p/ trocar)</div>
+        <div data-slot-done="${esc(slotKey)}" class="hidden" style="font-size:11px;font-weight:700;color:var(--ok-text)">✅ Foto anexada (trocar)</div>
       </label>
     `;
 
     sheet(`
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+      <div class="ck-top-bar">
         <div>
-          <h2 style="margin:0;font-size:18px">📋 CHECKLIST DE VIAGEM — FROTA</h2>
-          <div class="muted xs">Preenchimento rápido pelo celular: Saída / Chegada</div>
+          <h2>📋 CHECKLIST DE VIAGEM — FROTA</h2>
+          <div class="muted xs">(Preenchimento rápido: Saída / Chegada)</div>
         </div>
+        <button type="button" class="icon-btn" data-close aria-label="Fechar">${icon('x', 18)}</button>
       </div>
 
-      <div class="card" style="padding:12px;margin-bottom:12px;background:var(--surface-2)">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">
-          <div>👤 Motorista: <strong>${esc(driverName)}</strong></div>
-          <div>📅 Data/Hora: <strong>${esc(nowFormatted)}</strong></div>
+      <div class="ck-header-card">
+        <div class="ck-meta-strip">
+          <span>👤 Motorista: <strong>${esc(driverName)}</strong></span>
+          <span>📅 <strong>${esc(nowFormatted)}</strong></span>
         </div>
-        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:8px;margin-bottom:10px">
-          <label class="field" style="margin:0"><span>🚛 Placa do Veículo *</span>
-            <select class="select" id="ck-veh" style="font-weight:700;height:44px">
-              <option value="">Selecione a placa...</option>
-              ${cache.vehicles.map((v) => `<option value="${esc(v.id)}" data-km="${v.odometer_km || 0}">${esc(v.plate)} ${v.nickname ? `(${esc(v.nickname)})` : `— ${esc(v.model || '')}`}</option>`).join('')}
-            </select>
-          </label>
-          <label class="field" style="margin:0"><span>📏 Hodômetro (Km) *</span>
-            <input class="input" type="number" id="ck-km" placeholder="Ex: 158400" style="height:44px;font-weight:700" />
-          </label>
-        </div>
+
         <div>
-          <span class="xs muted" style="display:block;margin-bottom:4px;font-weight:600">📍 Tipo do Checklist:</span>
+          <span class="xs muted" style="display:block;margin-bottom:5px;font-weight:700">📍 Tipo:</span>
           <input type="hidden" id="ck-type" value="saida" />
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <button type="button" class="btn primary" data-ck-type-btn="saida" style="height:42px;font-weight:700">📤 (X) Saída</button>
-            <button type="button" class="btn" data-ck-type-btn="retorno" style="height:42px;font-weight:700">📥 ( ) Chegada</button>
+          <div class="ck-type-switch">
+            <button type="button" class="btn primary" data-ck-type-btn="saida">📤 (X) Saída</button>
+            <button type="button" class="btn" data-ck-type-btn="retorno">📥 ( ) Chegada</button>
           </div>
         </div>
+
+        <div class="ck-header-fields">
+          <label class="field" style="margin:0;min-width:0">
+            <span>🚛 Placa do Veículo *</span>
+            <select class="select" id="ck-veh" style="font-weight:700">
+              <option value="">Selecione a placa...</option>
+              ${cache.vehicles.map((v) => `<option value="${esc(v.id)}" data-km="${v.odometer_km || 0}">${esc(v.plate)} — ${esc(v.nickname || v.model || 'Veículo')}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field" style="margin:0;min-width:0">
+            <span>📏 Hodômetro Atual (Km) *</span>
+            <input class="input" type="number" inputmode="numeric" id="ck-km" placeholder="Ex: 158400" style="font-weight:700" />
+          </label>
+        </div>
       </div>
 
-      <div style="max-height:58vh;overflow-y:auto;padding-right:2px;display:flex;flex-direction:column;gap:12px">
+      <div class="ck-stages-stack">
         ${Array.from(groups.entries()).map(([cat, list]) => {
           const meta = stageMeta(cat);
           return `
-            <section class="card" style="padding:12px;border:1.5px solid var(--border)">
-              <div style="font-weight:800;font-size:14.5px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);color:var(--text)">
-                ${esc(cat.toUpperCase())}
+            <section class="ck-stage-card">
+              <div class="ck-stage-title">
+                <span>${esc(cat.toUpperCase())}</span>
               </div>
-              <div style="display:flex;flex-direction:column;gap:8px">
+
+              <div class="ck-items-list">
                 ${list.map((it) => `
-                  <div class="ck-row" data-item-id="${esc(it.id)}" data-item-cat="${esc(cat)}" style="padding:10px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border)">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-                      <div style="font-weight:600;font-size:13.5px;flex:1;min-width:150px">
-                        • ${esc(it.label)}
-                      </div>
-                      <div style="display:flex;gap:6px;align-items:center">
-                        <button type="button" class="btn sm primary" data-ck-st="ok" style="min-width:68px;height:36px;font-weight:700">✅ OK</button>
-                        <button type="button" class="btn sm" data-ck-st="problema" style="min-width:92px;height:36px;font-weight:700">⚠️ Irregular</button>
-                        <label class="btn sm" title="Tirar foto deste ponto" style="height:36px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
-                          📷 <span data-item-photo-badge="${esc(it.id)}" class="xs">Foto</span>
-                          <input type="file" accept="image/*" capture="environment" hidden data-item-photo-input="${esc(it.id)}" />
-                        </label>
-                      </div>
+                  <div class="ck-row" data-item-id="${esc(it.id)}" data-item-cat="${esc(cat)}">
+                    <div class="ck-row-label">• ${esc(it.label)}</div>
+                    <div class="ck-row-actions">
+                      <button type="button" class="btn sm success" data-ck-st="ok">✓ OK</button>
+                      <button type="button" class="btn sm" data-ck-st="problema">⚠️ Irregular</button>
+                      <label class="btn sm ck-photo-btn" data-item-photo-lbl="${esc(it.id)}" title="Tirar foto deste item">
+                        📷 <span data-item-photo-badge="${esc(it.id)}">Foto</span>
+                        <input type="file" accept="image/*" capture="environment" hidden data-item-photo-input="${esc(it.id)}" />
+                      </label>
                     </div>
-                    <div data-item-photo-preview="${esc(it.id)}" class="hidden" style="margin-top:8px;display:none;align-items:center;gap:8px">
-                      <img src="" alt="Foto do item" style="width:58px;height:58px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" />
-                      <span class="xs" style="color:var(--ok);font-weight:700">📸 Foto do ponto anexada</span>
+                    <div data-item-photo-preview="${esc(it.id)}" class="hidden" style="margin-top:8px;display:none;align-items:center;gap:8px;padding-top:6px;border-top:1px dashed var(--border)">
+                      <img src="" alt="Foto do item" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0" />
+                      <span class="xs" style="color:var(--ok-text);font-weight:700">📸 Foto do item salva</span>
                     </div>
-                    <input class="input hidden" data-ck-note placeholder="Descreva a irregularidade encontrada neste ponto..." style="margin-top:8px;height:38px;font-size:13px" />
+                    <input class="input hidden" data-ck-note placeholder="Qual o defeito encontrado neste item?" style="margin-top:8px;min-height:40px;font-size:13.5px" />
                   </div>
                 `).join('')}
               </div>
 
-              <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">
-                <div style="font-size:12.5px;font-weight:700;margin-bottom:8px;color:${meta.mandatory ? 'var(--info)' : 'var(--text-2)'}">
+              <div class="ck-stage-photo-box">
+                <div class="ck-stage-photo-title" style="color:${meta.mandatory ? 'var(--info-text)' : 'var(--text-2)'}">
                   ${esc(meta.label)}
                 </div>
                 ${meta.isFourSides ? `
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    ${renderPhotoSlot('frente', '1. Frente do Caminhão', true)}
-                    ${renderPhotoSlot('traseira', '2. Traseira do Caminhão', true)}
-                    ${renderPhotoSlot('lateral_direita', '3. Lateral Direita', true)}
-                    ${renderPhotoSlot('lateral_esquerda', '4. Lateral Esquerda', true)}
+                  <div class="ck-photo-grid-4">
+                    ${renderPhotoSlot('frente', '1. Frente', true)}
+                    ${renderPhotoSlot('traseira', '2. Traseira', true)}
+                    ${renderPhotoSlot('lateral_direita', '3. Lat. Direita', true)}
+                    ${renderPhotoSlot('lateral_esquerda', '4. Lat. Esquerda', true)}
                   </div>
-                ` : renderPhotoSlot(meta.key, meta.mandatory ? 'Painel com motor ligado (Km, combustível e alertas)' : `Foto de ${cat}`, meta.mandatory)}
+                ` : renderPhotoSlot(meta.key, meta.mandatory ? 'Foto do Painel Ligado' : `Foto de ${cat}`, meta.mandatory)}
               </div>
             </section>
           `;
         }).join('')}
 
-        <section class="card" style="padding:12px;border:1.5px solid var(--border)">
+        <section class="ck-stage-card">
           <label class="field" style="margin:0">
-            <span style="font-weight:800;font-size:13.5px">⚠️ Observações / Avarias encontradas:</span>
-            <textarea class="input" id="ck-general-notes" rows="3" placeholder="(Descreva aqui caso tenha marcado algum item Irregular ou observação de viagem)" style="margin-top:6px"></textarea>
+            <span style="font-weight:800;font-size:13.5px;color:var(--text)">⚠️ Observações / Avarias encontradas:</span>
+            <textarea class="input" id="ck-general-notes" rows="3" placeholder="(Descreva aqui caso tenha marcado algum item Irregular)" style="margin-top:6px"></textarea>
           </label>
         </section>
       </div>
 
-      <div class="sheet-actions" style="margin-top:12px">
+      <div class="sheet-actions" style="margin-top:14px">
         <button class="btn" data-close>Cancelar</button>
-        <button class="btn primary" id="ck-submit" style="font-weight:700">✅ Finalizar e Enviar Checklist</button>
+        <button class="btn primary" id="ck-submit" style="font-weight:700">✅ Enviar Checklist</button>
       </div>
     `, {
+      className: 'ck-sheet',
       onMount(el, m) {
         const vehSel = $('#ck-veh', el);
         vehSel.onchange = () => {
@@ -1780,17 +1772,17 @@ export function fleetView(root, params = {}) {
           const lightIrregular = items.some((it) => String(it.category || '').includes('Ilumina') && stateMap.get(it.id) === 'problema');
           const pb = $('[data-slot-badge="pneus"]', el);
           const ps = $('[data-slot="pneus"]', el);
-          if (pb && ps) {
-            pb.textContent = tireIrregular ? 'OBRIGATÓRIA (Irregular)' : 'Se houver defeito';
+          if (pb && ps && !stagePhotos.pneus) {
+            pb.textContent = tireIrregular ? 'OBRIGATÓRIA' : 'Opcional';
             pb.className = 'badge xs ' + (tireIrregular ? 'danger' : '');
-            ps.style.borderColor = tireIrregular ? 'var(--danger)' : 'var(--border)';
+            ps.classList.toggle('danger', tireIrregular);
           }
           const lb = $('[data-slot-badge="iluminacao"]', el);
           const ls = $('[data-slot="iluminacao"]', el);
-          if (lb && ls) {
-            lb.textContent = lightIrregular ? 'OBRIGATÓRIA (Irregular)' : 'Se houver defeito';
+          if (lb && ls && !stagePhotos.iluminacao) {
+            lb.textContent = lightIrregular ? 'OBRIGATÓRIA' : 'Opcional';
             lb.className = 'badge xs ' + (lightIrregular ? 'danger' : '');
-            ls.style.borderColor = lightIrregular ? 'var(--danger)' : 'var(--border)';
+            ls.classList.toggle('danger', lightIrregular);
           }
         };
 
@@ -1802,9 +1794,9 @@ export function fleetView(root, params = {}) {
               const st = btn.dataset.ckSt;
               stateMap.set(id, st);
               $$('[data-ck-st]', row).forEach((b) => {
-                b.className = 'btn sm' + (b === btn ? (st === 'problema' ? ' danger' : ' primary') : '');
+                b.className = 'btn sm' + (b === btn ? (st === 'problema' ? ' danger' : ' success') : '');
               });
-              row.style.borderColor = st === 'problema' ? 'var(--danger)' : 'var(--border)';
+              row.classList.toggle('is-irregular', st === 'problema');
               noteInp.classList.toggle('hidden', st !== 'problema');
               if (st === 'problema') noteInp.focus();
               updateConditionalBadges();
@@ -1826,7 +1818,9 @@ export function fleetView(root, params = {}) {
               }
               const bdg = $(`[data-item-photo-badge="${id}"]`, row);
               if (bdg) bdg.textContent = '✓ OK';
-              toast('Foto do ponto anexada!');
+              const lbl = $(`[data-item-photo-lbl="${id}"]`, row);
+              if (lbl) lbl.classList.add('has-photo');
+              toast('Foto do item anexada!');
             } catch (err) { toast('Falha ao processar foto: ' + err.message, 'err'); }
           });
         });
@@ -1846,7 +1840,10 @@ export function fleetView(root, params = {}) {
               if (prev) { prev.style.display = 'block'; $('img', prev).src = dataUrl; }
               if (empty) empty.style.display = 'none';
               if (done) done.classList.remove('hidden');
-              if (card) card.style.borderColor = 'var(--ok)';
+              if (card) {
+                card.classList.remove('mandatory', 'danger');
+                card.classList.add('done');
+              }
               toast('Foto anexada com sucesso!');
             } catch (err) { toast('Erro ao carregar foto: ' + err.message, 'err'); }
           });
@@ -1870,7 +1867,7 @@ export function fleetView(root, params = {}) {
           try {
             const btn = $('#ck-submit', el);
             btn.disabled = true;
-            btn.textContent = 'Enviando fotos e salvando...';
+            btn.textContent = 'Enviando...';
             const r = await api('/api/fleet/checklists', {
               method: 'POST',
               body: {
@@ -1893,7 +1890,7 @@ export function fleetView(root, params = {}) {
             onSaved?.();
           } catch (e) {
             const btn = $('#ck-submit', el);
-            if (btn) { btn.disabled = false; btn.textContent = '✅ Finalizar e Enviar Checklist'; }
+            if (btn) { btn.disabled = false; btn.textContent = '✅ Enviar Checklist'; }
             toast(e.message, 'err');
           }
         };
@@ -1912,50 +1909,56 @@ export function fleetView(root, params = {}) {
         ['iluminacao', '3️⃣ Iluminação & Sinalização'],
         ['frente', '4️⃣ Caminhão — Frente'],
         ['traseira', '4️⃣ Caminhão — Traseira'],
-        ['lateral_direita', '4️⃣ Caminhão — Lateral Direita'],
-        ['lateral_esquerda', '4️⃣ Caminhão — Lateral Esquerda'],
+        ['lateral_direita', '4️⃣ Caminhão — Lat. Direita'],
+        ['lateral_esquerda', '4️⃣ Caminhão — Lat. Esquerda'],
       ].filter(([k]) => p[k]);
 
       sheet(`
-        <h2>📋 Checklist — ${esc(c.plate)} (${c.type === 'saida' ? 'Saída' : 'Chegada'})</h2>
-        <p class="muted small">${fmtDateTime(c.created_at)} • Motorista: <strong>${esc(c.driver_name || '—')}</strong> ${c.km != null ? `• ${numFmt(c.km)} km` : ''}</p>
-        <div style="max-height:62vh;overflow-y:auto;margin-top:10px">
-          ${photoLabels.length ? `
-            <div class="section-title" style="margin-top:0"><span>📸 Fotos do Checklist (${photoLabels.length})</span></div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px">
-              ${photoLabels.map(([k, lbl]) => `
-                <a href="${esc(p[k])}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2);display:block">
-                  <img src="${esc(p[k])}" alt="${esc(lbl)}" style="width:100%;height:96px;object-fit:cover;display:block" />
-                  <div class="xs" style="padding:6px;font-weight:700;text-align:center">${esc(lbl)}</div>
-                </a>
-              `).join('')}
-            </div>
-          ` : ''}
+        <div class="ck-top-bar">
+          <div>
+            <h2>📋 Checklist — ${esc(c.plate)} (${c.type === 'saida' ? 'Saída' : 'Chegada'})</h2>
+            <div class="muted xs">${fmtDateTime(c.created_at)} • ${esc(c.driver_name || '—')} ${c.km != null ? `• ${numFmt(c.km)} km` : ''}</div>
+          </div>
+          <button type="button" class="icon-btn" data-close aria-label="Fechar">${icon('x', 18)}</button>
+        </div>
 
-          <div class="section-title"><span>Itens Verificados</span></div>
+        ${photoLabels.length ? `
+          <div class="section-title" style="margin-top:4px"><span>📸 Fotos do Checklist (${photoLabels.length})</span></div>
+          <div class="ck-photo-grid-4" style="margin-bottom:14px">
+            ${photoLabels.map(([k, lbl]) => `
+              <a href="${esc(p[k])}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2);display:block">
+                <img src="${esc(p[k])}" alt="${esc(lbl)}" style="width:100%;height:92px;object-fit:cover;display:block" />
+                <div class="xs" style="padding:6px;font-weight:700;text-align:center">${esc(lbl)}</div>
+              </a>
+            `).join('')}
+          </div>
+        ` : ''}
+
+        <div class="section-title"><span>Itens Verificados</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
           ${(c.answers || []).map((a) => `
-            <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:8px">
-              <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:10px;background:var(--surface-2);border:1px solid ${a.status === 'problema' ? 'var(--danger)' : 'var(--border)'};gap:8px">
+              <div style="min-width:0;flex:1">
                 <div class="xs muted">${esc(a.category || '')}</div>
-                <strong>• ${esc(a.label)}</strong>
-                ${a.note ? `<div class="small" style="color:var(--danger)">⚠️ ${esc(a.note)}</div>` : ''}
+                <strong style="font-size:13px;display:block">• ${esc(a.label)}</strong>
+                ${a.note ? `<div class="xs" style="color:var(--danger-text);margin-top:2px">⚠️ ${esc(a.note)}</div>` : ''}
               </div>
-              <div class="row" style="gap:6px;align-items:center">
-                ${a.photo_url ? `<a href="${esc(a.photo_url)}" target="_blank" class="btn sm">📸 Foto</a>` : ''}
+              <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+                ${a.photo_url ? `<a href="${esc(a.photo_url)}" target="_blank" class="btn sm">📸</a>` : ''}
                 <span class="badge ${a.status === 'ok' ? 'ok' : a.status === 'problema' ? 'danger' : ''}">${a.status === 'ok' ? 'OK' : 'IRREGULAR'}</span>
               </div>
             </div>
           `).join('')}
-
-          ${c.notes ? `
-            <div class="card" style="margin-top:12px;background:var(--surface-2)">
-              <strong class="xs">⚠️ Observações / Avarias encontradas:</strong>
-              <div class="small" style="margin-top:4px">${esc(c.notes)}</div>
-            </div>
-          ` : ''}
         </div>
-        <div class="sheet-actions"><button class="btn" data-close>Fechar</button></div>
-      `);
+
+        ${c.notes ? `
+          <div class="card" style="margin-top:12px;background:var(--surface-2);padding:12px">
+            <strong class="xs">⚠️ Observações / Avarias encontradas:</strong>
+            <div class="small" style="margin-top:4px">${esc(c.notes)}</div>
+          </div>
+        ` : ''}
+        <div class="sheet-actions"><button class="btn primary" data-close>Fechar</button></div>
+      `, { className: 'ck-sheet' });
     } catch (e) { toast(e.message, 'err'); }
   }
 
