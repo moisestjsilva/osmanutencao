@@ -815,6 +815,13 @@ export function registerFleetRoutes(app, getDb) {
     return { ...out, checklist: db.prepare(`${ckSelect} WHERE c.id = ?`).get(id) };
   });
 
+  del('/checklists/:id', G, (req, res, db) => {
+    const c = db.prepare('SELECT * FROM fleet_checklists WHERE id = ?').get(req.params.id);
+    if (!c) throw new FleetError(404, 'Checklist não encontrado');
+    db.prepare('DELETE FROM fleet_checklists WHERE id = ?').run(c.id);
+    return { ok: true };
+  });
+
   // ======================================================================= MANUTENÇÃO (planos por km/tempo)
   get('/plans', GM, (req, res, db) => {
     const rows = db.prepare(`SELECT p.*, v.plate, v.nickname FROM fleet_plans p JOIN fleet_vehicles v ON v.id = p.vehicle_id

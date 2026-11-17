@@ -836,6 +836,7 @@ export function fleetView(root, params = {}) {
               <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
                 ${c.wo_id ? `<a class="btn sm danger" href="#/os/${esc(c.wo_id)}" style="flex:1">🔧 Abrir OS</a>` : ''}
                 <button class="btn sm primary" data-view-ck="${esc(c.id)}" style="flex:1">👁️ Ver Fotos & Itens</button>
+                ${access === 'gestor' ? `<button class="btn sm danger" data-del-ck="${esc(c.id)}" data-plate="${esc(c.plate)}" title="Excluir checklist">${icon('trash', 14)}</button>` : ''}
               </div>
             </article>
           `).join('')}
@@ -845,7 +846,22 @@ export function fleetView(root, params = {}) {
 
     $('#btn-new-ck-banner', body)?.addEventListener('click', () => openNewChecklistModal(() => renderCurrentTab()));
     $$('[data-view-ck]', body).forEach((b) => {
-      b.onclick = () => openChecklistDetailModal(b.dataset.viewCk);
+      b.onclick = () => openChecklistDetailModal(b.dataset.viewCk, () => renderCurrentTab());
+    });
+    $$('[data-del-ck]', body).forEach((b) => {
+      b.onclick = async () => {
+        if (!(await confirmDialog({
+          title: `Excluir checklist (${b.dataset.plate || ''})?`,
+          body: 'Este registro de checklist será removido permanentemente do histórico.',
+          confirm: 'Excluir',
+          danger: true,
+        }))) return;
+        try {
+          await api(`/api/fleet/checklists/${b.dataset.delCk}`, { method: 'DELETE' });
+          toast('Checklist excluído');
+          renderCurrentTab();
+        } catch (e) { toast(e.message, 'err'); }
+      };
     });
   }
 
@@ -1901,7 +1917,7 @@ export function fleetView(root, params = {}) {
     });
   }
 
-  async function openChecklistDetailModal(id) {
+  async function openChecklistDetailModal(id, onDeleted) {
     try {
       const r = await api(`/api/fleet/checklists/${id}`);
       const c = r.checklist;
@@ -1960,8 +1976,29 @@ export function fleetView(root, params = {}) {
             <div class="small" style="margin-top:4px">${esc(c.notes)}</div>
           </div>
         ` : ''}
-        <div class="sheet-actions"><button class="btn primary" data-close>Fechar</button></div>
-      `, { className: 'ck-sheet' });
+        <div class="sheet-actions">
+          ${access === 'gestor' ? `<button class="btn danger" id="ck-del-btn">${icon('trash', 15)} Excluir Checklist</button>` : ''}
+          <button class="btn primary" data-close>Fechar</button>
+        </div>
+      `, {
+        className: 'ck-sheet',
+        onMount(el, m) {
+          $('#ck-del-btn', el)?.addEventListener('click', async () => {
+            if (!(await confirmDialog({
+              title: `Excluir checklist (${c.plate})?`,
+              body: 'Este registro de checklist será removido permanentemente do histórico.',
+              confirm: 'Excluir',
+              danger: true,
+            }))) return;
+            try {
+              await api(`/api/fleet/checklists/${c.id}`, { method: 'DELETE' });
+              toast('Checklist excluído');
+              m.close();
+              onDeleted?.();
+            } catch (e) { toast(e.message, 'err'); }
+          });
+        },
+      });
     } catch (e) { toast(e.message, 'err'); }
   }
 

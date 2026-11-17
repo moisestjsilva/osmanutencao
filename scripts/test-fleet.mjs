@@ -333,6 +333,15 @@ async function main() {
   assert.equal(r.overall_status, 'ok');
   ok('POST /api/fleet/quick-checklist salva checklist 1-toque com fotos obrigatórias direto pelo celular');
 
+  const quickCkId = r.checklistId;
+  r = await call('DELETE', `/api/fleet/checklists/${quickCkId}`, null, tJoao);
+  assert.equal(r.status, 403);
+  r = await call('DELETE', `/api/fleet/checklists/${quickCkId}`, null, adm);
+  assert.equal(r.status, 200);
+  r = await call('GET', `/api/fleet/checklists/${quickCkId}`, null, adm);
+  assert.equal(r.status, 404);
+  ok('gestor exclui checklist via DELETE /api/fleet/checklists/:id e motorista não pode excluir (403)');
+
   console.log(`\n${pass} verificações OK`);
 }
 
