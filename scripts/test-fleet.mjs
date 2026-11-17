@@ -139,6 +139,9 @@ async function main() {
   r = await call('PUT', '/api/fleet/documents/alerts-config', { enabled: true, user_ids: firstUserId ? [firstUserId] : [], extra_phones: ['32999998888'], before_days: [60, 30, 15, 7, 1], after_days: 10 }, adm);
   assert.equal(r.status, 200);
   assert.equal(r.config.extra_phones.includes('32999998888'), true);
+  r = await call('POST', '/api/fleet/documents/alerts-test', {}, adm);
+  assert.equal(r.status, 400);
+  assert.match(r.error, /Não foi possível enviar/i);
   ok('upload de PDF em documento e configuração de alertas no WhatsApp (60/30/15/7/1 + 10d vencido)');
   r = await call('POST', '/api/fleet/fines', { vehicle_id: V.id, fine_date: trip.start_at, infraction: 'Excesso de velocidade', amount: 293.47, points: 5, due_date: '2030-01-10' }, adm);
   assert.equal(r.status, 201); assert.equal(r.driver_detected, true); assert.equal(r.fine.driver_id, DRV.id); ok('multa identifica o motorista pela viagem');

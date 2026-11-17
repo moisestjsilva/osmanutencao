@@ -2396,9 +2396,11 @@ export function fleetView(root, params = {}) {
             try {
               await api('/api/fleet/documents/alerts-config', { method: 'PUT', body: collect() });
               const r = await api('/api/fleet/documents/alerts-test', { method: 'POST' });
+              const sent = r.sent ?? 0;
+              const matched = r.matched ?? 0;
               toast(r.testSent
-                ? `Mensagem de teste enviada para ${r.sent} pessoa(s)!`
-                : `Alertas disparados para ${r.sent} pessoa(s) (${r.matched} documento(s) no prazo).`);
+                ? `Mensagem de teste enviada para ${sent} pessoa(s)!`
+                : `Alertas enviados para ${sent} pessoa(s) (${matched} documento(s) no prazo).`);
             } catch (e) {
               toast(e.message, 'err');
             } finally {

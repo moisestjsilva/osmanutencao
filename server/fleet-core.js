@@ -902,11 +902,14 @@ export async function checkAndSendDocWhatsAppAlerts(db, { forceTest = false } = 
     ].join('\n');
 
     let sentCount = 0;
+    const errors = [];
     for (const t of targets) {
       try {
         const res = await sendFleetWhatsAppMessage({ to: t.phone, text }, db);
         if (res && !res.skipped) sentCount++;
+        else if (res?.reason) errors.push(`${t.phone}: ${res.reason}`);
       } catch (err) {
+        errors.push(`${t.phone}: ${err.message}`);
         console.warn(`[Frota] Falha ao enviar alerta de documento para ${t.phone}:`, err.message);
       }
     }
@@ -918,7 +921,7 @@ export async function checkAndSendDocWhatsAppAlerts(db, { forceTest = false } = 
       }
     }
 
-    return { ok: true, sent: sentCount, matched: toNotify.length, targets: targets.length };
+    return { ok: true, sent: sentCount, matched: toNotify.length, targets: targets.length, errors };
   } catch (e) {
     console.warn('[Frota] Falha ao enviar alertas de documentos no WhatsApp:', e.message);
     return { error: e.message, sent: 0 };

@@ -216,7 +216,7 @@ export function registerFleetRoutes(app, getDb) {
   });
 
   const route = (method, path, levels, fn) => {
-    app[method](`/api/fleet${path}`, (req, res) => {
+    app[method](`/api/fleet${path}`, async (req, res) => {
       try {
         if (!req.user) return res.status(401).json({ error: 'Faça login para continuar' });
         const access = fleetAccessOf(req.user);
@@ -225,7 +225,7 @@ export function registerFleetRoutes(app, getDb) {
         }
         const db = getDb();
         req.fleet = { access, driver: access === 'motorista' ? getDriverByUser(db, req.user.id) : null };
-        const out = fn(req, res, db);
+        const out = await fn(req, res, db);
         if (out !== undefined && !res.headersSent) res.json(out);
       } catch (e) {
         if (e instanceof FleetError) return res.status(e.status).json({ error: e.message, ...e.extra });
@@ -1091,7 +1091,7 @@ export function registerFleetRoutes(app, getDb) {
     const cfg = getDocWhatsAppConfig(db);
     const targets = resolveDocWhatsAppTargets(db, cfg);
     if (!targets.length) {
-      throw new FleetError(400, 'Selecione pelo menos uma pessoa com WhatsApp cadastrado antes de testar.');
+      throw new FleetError(400, 'Selecione pelo menos uma pessoa com WhatsApp cadastrado ou informe um número extra antes de testar.');
     }
     const result = await checkAndSendDocWhatsAppAlerts(db, { forceTest: true });
     if (result.matched === 0) {
@@ -1104,13 +1104,24 @@ export function registerFleetRoutes(app, getDb) {
         '_(No momento não há documentos exatamente nesses marcos de vencimento.)_',
       ].join('\n');
       let sent = 0;
+      const errors = [];
       for (const t of targets) {
         try {
           const r = await sendFleetWhatsAppMessage({ to: t.phone, text: testMsg }, db);
           if (r && !r.skipped) sent++;
-        } catch (_) {}
+          else if (r?.reason) errors.push(`${t.phone}: ${r.reason}`);
+        } catch (err) {
+          errors.push(`${t.phone}: ${err.message}`);
+        }
       }
-      return { ok: true, sent, matched: 0, targets: targets.length, testSent: true };
+      if (sent === 0) {
+        throw new FleetError(400, `Não foi possível enviar no WhatsApp: ${errors[0] || 'Verifique se o WhatsApp está conectado em /whatsapp-frota'}`);
+      }
+      return { ok: true, sent, matched: 0, targets: targets.length, testSent: true, errors };
+    }
+    if ((result.sent || 0) === 0) {
+      const errDetail = result.errors?.[0] || result.reason || 'Verifique se o WhatsApp está conectado em /whatsapp-frota';
+      throw new FleetError(400, `Não foi possível enviar os alertas (${result.matched} doc(s)): ${errDetail}`);
     }
     return { ok: true, ...result };
   });

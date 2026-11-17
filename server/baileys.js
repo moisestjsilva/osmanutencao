@@ -330,6 +330,37 @@ export function onBaileysMessage(handler) {
   incomingMessageHandler = handler;
 }
 
+async function resolveTargetJid(activeSock, rawTo) {
+  let jid = String(rawTo || '').trim();
+  if (!jid) return '';
+  if (jid.includes('@g.us') || jid.includes('@lid')) return jid;
+  if (jid.includes('@')) {
+    const [userPart, server] = jid.split('@');
+    jid = `${userPart.split(':')[0].replace(/\D/g, '')}@${server}`;
+  } else if (jid.length > 15) {
+    return `${jid}@g.us`;
+  } else {
+    const cleanNumber = jid.split('@')[0].split(':')[0].replace(/\D/g, '');
+    jid = `${cleanNumber}@s.whatsapp.net`;
+  }
+
+  if (jid.endsWith('@s.whatsapp.net') && typeof activeSock?.onWhatsApp === 'function') {
+    const num = jid.split('@')[0];
+    const candidates = [num];
+    if (num.startsWith('55') && num.length === 13 && num[4] === '9') {
+      candidates.push(num.slice(0, 4) + num.slice(5));
+    } else if (num.startsWith('55') && num.length === 12) {
+      candidates.push(num.slice(0, 4) + '9' + num.slice(4));
+    }
+    try {
+      const checked = await activeSock.onWhatsApp(...candidates);
+      const found = Array.isArray(checked) ? checked.find((r) => r?.exists && r?.jid) : null;
+      if (found?.jid) return found.jid;
+    } catch (_) {}
+  }
+  return jid;
+}
+
 /**
  * Envia mensagem via Baileys para número ou ID de grupo
  */
@@ -346,22 +377,7 @@ export async function sendBaileysMessage({ to, text, image, caption, poll }) {
     throw new Error('WhatsApp não está conectado. Acesse /whatsapp para escanear o QR Code.');
   }
 
-  let jid = String(to || '').trim();
-
-  // Tratamento e limpeza rigorosa de JID
-  if (jid.includes('@g.us')) {
-    // Grupo
-  } else if (jid.includes('@')) {
-    // @s.whatsapp.net ou @lid: remove identificador de dispositivo (:22@...)
-    const [userPart, server] = jid.split('@');
-    const cleanUser = userPart.split(':')[0].replace(/\D/g, '');
-    jid = `${cleanUser}@${server}`;
-  } else if (jid.length > 15) {
-    jid = `${jid}@g.us`;
-  } else {
-    const cleanNumber = jid.split('@')[0].split(':')[0].replace(/\D/g, '');
-    jid = `${cleanNumber}@s.whatsapp.net`;
-  }
+  const jid = await resolveTargetJid(sock, to);
 
   console.log(`[WhatsApp-Baileys] 📤 Enviando resposta para ${jid}... ${image ? '(com imagem)' : poll ? '(com enquete)' : ''}`);
   let result;
@@ -658,17 +674,7 @@ export async function sendFleetBaileysMessage({ to, text, image, caption, poll }
     throw new Error('WhatsApp exclusivo da Frota não está conectado.');
   }
 
-  let jid = String(to || '').trim();
-  if (jid.includes('@g.us')) {
-    // Grupo
-  } else if (jid.includes('@')) {
-    const [userPart, server] = jid.split('@');
-    jid = `${userPart.split(':')[0].replace(/\D/g, '')}@${server}`;
-  } else if (jid.length > 15) {
-    jid = `${jid}@g.us`;
-  } else {
-    jid = `${jid.split('@')[0].split(':')[0].replace(/\D/g, '')}@s.whatsapp.net`;
-  }
+  const jid = await resolveTargetJid(fleetSock, to);
 
   let result;
   if (image) {
