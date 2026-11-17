@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UPLOAD_DIR } from './db.js';
 import { applyOp, notify, getSetting, setSetting } from './domain.js';
-import { sendWhatsAppMessage, isWhatsAppEnabled } from './whatsapp.js';
+import { sendWhatsAppMessage, sendFleetWhatsAppMessage, isWhatsAppEnabled } from './whatsapp.js';
 import { fleetAccessOf } from './auth.js';
 
 export const nowIso = () => new Date().toISOString();
@@ -748,11 +748,189 @@ export async function maybeSendDigest(db) {
   }
 }
 
+// Configuração de alertas individuais de vencimento de documentos no WhatsApp
+export const DEFAULT_DOC_BEFORE_DAYS = [60, 30, 15, 7, 1];
+export const DEFAULT_DOC_AFTER_DAYS = 10;
+
+export function parseDaysList(raw, fallback = DEFAULT_DOC_BEFORE_DAYS) {
+  if (Array.isArray(raw)) {
+    const arr = raw.map((n) => Math.round(Number(n))).filter((n) => Number.isFinite(n) && n > 0 && n <= 365);
+    return arr.length ? [...new Set(arr)].sort((a, b) => b - a) : [...fallback];
+  }
+  const str = String(raw || '').trim();
+  if (!str) return [...fallback];
+  const arr = str.split(/[\s,;]+/).map((n) => Math.round(Number(n))).filter((n) => Number.isFinite(n) && n > 0 && n <= 365);
+  return arr.length ? [...new Set(arr)].sort((a, b) => b - a) : [...fallback];
+}
+
+export function getDocWhatsAppConfig(db) {
+  let userIds = [];
+  let extraPhones = [];
+  try { userIds = JSON.parse(getSetting(db, 'fleet_doc_wa_recipients', '[]')) || []; } catch (_) {}
+  try { extraPhones = JSON.parse(getSetting(db, 'fleet_doc_wa_extra_phones', '[]')) || []; } catch (_) {}
+  const beforeRaw = getSetting(db, 'fleet_doc_wa_before_days', DEFAULT_DOC_BEFORE_DAYS.join(','));
+  const afterRaw = Number(getSetting(db, 'fleet_doc_wa_after_days', String(DEFAULT_DOC_AFTER_DAYS)));
+  return {
+    enabled: getSetting(db, 'fleet_doc_wa_enabled', '1') === '1',
+    user_ids: Array.isArray(userIds) ? userIds.filter(Boolean) : [],
+    extra_phones: Array.isArray(extraPhones) ? extraPhones.filter(Boolean) : [],
+    before_days: parseDaysList(beforeRaw),
+    after_days: Number.isFinite(afterRaw) && afterRaw >= 0 && afterRaw <= 60 ? Math.round(afterRaw) : DEFAULT_DOC_AFTER_DAYS,
+  };
+}
+
+export function resolveDocWhatsAppTargets(db, cfg) {
+  const targets = [];
+  const seenPhones = new Set();
+  const normPhone = (raw) => {
+    const d = String(raw || '').replace(/\D/g, '');
+    if (d.length < 10) return '';
+    return d.length <= 11 && !d.startsWith('55') ? `55${d}` : d;
+  };
+  for (const uid of cfg.user_ids || []) {
+    const u = db.prepare('SELECT id, name, phone FROM users WHERE id = ? AND active = 1').get(uid);
+    if (!u) continue;
+    let ph = normPhone(u.phone);
+    if (!ph) {
+      const drv = db.prepare('SELECT phone FROM fleet_drivers WHERE user_id = ? AND active = 1').get(u.id);
+      ph = normPhone(drv?.phone);
+    }
+    if (!ph || seenPhones.has(ph)) continue;
+    seenPhones.add(ph);
+    targets.push({ user_id: u.id, name: u.name, phone: ph });
+  }
+  for (const raw of cfg.extra_phones || []) {
+    const ph = normPhone(raw);
+    if (!ph || seenPhones.has(ph)) continue;
+    seenPhones.add(ph);
+    targets.push({ user_id: null, name: ph, phone: ph });
+  }
+  return targets;
+}
+
+export async function checkAndSendDocWhatsAppAlerts(db, { forceTest = false } = {}) {
+  try {
+    const cfg = getDocWhatsAppConfig(db);
+    if (!cfg.enabled && !forceTest) return { skipped: true, reason: 'disabled', sent: 0 };
+    const targets = resolveDocWhatsAppTargets(db, cfg);
+    if (!targets.length) return { skipped: true, reason: 'no_targets', sent: 0 };
+
+    if (!forceTest) {
+      const hour = Number(new Date().toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' }));
+      if (hour < 7) return { skipped: true, reason: 'before_hours', sent: 0 };
+    }
+
+    const todayStr = today();
+    const vehicles = new Map(db.prepare('SELECT * FROM fleet_vehicles WHERE active = 1').all().map((v) => [v.id, v]));
+    const drivers = new Map(db.prepare('SELECT * FROM fleet_drivers WHERE active = 1').all().map((d) => [d.id, d]));
+
+    // Considera o documento mais recente de cada tipo por veículo/motorista
+    const latest = new Map();
+    for (const d of db.prepare('SELECT * FROM fleet_documents WHERE expiry_date IS NOT NULL').all()) {
+      const k = `${d.entity_type}:${d.entity_id}:${d.doc_type}`;
+      if (!latest.has(k) || latest.get(k).expiry_date < d.expiry_date) latest.set(k, d);
+    }
+
+    const candidates = [];
+    for (const d of latest.values()) {
+      const owner = d.entity_type === 'vehicle' ? vehicles.get(d.entity_id) : drivers.get(d.entity_id);
+      if (!owner) continue;
+      const who = d.entity_type === 'vehicle' ? `${owner.plate}${owner.nickname ? ` (${owner.nickname})` : ''}` : owner.name;
+      candidates.push({
+        key: `doc:${d.id}`,
+        expiry_date: d.expiry_date,
+        doc_type: d.doc_type,
+        number: d.number,
+        who,
+        has_file: Boolean(d.file_url),
+      });
+    }
+    for (const dr of drivers.values()) {
+      if (!dr.cnh_expiry || dr.status === 'inativo') continue;
+      candidates.push({
+        key: `cnh:${dr.id}`,
+        expiry_date: dr.cnh_expiry,
+        doc_type: 'CNH',
+        number: dr.cnh_number || null,
+        who: dr.name,
+        has_file: false,
+      });
+    }
+
+    const toNotify = [];
+    for (const item of candidates) {
+      const days = daysBetween(todayStr, item.expiry_date);
+      const isBeforeMatch = days > 0 && cfg.before_days.includes(days);
+      const isDueToday = days === 0;
+      const isOverdueMatch = days < 0 && Math.abs(days) <= cfg.after_days;
+      if (!isBeforeMatch && !isDueToday && !isOverdueMatch) continue;
+
+      const logKey = `docwa:${item.key}:${item.expiry_date}:${todayStr}`;
+      if (!forceTest && db.prepare('SELECT 1 FROM fleet_alert_log WHERE alert_key = ?').get(logKey)) {
+        continue;
+      }
+      toNotify.push({ ...item, days, logKey });
+    }
+
+    if (!toNotify.length) {
+      return { ok: true, sent: 0, matched: 0, targets: targets.length };
+    }
+
+    const fmtBr = (iso) => String(iso || '').split('-').reverse().join('/');
+    const lines = toNotify.map((it) => {
+      let statusTxt = '';
+      if (it.days > 1) statusTxt = `🟡 Vence em *${it.days} dias* (${fmtBr(it.expiry_date)})`;
+      else if (it.days === 1) statusTxt = `🟠 *VENCE AMANHÃ!* (${fmtBr(it.expiry_date)})`;
+      else if (it.days === 0) statusTxt = `🔴 *VENCE HOJE!* (${fmtBr(it.expiry_date)})`;
+      else {
+        const elapsed = Math.abs(it.days);
+        statusTxt = `🚨 *VENCIDO há ${elapsed} dia(s)* (venceu em ${fmtBr(it.expiry_date)} — aviso ${elapsed}/${cfg.after_days})`;
+      }
+      return [
+        `• *${it.doc_type}* — *${it.who}*${it.number ? ` (Nº ${it.number})` : ''}`,
+        `  ${statusTxt}${it.has_file ? ' • 📎 Anexo no app' : ''}`,
+      ].join('\n');
+    });
+
+    const text = [
+      `📄 *ALERTA DE VENCIMENTO DE DOCUMENTOS — FROTA*`,
+      `📅 ${fmtBr(todayStr)}`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      ...lines,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `💡 _Atualize o documento e a nova data de vencimento no sistema para encerrar os avisos._`,
+    ].join('\n');
+
+    let sentCount = 0;
+    for (const t of targets) {
+      try {
+        const res = await sendFleetWhatsAppMessage({ to: t.phone, text }, db);
+        if (res && !res.skipped) sentCount++;
+      } catch (err) {
+        console.warn(`[Frota] Falha ao enviar alerta de documento para ${t.phone}:`, err.message);
+      }
+    }
+
+    if (sentCount > 0) {
+      const upsert = db.prepare('INSERT INTO fleet_alert_log (alert_key, level, last_sent_at) VALUES (?,?,?) ON CONFLICT(alert_key) DO UPDATE SET level=excluded.level, last_sent_at=excluded.last_sent_at');
+      for (const it of toNotify) {
+        upsert.run(it.logKey, it.days <= 0 ? 'vencido' : 'vencendo', nowIso());
+      }
+    }
+
+    return { ok: true, sent: sentCount, matched: toNotify.length, targets: targets.length };
+  } catch (e) {
+    console.warn('[Frota] Falha ao enviar alertas de documentos no WhatsApp:', e.message);
+    return { error: e.message, sent: 0 };
+  }
+}
+
 export function startFleetScheduler(getDb) {
   const tick = () => {
     const db = getDb();
     dispatchAlerts(db);
     maybeSendDigest(db);
+    checkAndSendDocWhatsAppAlerts(db);
   };
   setTimeout(tick, 45 * 1000);
   setInterval(tick, 30 * 60 * 1000);

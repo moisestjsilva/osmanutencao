@@ -341,26 +341,38 @@ app.post('/api/auth/change-password', requireUser, (req, res) => {
   res.json({ ok: true, message: 'Senha atualizada com sucesso' });
 });
 
-// ---------- Upload de Imagens (Máquinas, Usuários e Fotos) ----------
+// ---------- Upload de Imagens e Documentos PDF (Máquinas, Usuários, Fotos e Frota) ----------
 app.post('/api/upload', requireUser, (req, res) => {
   try {
-    const { dataUrl, filename } = req.body || {};
+    const { dataUrl } = req.body || {};
     if (!dataUrl || typeof dataUrl !== 'string') {
-      return res.status(400).json({ error: 'Nenhuma imagem enviada' });
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
-    const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
-    if (!match) {
-      return res.status(400).json({ error: 'Formato de imagem inválido' });
+    const imgMatch = dataUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+    const pdfMatch = !imgMatch && dataUrl.match(/^data:application\/pdf;base64,(.+)$/);
+    if (!imgMatch && !pdfMatch) {
+      return res.status(400).json({ error: 'Formato inválido. Envie imagem (JPG/PNG) ou PDF.' });
     }
-    const rawExt = match[1].toLowerCase();
-    const ext = rawExt === 'jpeg' ? 'jpg' : (rawExt.includes('svg') ? 'svg' : (rawExt.includes('png') ? 'png' : 'jpg'));
-    const buffer = Buffer.from(match[2], 'base64');
+    let ext = 'jpg';
+    let b64 = '';
+    if (pdfMatch) {
+      ext = 'pdf';
+      b64 = pdfMatch[1];
+    } else {
+      const rawExt = imgMatch[1].toLowerCase();
+      ext = rawExt === 'jpeg' ? 'jpg' : (rawExt.includes('svg') ? 'svg' : (rawExt.includes('png') ? 'png' : 'jpg'));
+      b64 = imgMatch[2];
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (!buffer.length) {
+      return res.status(400).json({ error: 'Arquivo vazio' });
+    }
     const fname = `${randomUUID()}.${ext}`;
     const dest = path.join(UPLOAD_DIR, fname);
     fs.writeFileSync(dest, buffer);
     res.json({ ok: true, url: `/uploads/${fname}`, filename: fname });
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao salvar imagem: ' + err.message });
+    res.status(500).json({ error: 'Erro ao salvar arquivo: ' + err.message });
   }
 });
 

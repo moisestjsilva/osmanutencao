@@ -1031,9 +1031,11 @@ export function fleetView(root, params = {}) {
   async function renderDocsAndFines(body, topActions) {
     if (access === 'gestor') {
       topActions.innerHTML = `
+        <button class="btn" id="btn-doc-alerts">🔔 Alertas WhatsApp</button>
         <button class="btn" id="btn-new-doc">${icon('doc', 16)} + Documento</button>
         <button class="btn primary" id="btn-new-fine">${icon('alert', 16)} + Multa</button>
       `;
+      $('#btn-doc-alerts', topActions).onclick = () => openDocAlertsConfigModal(() => renderCurrentTab());
       $('#btn-new-doc', topActions).onclick = () => openDocModal(() => renderCurrentTab());
       $('#btn-new-fine', topActions).onclick = () => openFineModal(null, () => renderCurrentTab());
     }
@@ -1052,7 +1054,7 @@ export function fleetView(root, params = {}) {
         ${docs.length ? `
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>Status</th><th>Vínculo</th><th>Documento</th><th>Número</th><th>Vencimento</th>${access === 'gestor' ? '<th></th>' : ''}</tr></thead>
+              <thead><tr><th>Status</th><th>Vínculo</th><th>Documento</th><th>Número</th><th>Vencimento</th><th>Arquivo</th>${access === 'gestor' ? '<th></th>' : ''}</tr></thead>
               <tbody>
                 ${docs.map((d) => `
                   <tr>
@@ -1061,7 +1063,19 @@ export function fleetView(root, params = {}) {
                     <td>${esc(d.doc_type)}</td>
                     <td class="small">${esc(d.number || '—')}</td>
                     <td><strong>${fmtDate(d.expiry_date)}</strong> ${d.status?.days != null ? `<span class="muted xs">(${d.status.days < 0 ? `vencido há ${Math.abs(d.status.days)}d` : `${d.status.days}d`})</span>` : ''}</td>
-                    ${access === 'gestor' ? `<td><button class="btn sm danger" data-del-doc="${esc(d.id)}">${icon('trash', 14)}</button></td>` : ''}
+                    <td>
+                      ${d.file_url
+                        ? `<a class="btn sm" href="${esc(d.file_url)}" target="_blank" rel="noopener">📎 Abrir</a>`
+                        : '<span class="muted xs">Sem anexo</span>'}
+                    </td>
+                    ${access === 'gestor' ? `
+                      <td>
+                        <div class="row" style="gap:4px">
+                          <button class="btn sm" data-edit-doc="${esc(d.id)}" title="Editar / Renovar">${icon('edit', 14)}</button>
+                          <button class="btn sm danger" data-del-doc="${esc(d.id)}" title="Excluir">${icon('trash', 14)}</button>
+                        </div>
+                      </td>
+                    ` : ''}
                   </tr>
                 `).join('')}
               </tbody>
@@ -1107,6 +1121,12 @@ export function fleetView(root, params = {}) {
       </section>
     `;
 
+    $$('[data-edit-doc]', body).forEach((b) => {
+      b.onclick = () => {
+        const doc = docs.find((x) => x.id === b.dataset.editDoc);
+        if (doc) openDocModal(() => renderCurrentTab(), doc);
+      };
+    });
     $$('[data-del-doc]', body).forEach((b) => {
       b.onclick = async () => {
         if (!(await confirmDialog({ title: 'Excluir documento?', confirm: 'Excluir', danger: true }))) return;
@@ -2184,29 +2204,53 @@ export function fleetView(root, params = {}) {
     });
   }
 
-  function openDocModal(onSaved) {
+  function openDocModal(onSaved, doc = null) {
+    const isEdit = !!doc;
+    let uploadedUrl = doc?.file_url || null;
+    let pendingFile = null;
+
+    const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      fr.onload = () => resolve(fr.result);
+      fr.readAsDataURL(file);
+    });
+
     sheet(`
-      <h2>📄 Cadastrar Documento / Licença</h2>
+      <h2>📄 ${isEdit ? 'Atualizar / Renovar Documento' : 'Cadastrar Documento / Licença'}</h2>
       <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <label class="field"><span>Vincular a *</span>
-          <select class="select" id="dc-etype">
-            <option value="vehicle">Caminhão / Veículo</option>
-            <option value="driver">Motorista</option>
+          <select class="select" id="dc-etype" ${isEdit ? 'disabled' : ''}>
+            <option value="vehicle" ${doc?.entity_type !== 'driver' ? 'selected' : ''}>Caminhão / Veículo</option>
+            <option value="driver" ${doc?.entity_type === 'driver' ? 'selected' : ''}>Motorista</option>
           </select>
         </label>
         <label class="field"><span>Selecione *</span>
-          <select class="select" id="dc-eid"></select>
+          <select class="select" id="dc-eid" ${isEdit ? 'disabled' : ''}></select>
         </label>
         <label class="field"><span>Tipo de Documento *</span>
-          <input class="input" id="dc-type" placeholder="CRLV, ANTT, Tacógrafo, Seguro, Toxicológico..." />
+          <input class="input" id="dc-type" value="${esc(doc?.doc_type || '')}" placeholder="CRLV, ANTT, Tacógrafo, Seguro, Toxicológico..." />
         </label>
-        <label class="field"><span>Número / Apólice</span><input class="input" id="dc-num" /></label>
-        <label class="field"><span>Data de Vencimento *</span><input class="input" type="date" id="dc-exp" /></label>
-        <label class="field"><span>Valor Pago (R$)</span><input class="input" type="number" step="0.01" id="dc-cost" /></label>
+        <label class="field"><span>Número / Apólice</span><input class="input" id="dc-num" value="${esc(doc?.number || '')}" /></label>
+        <label class="field"><span>Data de Vencimento *</span><input class="input" type="date" id="dc-exp" value="${esc(doc?.expiry_date || '')}" /></label>
+        <label class="field"><span>Valor Pago (R$)</span><input class="input" type="number" step="0.01" id="dc-cost" value="${doc?.cost != null ? esc(doc.cost) : ''}" /></label>
       </div>
+
+      <div class="field" style="margin-top:8px">
+        <span>📎 Arquivo do Documento (PDF ou Foto/Imagem)</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+          <label class="btn sm" style="cursor:pointer">
+            📤 Escolher PDF ou Foto
+            <input type="file" id="dc-file" accept="application/pdf,image/*" hidden />
+          </label>
+          <span id="dc-file-name" class="xs muted">${uploadedUrl ? 'Arquivo já anexado' : 'Nenhum arquivo selecionado'}</span>
+          ${uploadedUrl ? `<a class="btn sm" href="${esc(uploadedUrl)}" target="_blank" rel="noopener">👁️ Ver Atual</a>` : ''}
+        </div>
+      </div>
+
       <div class="sheet-actions">
         <button class="btn" data-close>Cancelar</button>
-        <button class="btn primary" id="dc-save">Salvar Documento</button>
+        <button class="btn primary" id="dc-save">${isEdit ? 'Atualizar Documento' : 'Salvar Documento'}</button>
       </div>
     `, {
       onMount(el, m) {
@@ -2214,34 +2258,157 @@ export function fleetView(root, params = {}) {
         const eidSel = $('#dc-eid', el);
         const fillEntities = () => {
           if (etSel.value === 'vehicle') {
-            eidSel.innerHTML = cache.vehicles.map((v) => `<option value="${esc(v.id)}">${esc(v.plate)} ${v.nickname ? `(${esc(v.nickname)})` : ''}</option>`).join('');
+            eidSel.innerHTML = cache.vehicles.map((v) => `<option value="${esc(v.id)}" ${doc?.entity_id === v.id ? 'selected' : ''}>${esc(v.plate)} ${v.nickname ? `(${esc(v.nickname)})` : ''}</option>`).join('');
           } else {
-            eidSel.innerHTML = cache.drivers.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+            eidSel.innerHTML = cache.drivers.map((d) => `<option value="${esc(d.id)}" ${doc?.entity_id === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('');
           }
         };
         etSel.onchange = fillEntities;
         fillEntities();
 
+        $('#dc-file', el).addEventListener('change', (e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          pendingFile = f;
+          $('#dc-file-name', el).textContent = `✓ ${f.name}`;
+        });
+
         $('#dc-save', el).onclick = async () => {
+          const btn = $('#dc-save', el);
+          btn.disabled = true;
+          btn.textContent = 'Salvando...';
           try {
-            await api('/api/fleet/documents', {
-              method: 'POST',
-              body: {
-                entity_type: etSel.value,
-                entity_id: eidSel.value,
-                doc_type: $('#dc-type', el).value.trim(),
-                number: $('#dc-num', el).value.trim() || null,
-                expiry_date: $('#dc-exp', el).value || null,
-                cost: $('#dc-cost', el).value ? Number($('#dc-cost', el).value) : null,
-              },
-            });
-            toast('Documento cadastrado!');
+            if (pendingFile) {
+              const isPdf = pendingFile.type === 'application/pdf' || /\.pdf$/i.test(pendingFile.name);
+              const dataUrl = isPdf
+                ? await readFileAsDataUrl(pendingFile)
+                : await compressImage(pendingFile, 1600, 0.85);
+              const up = await api('/api/upload', { method: 'POST', body: { dataUrl } });
+              uploadedUrl = up.url;
+            }
+            const payload = {
+              entity_type: etSel.value,
+              entity_id: eidSel.value,
+              doc_type: $('#dc-type', el).value.trim(),
+              number: $('#dc-num', el).value.trim() || null,
+              expiry_date: $('#dc-exp', el).value || null,
+              cost: $('#dc-cost', el).value ? Number($('#dc-cost', el).value) : null,
+              file_url: uploadedUrl,
+            };
+            if (isEdit) {
+              await api(`/api/fleet/documents/${doc.id}`, { method: 'PUT', body: payload });
+              toast('Documento atualizado!');
+            } else {
+              await api('/api/fleet/documents', { method: 'POST', body: payload });
+              toast('Documento cadastrado!');
+            }
             m.close();
             onSaved?.();
-          } catch (e) { toast(e.message, 'err'); }
+          } catch (e) {
+            btn.disabled = false;
+            btn.textContent = isEdit ? 'Atualizar Documento' : 'Salvar Documento';
+            toast(e.message, 'err');
+          }
         };
       },
     });
+  }
+
+  async function openDocAlertsConfigModal(onSaved) {
+    try {
+      const res = await api('/api/fleet/documents/alerts-config');
+      const cfg = res.config || {};
+      const users = res.users || [];
+      const selectedIds = new Set(cfg.user_ids || []);
+
+      sheet(`
+        <h2>🔔 Alertas de Vencimento no WhatsApp</h2>
+        <p class="muted xs">Escolha quem deve receber avisos automáticos no WhatsApp quando um documento (CRLV, ANTT, Seguro, Tacógrafo, CNH, etc.) estiver perto de vencer ou vencido.</p>
+
+        <label class="row" style="gap:8px;align-items:center;margin:12px 0;cursor:pointer">
+          <input type="checkbox" id="da-enabled" ${cfg.enabled !== false ? 'checked' : ''} />
+          <span><strong>Ativar envio automático de alertas no WhatsApp</strong></span>
+        </label>
+
+        <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <label class="field">
+            <span>Avisar antes do vencimento (dias)</span>
+            <input class="input" id="da-before" value="${esc((cfg.before_days || [60, 30, 15, 7, 1]).join(', '))}" placeholder="60, 30, 15, 7, 1" />
+          </label>
+          <label class="field">
+            <span>Se não atualizar, avisar vencido por (dias)</span>
+            <input class="input" type="number" min="0" max="60" id="da-after" value="${cfg.after_days ?? 10}" />
+          </label>
+        </div>
+
+        <div class="section-title"><span>👥 Selecionar Pessoas que Receberão no WhatsApp</span></div>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:12px;padding:8px;background:var(--surface-2);display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          ${users.map((u) => {
+            const hasPhone = Boolean(u.phone && String(u.phone).replace(/\D/g, '').length >= 10);
+            return `
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);cursor:${hasPhone ? 'pointer' : 'not-allowed'};opacity:${hasPhone ? '1' : '0.65'}">
+                <span style="display:flex;align-items:center;gap:8px;min-width:0">
+                  <input type="checkbox" class="da-user-chk" value="${esc(u.id)}" ${selectedIds.has(u.id) ? 'checked' : ''} ${hasPhone ? '' : 'disabled'} />
+                  <span style="min-width:0">
+                    <strong style="font-size:13px;display:block">${esc(u.name)}</strong>
+                    <span class="muted xs">${esc(u.role)}${u.fleet_role ? ` • ${esc(u.fleet_role)}` : ''}</span>
+                  </span>
+                </span>
+                <span class="badge ${hasPhone ? 'ok' : 'warn'} xs">${hasPhone ? esc(u.phone) : 'Sem WhatsApp'}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+
+        <label class="field">
+          <span>Números extras de WhatsApp (opcional, separados por vírgula)</span>
+          <input class="input" id="da-extra" value="${esc((cfg.extra_phones || []).join(', '))}" placeholder="Ex.: 32999998888, 32988887777" />
+        </label>
+
+        <div class="sheet-actions" style="flex-wrap:wrap;gap:8px">
+          <button class="btn" data-close>Cancelar</button>
+          <button class="btn" id="da-test">📨 Testar Envio Agora</button>
+          <button class="btn primary" id="da-save">💾 Salvar Configuração</button>
+        </div>
+      `, {
+        onMount(el, m) {
+          const collect = () => ({
+            enabled: $('#da-enabled', el).checked,
+            before_days: $('#da-before', el).value,
+            after_days: Number($('#da-after', el).value),
+            user_ids: $$('.da-user-chk:checked', el).map((c) => c.value),
+            extra_phones: $('#da-extra', el).value,
+          });
+
+          $('#da-save', el).onclick = async () => {
+            try {
+              await api('/api/fleet/documents/alerts-config', { method: 'PUT', body: collect() });
+              toast('Configuração de alertas no WhatsApp salva!');
+              m.close();
+              onSaved?.();
+            } catch (e) { toast(e.message, 'err'); }
+          };
+
+          $('#da-test', el).onclick = async () => {
+            const btn = $('#da-test', el);
+            btn.disabled = true;
+            btn.textContent = 'Enviando...';
+            try {
+              await api('/api/fleet/documents/alerts-config', { method: 'PUT', body: collect() });
+              const r = await api('/api/fleet/documents/alerts-test', { method: 'POST' });
+              toast(r.testSent
+                ? `Mensagem de teste enviada para ${r.sent} pessoa(s)!`
+                : `Alertas disparados para ${r.sent} pessoa(s) (${r.matched} documento(s) no prazo).`);
+            } catch (e) {
+              toast(e.message, 'err');
+            } finally {
+              btn.disabled = false;
+              btn.textContent = '📨 Testar Envio Agora';
+            }
+          };
+        },
+      });
+    } catch (e) { toast(e.message, 'err'); }
   }
 
   function openFineModal(fine = null, onSaved) {

@@ -8,7 +8,8 @@ import {
   FleetError, nowIso, today, addDays, fleetAccessOf, parseBody, SCHEMAS, tx, insertRow, updateRow,
   getVehicle, getDriverByUser, ensureMachineForVehicle, setOdometer, recomputeConsumption, planStatus, docStatus,
   openWorkOrder, fleetUserIds, fleetSettings, computeAlerts, dispatchAlerts, vehicleCostSummary, costReport, costReportCsv,
-  validCpf, saveChecklistPhoto, DOC_TYPES_VEHICLE, DOC_TYPES_DRIVER, COST_CATEGORIES, TIRE_EVENTS, FLEET_LEVELS, VEHICLE_STATUS,
+  validCpf, saveChecklistPhoto, getDocWhatsAppConfig, resolveDocWhatsAppTargets, parseDaysList, checkAndSendDocWhatsAppAlerts,
+  DOC_TYPES_VEHICLE, DOC_TYPES_DRIVER, COST_CATEGORIES, TIRE_EVENTS, FLEET_LEVELS, VEHICLE_STATUS,
   VEHICLE_TYPES, FUEL_TYPES, DRIVER_STATUS, FINE_STATUS, CNH_CATEGORIES,
 } from './fleet-core.js';
 import { setSetting } from './domain.js';
@@ -1041,6 +1042,79 @@ export function registerFleetRoutes(app, getDb) {
     res.status(201);
     return { ok: true, document: db.prepare('SELECT * FROM fleet_documents WHERE id = ?').get(id) };
   });
+  // Configuração de destinatários e prazos para alertas de vencimento de documentos no WhatsApp
+  get('/documents/alerts-config', G, (req, res, db) => {
+    const config = getDocWhatsAppConfig(db);
+    const driverPhones = new Map(
+      db.prepare("SELECT user_id, phone FROM fleet_drivers WHERE active = 1 AND user_id IS NOT NULL AND phone IS NOT NULL AND phone != ''")
+        .all()
+        .map((r) => [r.user_id, r.phone])
+    );
+    const users = db.prepare('SELECT id, name, username, role, fleet_role, phone FROM users WHERE active = 1 ORDER BY name').all().map((u) => ({
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      role: u.role,
+      fleet_role: u.fleet_role,
+      phone: u.phone || driverPhones.get(u.id) || '',
+    }));
+    return { config, users };
+  });
+
+  put('/documents/alerts-config', G, (req, res, db) => {
+    const b = req.body || {};
+    if (b.enabled !== undefined) setSetting(db, 'fleet_doc_wa_enabled', b.enabled ? '1' : '0');
+    if (Array.isArray(b.user_ids)) {
+      const cleanIds = [...new Set(b.user_ids.map((x) => String(x).trim()).filter(Boolean))];
+      setSetting(db, 'fleet_doc_wa_recipients', JSON.stringify(cleanIds));
+    }
+    if (b.extra_phones !== undefined) {
+      const list = Array.isArray(b.extra_phones)
+        ? b.extra_phones
+        : String(b.extra_phones || '').split(/[,;\n]+/);
+      const cleanPhones = [...new Set(list.map((p) => String(p).replace(/\D/g, '')).filter((p) => p.length >= 10))];
+      setSetting(db, 'fleet_doc_wa_extra_phones', JSON.stringify(cleanPhones));
+    }
+    if (b.before_days !== undefined) {
+      const parsed = parseDaysList(b.before_days);
+      setSetting(db, 'fleet_doc_wa_before_days', parsed.join(','));
+    }
+    if (b.after_days !== undefined) {
+      const n = Math.round(Number(b.after_days));
+      if (!Number.isFinite(n) || n < 0 || n > 60) throw new FleetError(400, 'Dias de aviso após vencimento inválido (0 a 60)');
+      setSetting(db, 'fleet_doc_wa_after_days', String(n));
+    }
+    return { ok: true, config: getDocWhatsAppConfig(db) };
+  });
+
+  post('/documents/alerts-test', G, async (req, res, db) => {
+    const cfg = getDocWhatsAppConfig(db);
+    const targets = resolveDocWhatsAppTargets(db, cfg);
+    if (!targets.length) {
+      throw new FleetError(400, 'Selecione pelo menos uma pessoa com WhatsApp cadastrado antes de testar.');
+    }
+    const result = await checkAndSendDocWhatsAppAlerts(db, { forceTest: true });
+    if (result.matched === 0) {
+      const testMsg = [
+        '📄 *TESTE — ALERTAS DE DOCUMENTOS DA FROTA*',
+        `✅ Seu número está configurado para receber avisos de vencimento:`,
+        `• *Antes do vencimento:* ${cfg.before_days.join(', ')} dias antes`,
+        `• *Se vencer sem atualizar:* aviso diário por *${cfg.after_days} dias*`,
+        '',
+        '_(No momento não há documentos exatamente nesses marcos de vencimento.)_',
+      ].join('\n');
+      let sent = 0;
+      for (const t of targets) {
+        try {
+          const r = await sendFleetWhatsAppMessage({ to: t.phone, text: testMsg }, db);
+          if (r && !r.skipped) sent++;
+        } catch (_) {}
+      }
+      return { ok: true, sent, matched: 0, targets: targets.length, testSent: true };
+    }
+    return { ok: true, ...result };
+  });
+
   put('/documents/:id', G, (req, res, db) => {
     const cur = db.prepare('SELECT * FROM fleet_documents WHERE id = ?').get(req.params.id);
     if (!cur) throw new FleetError(404, 'Documento não encontrado');
