@@ -331,3 +331,178 @@ export const localInputValue = (d = new Date()) => {
   const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return z.toISOString().slice(0, 16);
 };
+
+// Popup Lightbox de imagem com zoom interativo, arrastar (pan), rotação e galeria
+export function openImageLightbox(images, startIndex = 0) {
+  const list = (Array.isArray(images) ? images : [images])
+    .map((item) => (typeof item === 'string' ? { url: item, caption: '' } : item))
+    .filter((item) => item && item.url);
+  if (!list.length) return;
+
+  let idx = Math.max(0, Math.min(startIndex, list.length - 1));
+  let scale = 1;
+  let tx = 0;
+  let ty = 0;
+  let rot = 0;
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+  let lastTapTime = 0;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'img-lightbox';
+  overlay.innerHTML = `
+    <div class="img-lb-bar">
+      <div class="img-lb-caption" id="lb-caption"></div>
+      <div class="img-lb-tools">
+        <button type="button" class="img-lb-btn" id="lb-zoom-out" title="Diminuir zoom (−)">−</button>
+        <button type="button" class="img-lb-btn" id="lb-zoom-reset" title="Resetar zoom">100%</button>
+        <button type="button" class="img-lb-btn" id="lb-zoom-in" title="Aumentar zoom (+)">+</button>
+        <button type="button" class="img-lb-btn" id="lb-rotate" title="Girar 90°">↻</button>
+        <a class="img-lb-btn" id="lb-open" href="#" target="_blank" rel="noopener" title="Abrir original em nova aba">↗</a>
+        <button type="button" class="img-lb-btn close" id="lb-close" title="Fechar (Esc)">✕</button>
+      </div>
+    </div>
+    <div class="img-lb-stage" id="lb-stage">
+      ${list.length > 1 ? '<button type="button" class="img-lb-nav prev" id="lb-prev" aria-label="Foto anterior">‹</button>' : ''}
+      <img id="lb-img" alt="Visualização ampliada" draggable="false" />
+      ${list.length > 1 ? '<button type="button" class="img-lb-nav next" id="lb-next" aria-label="Próxima foto">›</button>' : ''}
+    </div>
+    <div class="img-lb-hint">Use a roda do mouse, os botões +/− ou duplo toque para dar zoom • Arraste para mover</div>
+  `;
+  document.body.appendChild(overlay);
+
+  const img = overlay.querySelector('#lb-img');
+  const stage = overlay.querySelector('#lb-stage');
+  const capEl = overlay.querySelector('#lb-caption');
+  const resetBtn = overlay.querySelector('#lb-zoom-reset');
+  const openLink = overlay.querySelector('#lb-open');
+
+  const applyTransform = () => {
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale}) rotate(${rot}deg)`;
+    resetBtn.textContent = `${Math.round(scale * 100)}%`;
+    stage.classList.toggle('is-zoomed', scale > 1.02);
+  };
+
+  const resetView = () => { scale = 1; tx = 0; ty = 0; rot = 0; applyTransform(); };
+
+  const show = (nextIdx) => {
+    idx = (nextIdx + list.length) % list.length;
+    const item = list[idx];
+    img.src = item.url;
+    openLink.href = item.url;
+    const counter = list.length > 1 ? `${idx + 1}/${list.length}` : '';
+    capEl.textContent = [counter, item.caption].filter(Boolean).join(' • ') || 'Visualização de imagem';
+    resetView();
+  };
+
+  const setZoom = (nextScale) => {
+    scale = Math.max(1, Math.min(4.5, nextScale));
+    if (scale === 1) { tx = 0; ty = 0; }
+    applyTransform();
+  };
+
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowRight' && list.length > 1) show(idx + 1);
+    else if (e.key === 'ArrowLeft' && list.length > 1) show(idx - 1);
+    else if (e.key === '+' || e.key === '=') setZoom(scale + 0.5);
+    else if (e.key === '-') setZoom(scale - 0.5);
+  };
+  document.addEventListener('keydown', onKey);
+
+  overlay.querySelector('#lb-close').onclick = close;
+  overlay.querySelector('#lb-zoom-in').onclick = () => setZoom(scale + 0.5);
+  overlay.querySelector('#lb-zoom-out').onclick = () => setZoom(scale - 0.5);
+  resetBtn.onclick = resetView;
+  overlay.querySelector('#lb-rotate').onclick = () => { rot = (rot + 90) % 360; applyTransform(); };
+  overlay.querySelector('#lb-prev')?.addEventListener('click', (e) => { e.stopPropagation(); show(idx - 1); });
+  overlay.querySelector('#lb-next')?.addEventListener('click', (e) => { e.stopPropagation(); show(idx + 1); });
+
+  stage.addEventListener('click', (e) => { if (e.target === stage) close(); });
+
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    setZoom(scale + (e.deltaY < 0 ? 0.35 : -0.35));
+  }, { passive: false });
+
+  img.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    if (scale > 1.2) resetView();
+    else setZoom(2.5);
+  });
+
+  // Arrastar com mouse
+  img.addEventListener('mousedown', (e) => {
+    if (scale <= 1) return;
+    e.preventDefault();
+    dragging = true;
+    dragStartX = e.clientX - tx;
+    dragStartY = e.clientY - ty;
+    stage.classList.add('is-dragging');
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    tx = e.clientX - dragStartX;
+    ty = e.clientY - dragStartY;
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    stage.classList.remove('is-dragging');
+  });
+
+  // Touch: pinça (pinch-to-zoom), arrastar e duplo toque no celular
+  stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDist = Math.hypot(dx, dy);
+      pinchStartScale = scale;
+      dragging = false;
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapTime < 280 && e.target === img) {
+        if (scale > 1.2) resetView();
+        else setZoom(2.5);
+        lastTapTime = 0;
+        return;
+      }
+      lastTapTime = now;
+      if (scale > 1) {
+        dragging = true;
+        dragStartX = e.touches[0].clientX - tx;
+        dragStartY = e.touches[0].clientY - ty;
+      }
+    }
+  }, { passive: true });
+
+  stage.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && pinchStartDist > 0) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      setZoom(pinchStartScale * (Math.hypot(dx, dy) / pinchStartDist));
+    } else if (e.touches.length === 1 && dragging && scale > 1) {
+      e.preventDefault();
+      tx = e.touches[0].clientX - dragStartX;
+      ty = e.touches[0].clientY - dragStartY;
+      applyTransform();
+    }
+  }, { passive: false });
+
+  stage.addEventListener('touchend', () => {
+    dragging = false;
+    pinchStartDist = 0;
+  });
+
+  show(idx);
+}

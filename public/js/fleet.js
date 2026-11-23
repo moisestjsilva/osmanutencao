@@ -6,7 +6,7 @@
 //   • motorista (fleet_role = 'motorista')
 // ============================================================================
 import { state, api } from './store.js';
-import { $, $$, esc, icon, toast, sheet, confirmDialog, fmtDate, fmtDateTime, localInputValue, avatar, compressImage } from './ui.js';
+import { $, $$, esc, icon, toast, sheet, confirmDialog, fmtDate, fmtDateTime, localInputValue, avatar, compressImage, openImageLightbox } from './ui.js';
 
 export function fleetLevelOf(user = state.user) {
   if (!user) return null;
@@ -1965,8 +1965,8 @@ export function fleetView(root, params = {}) {
         ${photoLabels.length ? `
           <div class="section-title" style="margin-top:4px"><span>📸 Fotos do Checklist (${photoLabels.length})</span></div>
           <div class="ck-photo-grid-4" style="margin-bottom:14px">
-            ${photoLabels.map(([k, lbl]) => `
-              <a href="${esc(p[k])}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2);display:block">
+            ${photoLabels.map(([k, lbl], idx) => `
+              <a href="${esc(p[k])}" data-ck-photo="${idx}" title="Clique para ampliar com zoom" style="text-decoration:none;color:inherit;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2);display:block">
                 <img src="${esc(p[k])}" alt="${esc(lbl)}" style="width:100%;height:92px;object-fit:cover;display:block" />
                 <div class="xs" style="padding:6px;font-weight:700;text-align:center">${esc(lbl)}</div>
               </a>
@@ -1984,7 +1984,7 @@ export function fleetView(root, params = {}) {
                 ${a.note ? `<div class="xs" style="color:var(--danger-text);margin-top:2px">⚠️ ${esc(a.note)}</div>` : ''}
               </div>
               <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-                ${a.photo_url ? `<a href="${esc(a.photo_url)}" target="_blank" class="btn sm">📸</a>` : ''}
+                ${a.photo_url ? `<a href="${esc(a.photo_url)}" data-ck-item-photo="${esc(a.photo_url)}" data-ck-item-lbl="${esc(a.label)}" class="btn sm" title="Ampliar foto">📸</a>` : ''}
                 <span class="badge ${a.status === 'ok' ? 'ok' : a.status === 'problema' ? 'danger' : ''}">${a.status === 'ok' ? 'OK' : 'IRREGULAR'}</span>
               </div>
             </div>
@@ -2004,6 +2004,19 @@ export function fleetView(root, params = {}) {
       `, {
         className: 'ck-sheet',
         onMount(el, m) {
+          const ckGallery = photoLabels.map(([k, lbl]) => ({ url: p[k], caption: `${c.plate} • ${lbl}` }));
+          $$('[data-ck-photo]', el).forEach((link) => {
+            link.addEventListener('click', (e) => {
+              e.preventDefault();
+              openImageLightbox(ckGallery, Number(link.dataset.ckPhoto) || 0);
+            });
+          });
+          $$('[data-ck-item-photo]', el).forEach((link) => {
+            link.addEventListener('click', (e) => {
+              e.preventDefault();
+              openImageLightbox([{ url: link.dataset.ckItemPhoto, caption: `${c.plate} • ${link.dataset.ckItemLbl || 'Item'}` }], 0);
+            });
+          });
           $('#ck-del-btn', el)?.addEventListener('click', async () => {
             if (!(await confirmDialog({
               title: `Excluir checklist (${c.plate})?`,

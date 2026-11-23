@@ -7,7 +7,7 @@ import {
 } from './store.js';
 import {
   esc, $, $$, icon, avatar, machineBadge, toast, sheet, askReason, confirmDialog, fmtDateTime, fmtDate, fmtMin, fmtTime, timeAgo, clock, stoppedClock, calcOperatingStoppedSeconds, statusBadge, prioBadge, roleBadge,
-  PRIORITY, PRIO_COLOR, ROLE, compressImage, localInputValue,
+  PRIORITY, PRIO_COLOR, ROLE, compressImage, localInputValue, openImageLightbox,
 } from './ui.js';
 import { scanQR, extractCode, cameraSupported } from './scanner.js';
 import { hasFleetAccess } from './fleet.js';
@@ -451,8 +451,8 @@ export function detailView(root, { id }) {
 
       <div class="section-title"><span>Fotos</span><span class="muted xs">${(wo.attachments?.length || 0) + (wo._localPhotos?.length || 0)}</span></div>
       <section class="photos">
-        ${(wo.attachments || []).map((a) => `<a href="${a.url}" target="_blank" rel="noopener"><img src="${a.url}" alt="Foto da OS" loading="lazy" /></a>`).join('')}
-        ${(wo._localPhotos || []).map((d) => `<div class="ph"><img src="${d}" alt="Foto pendente" /><span class="tag">pendente</span></div>`).join('')}
+        ${(wo.attachments || []).map((a, idx) => `<a href="${a.url}" data-wo-photo="${idx}" title="Clique para ampliar com zoom"><img src="${a.url}" alt="Foto da OS" loading="lazy" /></a>`).join('')}
+        ${(wo._localPhotos || []).map((d, idx) => `<div class="ph" data-wo-photo="${(wo.attachments?.length || 0) + idx}" style="cursor:pointer" title="Clique para ampliar com zoom"><img src="${d}" alt="Foto pendente" /><span class="tag">pendente</span></div>`).join('')}
         ${!isClosed(wo) ? `<label class="add-photo" id="add-photo" aria-label="Adicionar foto">${icon('camera', 24)}<input type="file" accept="image/*" capture="environment" hidden id="photo-input" /></label>` : ''}
       </section>
 
@@ -722,16 +722,25 @@ export function detailView(root, { id }) {
     $('#btn-back', root)?.addEventListener('click', () => (history.length > 1 ? history.back() : go('#/')));
     $('#btn-delete-wo', root)?.addEventListener('click', confirmDelete);
     $('#btn-zoom-machine', root)?.addEventListener('click', () => {
-      if (!wo.machine?.image_url) return;
-      sheet(`
-        <div style="text-align:center">
-          <h3 style="margin:0 0 6px;font-size:18px">${esc(wo.machine?.name || 'Máquina')}</h3>
-          ${wo.machine?.code ? `<p class="muted small" style="margin:0 0 12px">TAG: <strong>${esc(wo.machine.code)}</strong>${wo.machine?.sector ? ` • ${esc(wo.machine.sector)}` : ''}</p>` : ''}
-          <div style="max-height:75vh;overflow:hidden;border-radius:12px;border:1px solid var(--border);background:#000;display:flex;align-items:center;justify-content:center">
-            <img src="${esc(wo.machine.image_url)}" alt="${esc(wo.machine.name)}" style="max-width:100%;max-height:75vh;object-fit:contain;display:block" />
-          </div>
-        </div>
-      `);
+      const imgUrl = wo.fleetVehicle?.photoUrl || wo.machine?.image_url;
+      if (!imgUrl) return;
+      const cap = wo.fleetVehicle
+        ? `${wo.fleetVehicle.plate} — ${[wo.fleetVehicle.brand, wo.fleetVehicle.model].filter(Boolean).join(' ')}`
+        : `${wo.machine?.code ? `${wo.machine.code} — ` : ''}${wo.machine?.name || 'Equipamento'}`;
+      openImageLightbox([{ url: imgUrl, caption: cap }], 0);
+    });
+    const allWoPhotos = [
+      ...(wo.attachments || []).map((a) => ({
+        url: a.url,
+        caption: [a.userName ? `Enviada por ${a.userName}` : '', a.createdAt ? fmtDateTime(a.createdAt) : ''].filter(Boolean).join(' • '),
+      })),
+      ...(wo._localPhotos || []).map((d) => ({ url: d, caption: 'Foto pendente de envio' })),
+    ];
+    $$('[data-wo-photo]', root).forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        openImageLightbox(allWoPhotos, Number(el.dataset.woPhoto) || 0);
+      });
     });
     $$('[data-check]', root).forEach((row) => row.addEventListener('click', (e) => {
       e.preventDefault();
