@@ -228,10 +228,48 @@ function serializeWo(w, full = false) {
   const today = new Date().toISOString().slice(0, 10);
   const reqUser = userProfileOf(w.requester_id);
   const respUser = userProfileOf(w.responsible_id);
+  const cleanNumber = w.number != null ? String(w.number).replace(/\.0+$/, '') : null;
+
+  // Se a OS for da Frota, enriquece com os dados reais do veículo (placa, km, ano, chassi, motorista, etc.)
+  let fleetVehicle = null;
+  if (m) {
+    try {
+      const fv = db.prepare(`
+        SELECT v.*, d.name as default_driver_name
+        FROM fleet_vehicles v
+        LEFT JOIN fleet_drivers d ON d.id = v.default_driver_id
+        WHERE v.machine_id = ? OR UPPER(v.plate) = UPPER(?)
+        LIMIT 1
+      `).get(m.id, m.code || '');
+      if (fv) {
+        fleetVehicle = {
+          id: fv.id,
+          plate: fv.plate,
+          nickname: fv.nickname || null,
+          type: fv.type || null,
+          brand: fv.brand || null,
+          model: fv.model || null,
+          yearManufacture: fv.year_manufacture || null,
+          yearModel: fv.year_model || null,
+          chassis: fv.chassis || null,
+          renavam: fv.renavam || null,
+          fuelType: fv.fuel_type || null,
+          axles: fv.axles || null,
+          odometerKm: fv.odometer_km ?? 0,
+          status: fv.status || 'ativo',
+          defaultDriverName: fv.default_driver_name || null,
+          photoUrl: fv.photo_url || null,
+        };
+      }
+    } catch (_) {}
+  }
+
   const out = {
-    id: w.id, number: w.number, type: w.type, priority: w.priority, machineStopped: !!w.machine_stopped,
+    id: w.id, number: cleanNumber, type: w.type, priority: w.priority, machineStopped: !!w.machine_stopped,
     status: w.status, title: w.title, description: w.description,
     machine: m,
+    isFleet: Boolean(fleetVehicle || String(m?.sector || '').toUpperCase() === 'FROTA'),
+    fleetVehicle,
     requester: { id: w.requester_id, name: reqUser?.name || 'Agendador', avatar_url: reqUser?.avatar_url || null },
     responsible: respUser ? { id: respUser.id, name: respUser.name, avatar_url: respUser.avatar_url || null } : null,
     participants, recipientsMode: w.recipients_mode, recipients: JSON.parse(w.recipients_json || '[]'),
@@ -247,7 +285,21 @@ function serializeWo(w, full = false) {
     photos: db.prepare('SELECT COUNT(*) n FROM attachments WHERE wo_id=?').get(w.id).n,
   };
   if (full) {
+    let fleetChecklist = null;
+    try {
+      const ck = db.prepare(`
+        SELECT c.id, c.type, c.km, c.has_issues, c.critical_issues, c.notes, c.created_at, d.name as driver_name
+        FROM fleet_checklists c
+        LEFT JOIN fleet_drivers d ON d.id = c.driver_id
+        WHERE c.wo_id = ?
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      `).get(w.id);
+      if (ck) fleetChecklist = ck;
+    } catch (_) {}
+
     Object.assign(out, {
+      fleetChecklist,
       serviceDone: w.service_done, cause: w.cause, solution: w.solution, cancelledReason: w.cancelled_reason,
       materialsUsed: w.materials_used || null, toolsUsed: w.tools_used || null, notes: w.notes || null,
       intervals: ivs.map((i) => {

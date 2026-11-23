@@ -306,20 +306,38 @@ export function detailView(root, { id }) {
     const myPart = wo.participants?.find((p) => p.userId === u?.id);
     const stoppedNow = isStoppedNow(wo);
     const evs = (wo.events || []);
+    const isFleet = Boolean(wo.isFleet || wo.fleetVehicle || isFleetWo(wo));
+    const fv = wo.fleetVehicle || null;
+    const cleanNum = wo.number != null ? String(wo.number).replace(/\.0+$/, '') : null;
+
+    // Extrai [Km: 10.000] da descrição para exibir em campo próprio na OS da Frota
+    let displayDesc = wo.description || '';
+    let openedKm = wo.fleetChecklist?.km ?? null;
+    const kmMatch = displayDesc.match(/\s*\[Km:\s*([\d.,]+)\s*\]/i);
+    if (kmMatch) {
+      if (openedKm == null) openedKm = kmMatch[1];
+      displayDesc = displayDesc.replace(kmMatch[0], '').trim();
+    }
+    const fuelLabels = { diesel_s10: 'Diesel S10', diesel_s500: 'Diesel S500', gasolina: 'Gasolina', etanol: 'Etanol', gnv: 'GNV', arla32: 'Arla 32' };
+    const originEv = evs[0]?.origin;
+    const originLabel = originEv === 'whatsapp_fleet_bot' ? 'WhatsApp da Frota' : (originEv === 'whatsapp_bot' ? 'WhatsApp' : (wo.fleetChecklist ? 'Checklist de Viagem' : null));
+
     root.innerHTML = `
       <div class="row" style="margin-bottom:10px">
-        <button class="btn ghost sm" id="btn-back">${icon('back', 18)} Ordens</button>
+        <button class="btn ghost sm" id="btn-back">${icon('back', 18)} ${isFleet ? 'Voltar' : 'Ordens'}</button>
         <span class="grow"></span>
+        ${isFleet ? `<a class="btn sm" href="#/frota" style="margin-right:4px">${icon('truck', 15)} Ver na Frota</a>` : ''}
         ${wo._pending ? `<span class="badge pending">${icon('cloud', 12)} ${wo._pending} pendente(s)</span>` : ''}
         ${canDeleteWo() ? `<button class="btn danger sm" id="btn-delete-wo" title="Excluir OS permanentemente" style="margin-left:8px">${icon('trash', 16)} Excluir OS</button>` : ''}
       </div>
 
       <section class="card detail-hero ${wo.machineStopped ? 'is-stopped' : ''}">
         ${wo.machineStopped ? (stoppedNow
-          ? `<div class="stop-banner">${icon('alert', 20)} MÁQUINA PARADA <span class="timer mono" data-stopped-clock="${wo.createdAt}" data-op-hours="${wo.machine?.operating_hours_per_day || 8}">${stoppedClock(wo.createdAt, wo.machine?.operating_hours_per_day || 8)}</span></div>`
-          : `<div class="stop-banner recovered">${icon('check', 20)} Máquina retornou à operação ${wo.returnedAt ? `• ${fmtDateTime(wo.returnedAt)} (parada: ${stoppedClock(wo.createdAt, wo.machine?.operating_hours_per_day || 8, wo.returnedAt)})` : ''}</div>`) : ''}
+          ? `<div class="stop-banner">${icon('alert', 20)} ${isFleet ? 'VEÍCULO PARADO / EM MANUTENÇÃO' : 'MÁQUINA PARADA'} <span class="timer mono" data-stopped-clock="${wo.createdAt}" data-op-hours="${wo.machine?.operating_hours_per_day || 8}">${stoppedClock(wo.createdAt, wo.machine?.operating_hours_per_day || 8)}</span></div>`
+          : `<div class="stop-banner recovered">${icon('check', 20)} ${isFleet ? 'Veículo liberado para operação' : 'Máquina retornou à operação'} ${wo.returnedAt ? `• ${fmtDateTime(wo.returnedAt)} (parada: ${stoppedClock(wo.createdAt, wo.machine?.operating_hours_per_day || 8, wo.returnedAt)})` : ''}</div>`) : ''}
         <div class="row wrap">
-          <h1 style="font-size:24px">${wo.number ? `OS ${wo.number}` : 'OS (aguardando nº)'}</h1>
+          <h1 style="font-size:24px">${cleanNum ? `OS ${cleanNum}` : 'OS (aguardando nº)'}</h1>
+          ${isFleet ? '<span class="badge info">🚚 Frota</span>' : ''}
           ${statusBadge(wo.status)} ${prioBadge(wo.priority)}
           ${wo.type === 'preventiva' ? '<span class="badge prev">Preventiva</span>' : '<span class="badge">Corretiva</span>'}
           ${wo.specialty ? `<span class="badge" style="background:var(--accent-glow);color:var(--accent);font-weight:600">${esc(wo.specialty)}</span>` : ''}
@@ -327,25 +345,38 @@ export function detailView(root, { id }) {
         </div>
 
         <div class="detail-machine-card">
-          ${wo.machine?.image_url ? `
-            <div class="detail-machine-photo" id="btn-zoom-machine" title="Toque para ampliar a foto da máquina">
-              <img src="${esc(wo.machine.image_url)}" alt="${esc(wo.machine.name)}" />
+          ${(fv?.photoUrl || wo.machine?.image_url) ? `
+            <div class="detail-machine-photo" id="btn-zoom-machine" title="Toque para ampliar a foto">
+              <img src="${esc(fv?.photoUrl || wo.machine.image_url)}" alt="${esc(wo.machine?.name || fv?.plate || '')}" />
               <span class="zoom-hint">${icon('search', 11)}</span>
             </div>
           ` : `
             <div class="detail-machine-photo no-img">
-              ${icon('factory', 26)}
+              ${icon(isFleet ? 'truck' : 'factory', 26)}
             </div>
           `}
           <div class="detail-machine-info">
-            <h2>${esc(wo.machine?.name || 'Equipamento')}</h2>
+            <h2>${esc(fv ? `${[fv.brand, fv.model].filter(Boolean).join(' ') || wo.machine?.name || fv.plate}${fv.nickname ? ` (${fv.nickname})` : ''}` : (wo.machine?.name || 'Equipamento'))}</h2>
             <div class="card-tags-row">
-              ${wo.machine?.code ? `<span class="tag-pill">TAG: ${esc(wo.machine.code)}</span>` : ''}
+              ${fv?.plate ? `<span class="tag-pill">PLACA: ${esc(fv.plate)}</span>` : (wo.machine?.code ? `<span class="tag-pill">TAG: ${esc(wo.machine.code)}</span>` : '')}
               ${wo.machine?.sector ? `<span class="sector-text">Setor: ${esc(wo.machine.sector)}</span>` : ''}
+              ${fv?.status ? `<span class="badge ${fv.status === 'manutencao' ? 'danger' : 'ok'} xs">${fv.status === 'manutencao' ? 'Em manutenção' : 'Ativo'}</span>` : ''}
             </div>
           </div>
         </div>
-        <p style="margin:14px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(wo.description)}</p>
+
+        ${isFleet && fv ? `
+          <div class="kv" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border)">
+            ${openedKm != null ? `<div><span>Hodômetro na abertura</span><strong>${typeof openedKm === 'number' ? openedKm.toLocaleString('pt-BR') : esc(openedKm)} km</strong></div>` : ''}
+            <div><span>Hodômetro atual</span><strong>${Number(fv.odometerKm || 0).toLocaleString('pt-BR')} km</strong></div>
+            ${fv.yearManufacture || fv.yearModel ? `<div><span>Ano Fab./Mod.</span><strong>${esc([fv.yearManufacture, fv.yearModel].filter(Boolean).join('/'))}</strong></div>` : ''}
+            ${fv.fuelType ? `<div><span>Combustível</span><strong>${esc(fuelLabels[fv.fuelType] || fv.fuelType)}</strong></div>` : ''}
+            ${fv.defaultDriverName ? `<div><span>Motorista padrão</span><strong>${esc(fv.defaultDriverName)}</strong></div>` : ''}
+            ${fv.chassis ? `<div><span>Chassi</span><strong class="mono xs">${esc(fv.chassis)}</strong></div>` : ''}
+          </div>
+        ` : ''}
+
+        <p style="margin:14px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(displayDesc)}</p>
         <div class="kv">
           <div>
             <span>Solicitante</span>
@@ -362,11 +393,24 @@ export function detailView(root, { id }) {
               <strong>${esc(wo.responsible?.name || 'Ninguém assumiu')}</strong>
             </div>
           </div>
-          <div><span>${wo.dueDate ? 'Vencimento' : 'Avisados'}</span><strong>${wo.dueDate ? fmtDate(wo.dueDate) : recipientsLabel(wo)}</strong></div>
+          <div><span>${wo.dueDate ? 'Vencimento' : 'Avisados'}</span><strong>${wo.dueDate ? fmtDate(wo.dueDate) : (isFleet && wo.recipientsMode === 'todos' ? 'Equipe da Frota' : recipientsLabel(wo))}</strong></div>
+          ${originLabel ? `<div><span>Origem</span><strong>${esc(originLabel)}</strong></div>` : ''}
           ${wo.closedAt ? `<div><span>${wo.status === 'Cancelada' ? 'Cancelada em' : 'Concluída em'}</span><strong>${fmtDateTime(wo.closedAt)}</strong></div>` : ''}
           ${wo.reopenedCount ? `<div><span>Reaberturas</span><strong>${wo.reopenedCount}</strong></div>` : ''}
         </div>
       </section>
+
+      ${wo.fleetChecklist ? `
+        <section class="card" style="margin-top:12px;border-left:4px solid var(--info);padding:12px 14px">
+          <div class="row between wrap" style="gap:8px">
+            <div>
+              <strong class="small">📋 Originada do Checklist de Viagem (${wo.fleetChecklist.type === 'retorno' ? 'Chegada' : 'Saída'})</strong>
+              <div class="muted xs">${fmtDateTime(wo.fleetChecklist.created_at)}${wo.fleetChecklist.driver_name ? ` • Motorista: ${esc(wo.fleetChecklist.driver_name)}` : ''}${wo.fleetChecklist.km != null ? ` • ${Number(wo.fleetChecklist.km).toLocaleString('pt-BR')} km` : ''}</div>
+            </div>
+            <a class="btn sm" href="#/frota?tab=checklists">Ver Checklists</a>
+          </div>
+        </section>
+      ` : ''}
 
       ${(wo.status === 'Concluída' && wo.serviceDone) || wo.materialsUsed || wo.toolsUsed || wo.notes ? `
       <section class="card">
