@@ -56,7 +56,8 @@ function router() {
   // Bloqueio de rotas administrativas para telas simplificadas
   if (!isStaff) {
     if (role === 'solicitante') {
-      if (['/indicadores', '/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros', '/mais'].includes(path)) {
+      const allowFleetKpi = (path === '/indicadores' || path === '/indicadores/frota') && hasFleetAccess(state.user);
+      if (!allowFleetKpi && ['/indicadores', '/indicadores/frota', '/config', '/usuarios', '/preventivas', '/maquinas', '/cadastros', '/mais'].includes(path)) {
         toast('Recurso restrito à equipe de manutenção', 'warn');
         location.hash = '#/';
         return;
@@ -88,8 +89,8 @@ function router() {
     currentCleanup = machinesView(root);
   } else if (path === '/preventivas') {
     currentCleanup = plansView(root);
-  } else if (path === '/indicadores') {
-    currentCleanup = kpiView(root);
+  } else if (path === '/indicadores' || path === '/indicadores/frota') {
+    currentCleanup = kpiView(root, { ...params, scope: path === '/indicadores/frota' ? 'frota' : (params.scope || '') });
   } else if (path === '/mais') {
     currentCleanup = moreView(root);
   } else if (path === '/avisos') {

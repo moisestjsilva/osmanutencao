@@ -180,6 +180,7 @@ export function fleetView(root, params = {}) {
         <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
           <h1 style="margin:0">Gestão de Frota</h1>
           <span class="badge info">${esc(LEVEL_LABEL[access])}</span>
+          <a class="btn sm" href="#/indicadores/frota" style="margin-left:4px">📊 Indicadores da Frota</a>
         </div>
         <p>Controle completo de caminhões, hodômetro, viagens, diesel, pneus, documentos e custo/km</p>
       </div>

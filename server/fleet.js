@@ -9,6 +9,7 @@ import {
   getVehicle, getDriverByUser, ensureMachineForVehicle, setOdometer, recomputeConsumption, planStatus, docStatus,
   openWorkOrder, fleetUserIds, fleetSettings, computeAlerts, dispatchAlerts, vehicleCostSummary, costReport, costReportCsv,
   validCpf, saveChecklistPhoto, getDocWhatsAppConfig, resolveDocWhatsAppTargets, parseDaysList, checkAndSendDocWhatsAppAlerts,
+  computeFleetIndicators,
   DOC_TYPES_VEHICLE, DOC_TYPES_DRIVER, COST_CATEGORIES, TIRE_EVENTS, FLEET_LEVELS, VEHICLE_STATUS,
   VEHICLE_TYPES, FUEL_TYPES, DRIVER_STATUS, FINE_STATUS, CNH_CATEGORIES,
 } from './fleet-core.js';
@@ -1209,6 +1210,8 @@ export function registerFleetRoutes(app, getDb) {
     db.prepare('DELETE FROM fleet_costs WHERE id = ?').run(req.params.id);
     return { ok: true };
   });
+
+  get('/indicators', ALL, (req, res, db) => computeFleetIndicators(db, req.query, req.fleet.access));
 
   get('/reports/costs', G, (req, res, db) => costReport(db, { ...dateRange(req), vehicleId: req.query.vehicle_id || null }));
   get('/reports/costs.csv', G, (req, res, db) => {

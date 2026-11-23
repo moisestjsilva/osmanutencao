@@ -1005,3 +1005,293 @@ export function costReportCsv(report) {
   lines.push(['"TOTAL"', '""', t.km, num(round2(t.liters)), '', num(round2(t.fuel)), ...cats.map((c) => num(round2(t.categories[c] || 0))), num(round2(t.fines)), num(t.total), num(t.cost_per_km)].join(';'));
   return '\uFEFF' + lines.join('\r\n');
 }
+
+const FLEET_MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const fleetMonthBounds = (ym) => {
+  const [y, m] = ym.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m, 0, 23, 59, 59));
+  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10), fromIso: start.toISOString(), toIso: end.toISOString() };
+};
+const fleetShiftMonth = (ym, delta) => {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+const fleetMonthLabel = (ym) => {
+  const [y, m] = ym.split('-').map(Number);
+  return `${FLEET_MONTH_NAMES[(m || 1) - 1]}/${String(y).slice(-2)}`;
+};
+const fleetPctDelta = (cur, prev) => {
+  if (prev == null || prev === 0) return cur > 0 ? 100 : 0;
+  return round2(((cur - prev) / prev) * 100);
+};
+
+export function computeFleetIndicators(db, q = {}, access = 'gestor') {
+  const canSeeCosts = access === 'gestor';
+  const todayStr = today();
+  const vehicleId = q.vehicleId || q.vehicle_id || null;
+
+  let from;
+  let to;
+  let prevFrom = null;
+  let prevTo = null;
+  let selectedMonth = null;
+  let periodLabel = '';
+
+  if (q.month && /^\d{4}-\d{2}$/.test(q.month)) {
+    selectedMonth = q.month;
+    const cur = fleetMonthBounds(q.month);
+    const prev = fleetMonthBounds(fleetShiftMonth(q.month, -1));
+    from = cur.from;
+    to = cur.to;
+    prevFrom = prev.from;
+    prevTo = prev.to;
+    periodLabel = fleetMonthLabel(q.month);
+  } else if (q.from === 'tudo' || q.from === 'all') {
+    from = '2020-01-01';
+    to = todayStr;
+    periodLabel = 'Todo Histórico';
+  } else {
+    to = /^\d{4}-\d{2}-\d{2}$/.test(q.to || '') ? q.to : todayStr;
+    from = /^\d{4}-\d{2}-\d{2}$/.test(q.from || '') ? q.from : addDays(to, -29);
+    const spanDays = Math.max(1, daysBetween(from, to) + 1);
+    prevTo = addDays(from, -1);
+    prevFrom = addDays(prevTo, -(spanDays - 1));
+  }
+
+  const fromIso = `${from}T00:00:00.000Z`;
+  const toIso = `${to}T23:59:59.999Z`;
+  const prevFromIso = prevFrom ? `${prevFrom}T00:00:00.000Z` : null;
+  const prevToIso = prevTo ? `${prevTo}T23:59:59.999Z` : null;
+
+  const vehicles = db.prepare(`SELECT * FROM fleet_vehicles WHERE active = 1 ${vehicleId ? 'AND id = ?' : ''} ORDER BY plate`)
+    .all(...(vehicleId ? [vehicleId] : []));
+  const vById = new Map(vehicles.map((v) => [v.id, v]));
+  const vByMachineId = new Map(vehicles.filter((v) => v.machine_id).map((v) => [v.machine_id, v]));
+  const vByPlate = new Map(vehicles.map((v) => [String(v.plate || '').toUpperCase(), v]));
+
+  // Todas as OS da Frota (vinculadas a veículos ou ao setor FROTA)
+  const fleetWosAll = db.prepare(`
+    SELECT w.*, m.code as m_code, s.name as sector_name, s.code as sector_code
+    FROM work_orders w
+    JOIN machines m ON m.id = w.machine_id
+    LEFT JOIN sectors s ON s.id = m.sector_id
+    WHERE UPPER(COALESCE(s.name,'')) = 'FROTA' OR s.code = 'S-FROTA'
+       OR m.id IN (SELECT machine_id FROM fleet_vehicles WHERE machine_id IS NOT NULL)
+       OR UPPER(m.code) IN (SELECT UPPER(plate) FROM fleet_vehicles)
+  `).all().filter((w) => {
+    if (!vehicleId) return true;
+    const v = vByMachineId.get(w.machine_id) || vByPlate.get(String(w.m_code || '').toUpperCase());
+    return v && v.id === vehicleId;
+  });
+
+  const wosOpened = fleetWosAll.filter((w) => w.created_at >= fromIso && w.created_at <= toIso);
+  const wosCompleted = fleetWosAll.filter((w) => w.status === 'Concluída' && w.closed_at && w.closed_at >= fromIso && w.closed_at <= toIso);
+  const wosOpenNow = fleetWosAll.filter((w) => !['Concluída', 'Cancelada'].includes(w.status));
+  const prevWosOpened = prevFromIso ? fleetWosAll.filter((w) => w.created_at >= prevFromIso && w.created_at <= prevToIso) : [];
+
+  // Custos & Consumo do período e anterior
+  const curCostRep = costReport(db, { from, to, vehicleId });
+  const prevCostRep = prevFrom ? costReport(db, { from: prevFrom, to: prevTo, vehicleId }) : null;
+
+  const avgConsRow = db.prepare(`
+    SELECT AVG(consumption_km_l) a FROM fleet_fuel
+    WHERE consumption_km_l IS NOT NULL AND substr(filled_at,1,10) BETWEEN ? AND ?${vehicleId ? ' AND vehicle_id = ?' : ''}
+  `).get(from, to, ...(vehicleId ? [vehicleId] : []));
+  const avgConsumptionKmL = avgConsRow?.a != null ? round2(avgConsRow.a) : null;
+
+  // Viagens no período
+  const tripsCount = db.prepare(`
+    SELECT COUNT(*) n FROM fleet_trips
+    WHERE substr(start_at,1,10) BETWEEN ? AND ?${vehicleId ? ' AND vehicle_id = ?' : ''}
+  `).get(from, to, ...(vehicleId ? [vehicleId] : [])).n;
+
+  // Checklists no período
+  const ckRows = db.prepare(`
+    SELECT has_issues, critical_issues, vehicle_id FROM fleet_checklists
+    WHERE substr(created_at,1,10) BETWEEN ? AND ?${vehicleId ? ' AND vehicle_id = ?' : ''}
+  `).all(from, to, ...(vehicleId ? [vehicleId] : []));
+  const checklistsCount = ckRows.length;
+  const checklistsWithIssues = ckRows.filter((c) => c.has_issues).length;
+  const checklistOkPct = checklistsCount ? Math.round(((checklistsCount - checklistsWithIssues) / checklistsCount) * 100) : null;
+
+  // Alertas atuais (documentos, CNH, preventivas por km, multas)
+  const alerts = computeAlerts(db).filter((a) => !vehicleId || a.vehicle_id === vehicleId);
+  const docsExpired = alerts.filter((a) => (a.kind === 'documento' || a.kind === 'cnh') && a.level === 'vencido').length;
+  const docsExpiring = alerts.filter((a) => (a.kind === 'documento' || a.kind === 'cnh') && a.level === 'vencendo').length;
+  const plansOverdue = alerts.filter((a) => a.kind === 'manutencao' && a.level === 'vencida').length;
+  const pendingFines = db.prepare(`
+    SELECT COUNT(*) n, COALESCE(SUM(amount),0) s FROM fleet_fines
+    WHERE status = 'pendente'${vehicleId ? ' AND vehicle_id = ?' : ''}
+  `).get(...(vehicleId ? [vehicleId] : []));
+
+  // Ranking por veículo
+  const osCountByVeh = {};
+  const osStoppedByVeh = {};
+  const osOpenByVeh = {};
+  for (const w of wosOpened) {
+    const v = vByMachineId.get(w.machine_id) || vByPlate.get(String(w.m_code || '').toUpperCase());
+    if (!v) continue;
+    osCountByVeh[v.id] = (osCountByVeh[v.id] || 0) + 1;
+    if (w.machine_stopped) osStoppedByVeh[v.id] = (osStoppedByVeh[v.id] || 0) + 1;
+  }
+  for (const w of wosOpenNow) {
+    const v = vByMachineId.get(w.machine_id) || vByPlate.get(String(w.m_code || '').toUpperCase());
+    if (!v) continue;
+    osOpenByVeh[v.id] = (osOpenByVeh[v.id] || 0) + 1;
+  }
+
+  const byVehicle = curCostRep.rows.map((r) => {
+    const v = vById.get(r.vehicle_id);
+    const maintOther = round2((r.total || 0) - (r.fuel || 0) - (r.fines || 0));
+    return {
+      vehicleId: r.vehicle_id,
+      plate: r.plate,
+      nickname: r.nickname,
+      brand: v?.brand || '',
+      model: v?.model || '',
+      status: v?.status || 'ativo',
+      osCount: osCountByVeh[r.vehicle_id] || 0,
+      stoppedOs: osStoppedByVeh[r.vehicle_id] || 0,
+      openOs: osOpenByVeh[r.vehicle_id] || 0,
+      kmDriven: r.km || 0,
+      liters: round2(r.liters || 0),
+      avgConsumption: r.avg_consumption,
+      fuelCost: canSeeCosts ? round2(r.fuel || 0) : null,
+      maintCost: canSeeCosts ? maintOther : null,
+      finesCost: canSeeCosts ? round2(r.fines || 0) : null,
+      totalCost: canSeeCosts ? round2(r.total || 0) : null,
+      costPerKm: canSeeCosts ? r.cost_per_km : null,
+    };
+  }).sort((a, b) => (b.osCount - a.osCount) || ((b.totalCost || 0) - (a.totalCost || 0)) || (b.kmDriven - a.kmDriven));
+
+  // Evolução últimos 6 meses
+  const anchorYm = selectedMonth || to.slice(0, 7);
+  const monthlyTrend = [];
+  for (let i = 5; i >= 0; i--) {
+    const ym = fleetShiftMonth(anchorYm, -i);
+    const mb = fleetMonthBounds(ym);
+    const mOs = fleetWosAll.filter((w) => w.created_at >= mb.fromIso && w.created_at <= mb.toIso).length;
+    const mDone = fleetWosAll.filter((w) => w.status === 'Concluída' && w.closed_at && w.closed_at >= mb.fromIso && w.closed_at <= mb.toIso).length;
+    const f = db.prepare(`SELECT COALESCE(SUM(total),0) s FROM fleet_fuel WHERE substr(filled_at,1,10) BETWEEN ? AND ?${vehicleId ? ' AND vehicle_id = ?' : ''}`).get(mb.from, mb.to, ...(vehicleId ? [vehicleId] : [])).s;
+    const c = db.prepare(`SELECT COALESCE(SUM(amount),0) s FROM fleet_costs WHERE cost_date BETWEEN ? AND ?${vehicleId ? ' AND vehicle_id = ?' : ''}`).get(mb.from, mb.to, ...(vehicleId ? [vehicleId] : [])).s;
+    const fi = db.prepare(`SELECT COALESCE(SUM(amount),0) s FROM fleet_fines WHERE status='paga' AND COALESCE(paid_date, substr(fine_date,1,10)) BETWEEN ? AND ?${vehicleId ? ' AND vehicle_id = ?' : ''}`).get(mb.from, mb.to, ...(vehicleId ? [vehicleId] : [])).s;
+    monthlyTrend.push({
+      month: ym,
+      label: fleetMonthLabel(ym),
+      openedOs: mOs,
+      completedOs: mDone,
+      fuelCost: canSeeCosts ? round2(f) : null,
+      otherCost: canSeeCosts ? round2(c + fi) : null,
+      totalCost: canSeeCosts ? round2(f + c + fi) : null,
+    });
+  }
+
+  const vehiclesStoppedNow = vehicles.filter((v) => v.status === 'manutencao');
+  const t = curCostRep.totals;
+  const pt = prevCostRep?.totals || null;
+  const costBreakdown = canSeeCosts ? {
+    Combustível: round2(t.fuel || 0),
+    Manutenção: round2((t.categories?.manutencao || 0) + (t.categories?.pecas || 0)),
+    Pneus: round2(t.categories?.pneus || 0),
+    Pedágio: round2(t.categories?.pedagio || 0),
+    'Seguro / Impostos': round2((t.categories?.seguro || 0) + (t.categories?.impostos || 0)),
+    Multas: round2(t.fines || 0),
+    Outros: round2((t.categories?.estacionamento || 0) + (t.categories?.lavagem || 0) + (t.categories?.diaria || 0) + (t.categories?.outros || 0)),
+  } : null;
+
+  // Insights Automáticos da Frota
+  const insights = [];
+  if (vehiclesStoppedNow.length > 0) {
+    insights.push({
+      level: 'danger',
+      title: `${vehiclesStoppedNow.length} veículo(s) parado(s) em manutenção`,
+      detail: `Placas paradas agora: ${vehiclesStoppedNow.map((v) => v.plate).join(', ')}.`,
+    });
+  }
+  if (docsExpired > 0 || plansOverdue > 0) {
+    insights.push({
+      level: 'danger',
+      title: `${docsExpired} documento(s) vencido(s) e ${plansOverdue} preventiva(s) por Km atrasada(s)`,
+      detail: `Regularize licenças/CNHs vencidas e revisões por Km para evitar multas e quebras em rota.`,
+    });
+  }
+  const topOsVeh = [...byVehicle].sort((a, b) => b.osCount - a.osCount)[0];
+  if (topOsVeh && topOsVeh.osCount >= 2) {
+    insights.push({
+      level: 'warn',
+      title: `Veículo com mais chamados: ${topOsVeh.plate}${topOsVeh.nickname ? ` (${topOsVeh.nickname})` : ''}`,
+      detail: `${topOsVeh.osCount} OS no período${topOsVeh.stoppedOs ? ` (${topOsVeh.stoppedOs} com parada)` : ''}${canSeeCosts && topOsVeh.totalCost ? ` • gasto total R$ ${topOsVeh.totalCost.toFixed(2)}` : ''}.`,
+    });
+  }
+  if (canSeeCosts && pt && pt.total > 0 && t.total > 0) {
+    const delta = fleetPctDelta(t.total, pt.total);
+    if (delta >= 15) {
+      insights.push({
+        level: 'warn',
+        title: `Gasto da frota subiu ${delta}% frente ao período anterior`,
+        detail: `Total atual: R$ ${t.total.toFixed(2)} contra R$ ${pt.total.toFixed(2)} no período anterior.`,
+      });
+    } else if (delta <= -10) {
+      insights.push({
+        level: 'ok',
+        title: `Economia de ${Math.abs(delta)}% nos custos da frota`,
+        detail: `Gasto reduziu de R$ ${pt.total.toFixed(2)} para R$ ${t.total.toFixed(2)} no período.`,
+      });
+    }
+  }
+  if (checklistsCount > 0 && checklistsWithIssues > 0) {
+    const irrPct = Math.round((checklistsWithIssues / checklistsCount) * 100);
+    insights.push({
+      level: irrPct >= 30 ? 'warn' : 'info',
+      title: `${checklistsWithIssues} de ${checklistsCount} checklists com irregularidades (${irrPct}%)`,
+      detail: `Acompanhe as avarias apontadas pelos motoristas antes das viagens.`,
+    });
+  }
+  if (canSeeCosts && pendingFines.n > 0) {
+    insights.push({
+      level: 'warn',
+      title: `${pendingFines.n} multa(s) pendente(s) (R$ ${round2(pendingFines.s).toFixed(2)})`,
+      detail: `Confira a aba Documentos & Multas para dar baixa ou identificar motoristas.`,
+    });
+  }
+
+  return {
+    scope: 'frota',
+    canSeeCosts,
+    period: { from, to, month: selectedMonth, label: periodLabel },
+    summary: {
+      openedOs: wosOpened.length,
+      prevOpenedOs: prevFromIso ? prevWosOpened.length : null,
+      openedOsDeltaPct: prevFromIso ? fleetPctDelta(wosOpened.length, prevWosOpened.length) : null,
+      completedOs: wosCompleted.length,
+      openNow: wosOpenNow.length,
+      vehiclesTotal: vehicles.length,
+      vehiclesActive: vehicles.filter((v) => v.status === 'ativo').length,
+      vehiclesStoppedNow: vehiclesStoppedNow.length,
+      stoppedPlates: vehiclesStoppedNow.map((v) => v.plate),
+      totalCost: canSeeCosts ? round2(t.total || 0) : null,
+      prevTotalCost: canSeeCosts && pt ? round2(pt.total || 0) : null,
+      costDeltaPct: canSeeCosts && pt ? fleetPctDelta(t.total || 0, pt.total || 0) : null,
+      fuelCost: canSeeCosts ? round2(t.fuel || 0) : null,
+      fuelLiters: round2(t.liters || 0),
+      avgConsumptionKmL,
+      kmDriven: Math.round(t.km || 0),
+      costPerKm: canSeeCosts ? t.cost_per_km : null,
+      tripsCount,
+      checklistsCount,
+      checklistsWithIssues,
+      checklistOkPct,
+      docsExpired,
+      docsExpiring,
+      plansOverdue,
+      pendingFinesCount: pendingFines.n,
+      pendingFinesAmount: canSeeCosts ? round2(pendingFines.s) : null,
+    },
+    costBreakdown,
+    monthlyTrend,
+    byVehicle,
+    insights,
+  };
+}

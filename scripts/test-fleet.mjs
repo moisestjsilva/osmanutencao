@@ -361,6 +361,35 @@ async function main() {
   assert.equal(r.status, 404);
   ok('gestor exclui checklist via DELETE /api/fleet/checklists/:id e motorista não pode excluir (403)');
 
+  // 7) Indicadores: isolamento 100% entre Maquinário (Fábrica) e Frota + controle de acesso
+  console.log('Indicadores — Isolamento Maquinário vs Frota e Números do Mês');
+  const curMonth = new Date().toISOString().slice(0, 7);
+  r = await call('GET', `/api/indicators?month=${curMonth}`, null, adm);
+  assert.equal(r.status, 200);
+  assert.equal(r.scope, 'fabrica');
+  assert.equal(Array.isArray(r.monthlyTrend) && r.monthlyTrend.length === 6, true);
+  assert.equal(Array.isArray(r.insights), true);
+  assert.equal(r.byMachine.some((m) => m.code === 'ABC1D23' || m.code === 'RMI1A95' || String(m.sector || '').toUpperCase() === 'FROTA'), false);
+  ok('indicadores do maquinário (mês + 6 meses + insights) 100% livres de OS da frota');
+
+  r = await call('GET', `/api/fleet/indicators?month=${curMonth}`, null, techFab);
+  assert.equal(r.status, 403);
+  r = await call('GET', `/api/fleet/indicators?month=${curMonth}`, null, tPlain);
+  assert.equal(r.status, 403);
+  ok('usuários sem acesso ao menu Frota recebem 403 nos indicadores da frota');
+
+  r = await call('GET', `/api/fleet/indicators?month=${curMonth}`, null, bruno);
+  assert.equal(r.status, 200);
+  assert.equal(r.scope, 'frota');
+  assert.equal(r.canSeeCosts, true);
+  assert.equal(Array.isArray(r.monthlyTrend) && r.monthlyTrend.length === 6, true);
+  assert.ok(r.summary.openedOs >= 1);
+  r = await call('GET', `/api/fleet/indicators?month=${curMonth}`, null, tMec);
+  assert.equal(r.status, 200);
+  assert.equal(r.canSeeCosts, false);
+  assert.equal(r.summary.totalCost, null);
+  ok('gestor e mecânico da frota acessam indicadores exclusivos da frota (com custos restritos ao gestor)');
+
   console.log(`\n${pass} verificações OK`);
 }
 
