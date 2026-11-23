@@ -1212,12 +1212,22 @@ export function kpiView(root, routeParams = {}) {
   const fleetSectorIds = new Set((boot.sectors || []).filter((s) => String(s.name || '').toUpperCase() === 'FROTA' || String(s.code || '').toUpperCase() === 'S-FROTA').map((s) => s.id));
   const factoryMachines = (boot.machines || []).filter((m) => !fleetSectorIds.has(m.sector_id));
 
+  const fmtIsoDateBr = (iso) => {
+    const s = String(iso || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return fmtDate(iso);
+    const [y, m, d] = s.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
   function renderShell() {
     const isFleet = f.scope === 'frota' && canSeeFleet;
     const prevYm = shiftYm(currentYm(), -1);
     const activeChip = f.mode === 'month'
       ? (f.month === currentYm() ? 'cur-month' : (f.month === prevYm ? 'prev-month' : 'custom-month'))
       : f.mode;
+    const hasActiveFilter = isFleet
+      ? Boolean(f.vehicleId)
+      : Boolean(f.sectorId || f.machineId || (!isTechUser && (f.teamId || f.userId)));
 
     root.innerHTML = `
       <div class="page-head">
@@ -1234,48 +1244,67 @@ export function kpiView(root, routeParams = {}) {
       </div>
 
       <div class="kpi-toolbar">
-        <div class="row wrap" style="gap:8px;align-items:center">
-          <div class="month-nav" title="Escolher mês de referência">
-            <button type="button" id="btn-month-prev" aria-label="Mês anterior">‹</button>
-            <input type="month" id="inp-kpi-month" value="${esc(f.month)}" />
-            <button type="button" id="btn-month-next" aria-label="Próximo mês">›</button>
+        <div class="kpi-toolbar-top">
+          <div class="row wrap" style="gap:8px;align-items:center">
+            <div class="month-nav" title="Escolher mês de referência">
+              <button type="button" id="btn-month-prev" aria-label="Mês anterior">‹</button>
+              <input type="month" id="inp-kpi-month" value="${esc(f.month)}" />
+              <button type="button" id="btn-month-next" aria-label="Próximo mês">›</button>
+            </div>
+            <div class="chips" style="padding:0;margin:0">
+              <button class="chip ${activeChip === 'cur-month' ? 'active' : ''}" data-preset="cur-month">Mês Atual</button>
+              <button class="chip ${activeChip === 'prev-month' ? 'active' : ''}" data-preset="prev-month">Mês Anterior</button>
+              <button class="chip ${activeChip === '90' ? 'active' : ''}" data-preset="90">90 dias</button>
+              <button class="chip ${activeChip === '365' ? 'active' : ''}" data-preset="365">12 meses</button>
+              <button class="chip ${activeChip === 'tudo' ? 'active' : ''}" data-preset="tudo">Tudo</button>
+            </div>
           </div>
-          <div class="chips" style="padding:0;margin:0">
-            <button class="chip ${activeChip === 'cur-month' ? 'active' : ''}" data-preset="cur-month">Mês Atual</button>
-            <button class="chip ${activeChip === 'prev-month' ? 'active' : ''}" data-preset="prev-month">Mês Anterior</button>
-            <button class="chip ${activeChip === '90' ? 'active' : ''}" data-preset="90">90 dias</button>
-            <button class="chip ${activeChip === '365' ? 'active' : ''}" data-preset="365">12 meses</button>
-            <button class="chip ${activeChip === 'tudo' ? 'active' : ''}" data-preset="tudo">Tudo</button>
+
+          <div class="row" style="gap:8px;align-items:center">
+            ${isFleet ? `
+              <select class="input" id="f-vehicle" style="width:230px;max-width:100%;height:36px;min-height:36px;padding:0 28px 0 10px;font-size:13px;background-color:var(--surface-2)">
+                <option value="">Todos os veículos</option>
+                ${fleetVehicles.map((v) => `<option value="${esc(v.id)}" ${f.vehicleId === v.id ? 'selected' : ''}>${esc(v.plate)}${v.nickname ? ` (${esc(v.nickname)})` : ''}</option>`).join('')}
+              </select>
+            ` : ''}
+            ${hasActiveFilter ? `<button type="button" class="btn sm ghost" id="btn-clear-kpi-filters">✕ Limpar filtros</button>` : ''}
           </div>
         </div>
 
-        <div class="row wrap" style="gap:8px;align-items:center">
-          ${isFleet ? `
-            <select class="input" id="f-vehicle" style="height:36px;min-width:190px">
-              <option value="">Todos os veículos da Frota</option>
-              ${fleetVehicles.map((v) => `<option value="${esc(v.id)}" ${f.vehicleId === v.id ? 'selected' : ''}>${esc(v.plate)}${v.nickname ? ` (${esc(v.nickname)})` : ''}</option>`).join('')}
-            </select>
-          ` : `
-            <select class="input" id="f-sector" style="height:36px;min-width:140px">
-              <option value="">Todos os setores</option>
-              ${factorySectors.map((s) => `<option value="${s.id}" ${f.sectorId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
-            </select>
-            <select class="input" id="f-machine" style="height:36px;min-width:170px">
-              <option value="">Todas as máquinas</option>
-              ${factoryMachines.map((m) => `<option value="${m.id}" ${f.machineId === m.id ? 'selected' : ''}>${esc(m.code)} — ${esc(m.name)}</option>`).join('')}
-            </select>
+        ${!isFleet ? `
+          <div class="kpi-filters-grid ${isTechUser ? 'cols-2' : ''}">
+            <div class="kpi-filter-item">
+              <label for="f-sector">Setor</label>
+              <select class="input" id="f-sector">
+                <option value="">Todos os setores</option>
+                ${factorySectors.map((s) => `<option value="${s.id}" ${f.sectorId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="kpi-filter-item">
+              <label for="f-machine">Máquina</label>
+              <select class="input" id="f-machine">
+                <option value="">Todas as máquinas</option>
+                ${factoryMachines.map((m) => `<option value="${m.id}" ${f.machineId === m.id ? 'selected' : ''}>${esc(m.code)} — ${esc(m.name)}</option>`).join('')}
+              </select>
+            </div>
             ${!isTechUser ? `
-              <select class="input" id="f-team" style="height:36px;min-width:130px">
-                <option value="">Todas equipes</option>
-                ${(boot.teams || []).map((t) => `<option value="${t.id}" ${f.teamId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
-              </select>
-              <select class="input" id="f-user" style="height:36px;min-width:150px">
-                <option value="">Todos manutentores</option>
-                ${(boot.users || []).filter((u) => u.role === 'manutentor').map((u) => `<option value="${u.id}" ${f.userId === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
-              </select>
+              <div class="kpi-filter-item">
+                <label for="f-team">Equipe</label>
+                <select class="input" id="f-team">
+                  <option value="">Todas as equipes</option>
+                  ${(boot.teams || []).map((t) => `<option value="${t.id}" ${f.teamId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="kpi-filter-item">
+                <label for="f-user">Manutentor</label>
+                <select class="input" id="f-user">
+                  <option value="">Todos os manutentores</option>
+                  ${(boot.users || []).filter((u) => u.role === 'manutentor').map((u) => `<option value="${u.id}" ${f.userId === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+                </select>
+              </div>
             ` : ''}
-          `}
-        </div>
+          </div>
+        ` : ''}
       </div>
 
       <div id="kpi-body"><div class="skeleton"></div></div>
@@ -1310,13 +1339,22 @@ export function kpiView(root, routeParams = {}) {
     const bindSelect = (sel, key) => {
       const el = $(sel, root);
       if (!el) return;
-      el.onchange = (e) => { f[key] = e.target.value; load(); };
+      el.onchange = (e) => { f[key] = e.target.value; renderShell(); load(); };
     };
     bindSelect('#f-sector', 'sectorId');
     bindSelect('#f-machine', 'machineId');
     bindSelect('#f-team', 'teamId');
     bindSelect('#f-user', 'userId');
     bindSelect('#f-vehicle', 'vehicleId');
+
+    const btnClearFilters = $('#btn-clear-kpi-filters', root);
+    if (btnClearFilters) {
+      btnClearFilters.onclick = () => {
+        f.sectorId = ''; f.machineId = ''; f.teamId = ''; f.userId = ''; f.vehicleId = '';
+        renderShell();
+        load();
+      };
+    }
   }
 
   function buildQueryParams() {
@@ -1588,7 +1626,7 @@ export function kpiView(root, routeParams = {}) {
     const [mv, mu] = splitMin(d.mttr?.avgMin);
     const [sv, su] = splitMin(s.stoppedMin ?? d.stoppedTime?.totalMin ?? 0);
 
-    $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • Apenas Maquinário Industrial (OS da Frota não interferem nestes números)`;
+    $('#kpi-period', root).textContent = `${fmtIsoDateBr(d.period.from)} a ${fmtIsoDateBr(d.period.to)} • Apenas Maquinário Industrial (OS da Frota não interferem nestes números)`;
 
     const trend = d.monthlyTrend || [];
     const maxTrendVal = Math.max(1, ...trend.map((t) => Math.max(t.opened, t.completed)));
@@ -1744,7 +1782,7 @@ export function kpiView(root, routeParams = {}) {
   function renderFleetIndicators(d) {
     const s = d.summary || {};
     const canCosts = d.canSeeCosts;
-    $('#kpi-period', root).textContent = `${fmtDate(d.period.from)} a ${fmtDate(d.period.to)} • Exclusivo Frota (Caminhões e Veículos)`;
+    $('#kpi-period', root).textContent = `${fmtIsoDateBr(d.period.from)} a ${fmtIsoDateBr(d.period.to)} • Exclusivo Frota (Caminhões e Veículos)`;
 
     const trend = d.monthlyTrend || [];
     const maxTrend = canCosts
