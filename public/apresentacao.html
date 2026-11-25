@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Apresentação Executiva — Nova OS | Manutenção & Frota</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #111827;
+      --surface-2: #1e293b;
+      --border: rgba(148, 163, 184, 0.18);
+      --text: #f8fafc;
+      --text-2: #cbd5e1;
+      --text-3: #94a3b8;
+      --accent: #f97316;
+      --accent-soft: rgba(249, 115, 22, 0.15);
+      --ok: #10b981;
+      --ok-soft: rgba(16, 185, 129, 0.15);
+      --info: #0ea5e9;
+      --info-soft: rgba(14, 165, 233, 0.15);
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.16);
+      --violet: #8b5cf6;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Barra superior */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 54px;
+      background: rgba(11, 17, 32, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .brand-dot {
+      width: 30px; height: 30px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      display: grid; place-items: center;
+      color: #fff; font-weight: 800; font-size: 14px;
+    }
+    .brand small { color: var(--text-3); font-weight: 500; font-size: 12px; margin-left: 6px; }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      padding: 7px 13px;
+      border-radius: 9px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all .15s;
+    }
+    .btn:hover { background: #334155; color: #fff; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: #ea580c; }
+
+    .progress-bar {
+      position: fixed;
+      top: 54px; left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--info));
+      transition: width .3s ease;
+      z-index: 51;
+    }
+
+    /* Deck de Slides */
+    .deck {
+      position: fixed;
+      top: 57px; left: 0; right: 0; bottom: 58px;
+      overflow: hidden;
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 28px 48px;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      max-width: 1240px;
+      margin: 0 auto;
+      overflow-y: auto;
+      animation: fadeSlide .28s ease;
+    }
+    .slide.active { display: flex; }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--accent-soft);
+      color: var(--accent);
+      width: fit-content;
+      margin-bottom: 12px;
+    }
+    .tag-pill.info { background: var(--info-soft); color: #38bdf8; }
+    .tag-pill.ok { background: var(--ok-soft); color: #34d399; }
+
+    h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; margin: 0; letter-spacing: -0.025em; }
+    .hero-title { font-size: clamp(28px, 4.2vw, 48px); line-height: 1.1; font-weight: 800; }
+    .slide-title { font-size: clamp(22px, 2.8vw, 34px); line-height: 1.15; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { color: var(--text-2); font-size: clamp(14px, 1.3vw, 17px); line-height: 1.5; max-width: 780px; margin: 10px 0 22px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1.05fr 1fr; gap: 28px; align-items: center; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+    }
+    .card h3 { font-size: 16px; margin-bottom: 6px; }
+    .card p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.45; }
+
+    .bullet-list { display: flex; flex-direction: column; gap: 12px; }
+    .bullet {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      padding: 12px 14px;
+    }
+    .bullet-ico {
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      display: grid; place-items: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .bullet strong { display: block; font-size: 14px; margin-bottom: 2px; }
+    .bullet span { font-size: 12.8px; color: var(--text-3); line-height: 1.4; }
+
+    /* Mockups de Tela Real */
+    .mockup-window {
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45);
+    }
+    .mockup-bar {
+      background: #1e293b;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+    .dot-r, .dot-y, .dot-g { width: 9px; height: 9px; border-radius: 50%; }
+    .dot-r { background: #ef4444; } .dot-y { background: #f59e0b; } .dot-g { background: #10b981; }
+    .mockup-body { padding: 14px; background: #f8fafc; color: #0f172a; }
+
+    .phone-frame {
+      width: 270px;
+      margin: 0 auto;
+      background: #0f172a;
+      border: 6px solid #334155;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    }
+    .phone-notch {
+      height: 16px;
+      background: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .phone-notch::after {
+      content: '';
+      width: 64px; height: 5px;
+      border-radius: 99px;
+      background: #334155;
+    }
+    .phone-screen {
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 10px;
+      font-size: 11px;
+    }
+
+    .wa-screen {
+      background: #0b141a;
+      color: #e9edef;
+      padding: 12px;
+      font-size: 11.5px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .wa-msg {
+      background: #202c33;
+      padding: 8px 10px;
+      border-radius: 9px;
+      line-height: 1.4;
+      max-width: 92%;
+    }
+    .wa-msg.me { background: #005c4b; align-self: flex-end; }
+
+    .mini-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+    .mini-kpi {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-top: 3px solid var(--kc, #f97316);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .mini-kpi .l { font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+    .mini-kpi .v { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 800; color: #0f172a; margin: 2px 0; }
+    .mini-kpi .s { font-size: 9.5px; color: #64748b; }
+
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    .compare-table th, .compare-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .compare-table th {
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-3);
+      background: rgba(255,255,255,0.03);
+    }
+
+    /* Rodapé de navegação */
+    .bottombar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 58px;
+      background: rgba(11, 17, 32, 0.92);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      z-index: 50;
+    }
+    .dots { display: flex; gap: 7px; align-items: center; }
+    .dot-nav {
+      width: 9px; height: 9px;
+      border-radius: 99px;
+      background: #334155;
+      border: 0;
+      cursor: pointer;
+      padding: 0;
+      transition: all .2s;
+    }
+    .dot-nav.active { width: 26px; background: var(--accent); }
+
+    @media (max-width: 900px) {
+      .slide { padding: 18px 18px; justify-content: flex-start; }
+      .grid-2, .grid-4, .grid-3 { grid-template-columns: 1fr; }
+      .mini-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .brand small { display: none; }
+    }
+
+    @media print {
+      html, body { overflow: visible; height: auto; background: #fff; color: #0f172a; }
+      .topbar, .bottombar, .progress-bar { display: none !important; }
+      .deck { position: static; overflow: visible; }
+      .slide {
+        display: flex !important;
+        position: static;
+        page-break-after: always;
+        border: 1px solid #cbd5e1;
+        margin-bottom: 20px;
+        background: #0b1120;
+        color: #f8fafc;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-dot">OS</div>
+      <span>Nova OS <small>Apresentação Executiva • Móveis Rufato</small></span>
+    </div>
+    <div class="top-actions">
+      <button class="btn" onclick="window.print()">🖨️ Salvar PDF</button>
+      <button class="btn" onclick="toggleFullscreen()">⛶ Tela Cheia</button>
+      <a class="btn primary" href="/#/">Abrir Sistema &rarr;</a>
+    </div>
+  </header>
+
+  <div class="progress-bar" id="progressBar" style="width: 16.6%;"></div>
+
+  <main class="deck">
+    <!-- SLIDE 1: CAPA -->
+    <section class="slide active" data-title="Visão Geral">
+      <span class="tag-pill">🚀 Plataforma Única • Fábrica &amp; Frota</span>
+      <h1 class="hero-title">
+        Nova OS: Controle Total da<br/>
+        <span style="color:var(--accent)">Manutenção Industrial</span> e da <span style="color:#38bdf8">Frota</span>
+      </h1>
+      <p class="subtitle">
+        Plataforma própria desenvolvida para eliminar controles em papel, reduzir tempo de máquina parada,
+        controlar custos por veículo e dar visibilidade em tempo real à Diretoria — direto do celular ou computador.
+      </p>
+
+      <div class="grid-4">
+        <div class="card">
+          <div style="font-size:24px;margin-bottom:8px">📱</div>
+          <h3>App Offline (PWA)</h3>
+          <p>Funciona mesmo sem Wi-Fi no chão de fábrica e sincroniza automaticamente ao reconectar.</p>
+        </div>
+        <div class="card">
+          <div style="font-size:24px;margin-bottom:8px">💬</div>
+          <h3>WhatsApp Integrado</h3>
+          <p>Abertura de OS, checklist de viagem, avisos em grupo e alertas de documentos direto no WhatsApp.</p>
+        </div>
+        <div class="card">
+          <div style="font-size:24px;margin-bottom:8px">🚚</div>
+          <h3>Módulo Frota Isolado</h3>
+          <p>Fluxo separado por placa para caminhões, diesel, pneus, viagens e CNH sem misturar com a fábrica.</p>
+        </div>
+        <div class="card">
+          <div style="font-size:24px;margin-bottom:8px">📊</div>
+          <h3>Indicadores &amp; Insights</h3>
+          <p>Números mensais, custo por km, tempo de parada e alertas automáticos para tomada de decisão.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: ABERTURA DE OS + WHATSAPP -->
+    <section class="slide" data-title="Abertura de OS & WhatsApp">
+      <div class="grid-2">
+        <div>
+          <span class="tag-pill">⚡ Agilidade no Chão de Fábrica</span>
+          <h2 class="slide-title">Abertura de Chamado em Segundos (App, QR Code ou WhatsApp)</h2>
+          <p class="subtitle" style="margin-bottom:16px">
+            Qualquer colaborador abre uma OS em menos de 30 segundos, sem burocracia, com foto do problema e status de máquina parada.
+          </p>
+          <div class="bullet-list">
+            <div class="bullet">
+              <div class="bullet-ico">📷</div>
+              <div>
+                <strong>Leitura por QR Code na Máquina</strong>
+                <span>Escaneia a etiqueta da máquina e já preenche setor, TAG e criticidade automaticamente.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">⏱️</div>
+              <div>
+                <strong>Cronômetro Real de Parada &amp; Atendimento</strong>
+                <span>Mede exatamente quando a máquina parou, tempo de 1º atendimento, pausas e tempo de reparo (MTTR).</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">🤖</div>
+              <div>
+                <strong>Robôs Separados no WhatsApp</strong>
+                <span>Digitar a TAG abre OS da fábrica; digitar <code>frota</code> abre OS de caminhão pela placa sem misturar fluxos.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+          <div class="phone-frame">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+              <div style="background:#dc2626;color:#fff;padding:6px 8px;border-radius:8px;font-weight:800;display:flex;justify-content:space-between;margin-bottom:8px">
+                <span>⚠️ MÁQUINA PARADA</span>
+                <span>00:42:15</span>
+              </div>
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:9px;margin-bottom:8px">
+                <div style="font-weight:800;font-size:13px">OS 1042 <span style="background:#fee2e2;color:#b91c1c;padding:1px 6px;border-radius:99px;font-size:9px">Urgente</span></div>
+                <div style="color:#475569;margin:3px 0"><strong>S-04 • Seccionadora Homag</strong></div>
+                <div style="color:#64748b">Motor principal desarmando ao iniciar corte.</div>
+              </div>
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px;margin-bottom:8px">
+                <div style="font-weight:700;margin-bottom:4px">📸 Foto anexada (Zoom HD)</div>
+                <div style="height:54px;background:linear-gradient(135deg,#cbd5e1,#94a3b8);border-radius:7px;display:grid;place-items:center;color:#334155;font-weight:700">Foto do Painel</div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div style="background:#e2e8f0;padding:7px;border-radius:8px;text-align:center;font-weight:700">▶ Iniciar</div>
+                <div style="background:#f97316;color:#fff;padding:7px;border-radius:8px;text-align:center;font-weight:700">✋ Assumir</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="phone-frame">
+            <div class="phone-notch"></div>
+            <div class="wa-screen">
+              <div style="font-weight:700;color:#34d399;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:6px">💬 WhatsApp — Central Nova OS</div>
+              <div class="wa-msg me">frota RMI1A95</div>
+              <div class="wa-msg">
+                🚚 <strong>MERCEDES ACCELO 1016</strong> (RMI1A95)<br/>
+                📏 Último Km: 158.400 km<br/>
+                Digite a quilometragem atual:
+              </div>
+              <div class="wa-msg me">158650</div>
+              <div class="wa-msg">
+                ✅ <strong>OS DE FROTA #1043 ABERTA!</strong><br/>
+                🛑 Veículo parado • Equipe da Frota acionada no app e no grupo!
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: GESTÃO DE FROTA COMPLETA -->
+    <section class="slide" data-title="Gestão de Frota">
+      <div class="grid-2">
+        <div class="mockup-window">
+          <div class="mockup-bar">
+            <span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span>
+            <span style="margin-left:8px">os.moveisrufato.com.br/#/frota</span>
+          </div>
+          <div class="mockup-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <strong style="font-size:14px">🚚 Gestão de Frota • 47 Veículos Cadastrados</strong>
+              <span style="background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">Acesso Restrito</span>
+            </div>
+            <div class="mini-kpi-grid">
+              <div class="mini-kpi" style="--kc:#10b981"><div class="l">Ativos</div><div class="v">41</div><div class="s">operando</div></div>
+              <div class="mini-kpi" style="--kc:#ef4444"><div class="l">Manutenção</div><div class="v">6</div><div class="s">com OS aberta</div></div>
+              <div class="mini-kpi" style="--kc:#0ea5e9"><div class="l">Média 30d</div><div class="v">3,42</div><div class="s">km / litro</div></div>
+              <div class="mini-kpi" style="--kc:#f97316"><div class="l">Custo / Km</div><div class="v">R$ 4,85</div><div class="s">total frota</div></div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px;font-size:11px">
+              <div style="font-weight:700;margin-bottom:6px;color:#334155">Controle Integrado em Abas:</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px">
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600">🚛 Veículos &amp; Placas</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600">📋 Checklists</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600">⛽ Diesel (km/L)</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600">🛞 Pneus &amp; Recapagem</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600">🔧 Preventiva por Km</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600">📄 Docs, CNH &amp; Multas</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <span class="tag-pill info">🚚 Módulo Exclusivo de Frota</span>
+          <h2 class="slide-title">Controle Completo de Caminhões, Diesel, Pneus e Documentação</h2>
+          <div class="bullet-list" style="margin-top:14px">
+            <div class="bullet">
+              <div class="bullet-ico">🔒</div>
+              <div>
+                <strong>Privacidade por Permissão</strong>
+                <span>Somente usuários autorizados (Gestor, Mecânico ou Motorista da Frota) enxergam o menu e as OS de caminhões.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">⛽</div>
+              <div>
+                <strong>Cálculo Automático de Consumo &amp; Custo/Km</strong>
+                <span>Aponta a média real km/L entre tanques cheios, alerta desvios e consolida combustível + manutenção + pneus + multas.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">📄</div>
+              <div>
+                <strong>Alertas de Documentos e CNH no WhatsApp</strong>
+                <span>Upload de CRLV, ANTT e apólices em PDF/foto com avisos automáticos 60, 30, 15, 7 e 1 dia antes do vencimento.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: CHECKLIST 1-TOQUE -->
+    <section class="slide" data-title="Checklist 1-Toque">
+      <div class="grid-2">
+        <div>
+          <span class="tag-pill ok">📋 Padronização &amp; Prevenção</span>
+          <h2 class="slide-title">Checklist de Viagem em 1 Toque pelo Celular (Sem Login)</h2>
+          <p class="subtitle" style="margin-bottom:16px">
+            O motorista digita <code>Chek</code> no WhatsApp, recebe um link direto já com a placa selecionada e registra saída ou chegada em menos de 1 minuto.
+          </p>
+          <div class="bullet-list">
+            <div class="bullet">
+              <div class="bullet-ico">📸</div>
+              <div>
+                <strong>Evidência Fotográfica Obrigatória</strong>
+                <span>Exige foto do painel ligado (Km, combustível e luzes de alerta) e 4 fotos gerais do caminhão (frente, traseira e laterais).</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">🚨</div>
+              <div>
+                <strong>Abertura Automática de OS se Houver Avaria</strong>
+                <span>Qualquer item marcado como <em>Irregular</em> já abre a OS de Frota com as fotos anexadas e bloqueia item crítico.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">🔍</div>
+              <div>
+                <strong>Visualização com Zoom HD</strong>
+                <span>Gestor e mecânico ampliam qualquer foto do checklist ou da OS com zoom interativo para inspecionar detalhes.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone-frame" style="width:295px">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div style="background:#0f172a;color:#fff;padding:8px 10px;border-radius:10px;margin-bottom:8px">
+              <div style="font-weight:800;font-size:11.5px">📋 CHECKLIST DE VIAGEM — FROTA</div>
+              <div style="color:#94a3b8;font-size:9.5px">RMI1A95 • Saída / Chegada • 1 Toque</div>
+            </div>
+            <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px;margin-bottom:7px">
+              <div style="font-weight:800;margin-bottom:5px">1️⃣ CABINE &amp; PAINEL</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span>• Km e combustível</span>
+                <span style="background:#059669;color:#fff;padding:2px 7px;border-radius:6px;font-weight:700">✓ OK</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span>• Luzes de alerta</span>
+                <span style="background:#e11d48;color:#fff;padding:2px 7px;border-radius:6px;font-weight:700">⚠️ Irregular</span>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px;margin-bottom:8px">
+              <div style="font-weight:800;margin-bottom:5px">📸 Fotos Obrigatórias (4 lados)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;text-align:center">
+                <div style="background:#ecfdf5;border:1px solid #10b981;color:#047857;padding:6px;border-radius:7px;font-weight:700">✅ 1. Frente</div>
+                <div style="background:#ecfdf5;border:1px solid #10b981;color:#047857;padding:6px;border-radius:7px;font-weight:700">✅ 2. Traseira</div>
+                <div style="background:#ecfdf5;border:1px solid #10b981;color:#047857;padding:6px;border-radius:7px;font-weight:700">✅ 3. Lat. Dir.</div>
+                <div style="background:#f0f9ff;border:1px dashed #0284c7;color:#0369a1;padding:6px;border-radius:7px;font-weight:700">📷 4. Lat. Esq.</div>
+              </div>
+            </div>
+            <div style="background:#059669;color:#fff;padding:8px;border-radius:10px;text-align:center;font-weight:800">✅ Finalizar e Enviar Checklist</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: INDICADORES EXECUTIVOS -->
+    <section class="slide" data-title="Indicadores & Decisão">
+      <div class="grid-2">
+        <div class="mockup-window">
+          <div class="mockup-bar">
+            <span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span>
+            <span style="margin-left:8px">os.moveisrufato.com.br/#/indicadores</span>
+          </div>
+          <div class="mockup-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <strong style="font-size:13px">Indicadores — Novembro/2026</strong>
+              <div style="display:flex;gap:4px;font-size:10px">
+                <span style="background:#fff;border:1px solid #cbd5e1;padding:3px 7px;border-radius:6px;font-weight:700">🏭 Maquinário</span>
+                <span style="background:#e0f2fe;color:#0369a1;padding:3px 7px;border-radius:6px;font-weight:700">🚚 Frota</span>
+              </div>
+            </div>
+            <div style="background:#fff7ed;border-left:4px solid #f97316;border-radius:8px;padding:7px 9px;font-size:10.5px;margin-bottom:9px">
+              <strong>🟡 Gargalo do mês:</strong> Seccionadora S-04 concentrou 38% do tempo parado da fábrica.
+            </div>
+            <div class="mini-kpi-grid">
+              <div class="mini-kpi" style="--kc:#f97316"><div class="l">OS Abertas</div><div class="v">48</div><div class="s">▼ 12% vs mês ant.</div></div>
+              <div class="mini-kpi" style="--kc:#10b981"><div class="l">Concluídas</div><div class="v">51</div><div class="s">Vazão 106%</div></div>
+              <div class="mini-kpi" style="--kc:#ef4444"><div class="l">Parado</div><div class="v">18,4h</div><div class="s">Custo est. R$ 4,6k</div></div>
+              <div class="mini-kpi" style="--kc:#8b5cf6"><div class="l">MTTR</div><div class="v">1,8h</div><div class="s">média reparo</div></div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:9px;font-size:10.5px">
+              <div style="font-weight:700;margin-bottom:6px">📈 Evolução 6 Meses &amp; Rankings por Máquina / Setor / Manutentor</div>
+              <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;align-items:end;height:44px;padding-top:6px">
+                <div style="background:#f97316;height:65%;border-radius:3px"></div>
+                <div style="background:#f97316;height:80%;border-radius:3px"></div>
+                <div style="background:#f97316;height:55%;border-radius:3px"></div>
+                <div style="background:#f97316;height:90%;border-radius:3px"></div>
+                <div style="background:#f97316;height:75%;border-radius:3px"></div>
+                <div style="background:#10b981;height:60%;border-radius:3px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <span class="tag-pill">📊 Inteligência Gerencial</span>
+          <h2 class="slide-title">Indicadores Mensais Separados e Insights Automáticos</h2>
+          <div class="bullet-list" style="margin-top:14px">
+            <div class="bullet">
+              <div class="bullet-ico">🔀</div>
+              <div>
+                <strong>Fábrica e Frota 100% Separados</strong>
+                <span>OS de caminhões nunca interferem nos números do maquinário industrial. Indicadores da Frota são visíveis apenas para quem tem acesso à Frota.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">📅</div>
+              <div>
+                <strong>Comparativo Mensal com 1 Clique</strong>
+                <span>Navegue mês a mês, compare com o mês anterior (<code>▲/▼ %</code>) e filtre por setor, máquina, equipe ou manutentor.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <div class="bullet-ico">🎯</div>
+              <div>
+                <strong>Insights para Tomada de Decisão</strong>
+                <span>O painel aponta automaticamente máquinas gargalo, crescimento de fila, custo de parada, excesso de corretivas e gastos por caminhão.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: IMPACTO E RESUMO -->
+    <section class="slide" data-title="Ganhos para a Diretoria">
+      <span class="tag-pill ok">✅ Resultados Esperados</span>
+      <h2 class="slide-title">Por que o Nova OS Transforma a Gestão da Empresa</h2>
+      <p class="subtitle" style="margin-bottom:16px">
+        Sistema 100% próprio, sem mensalidade por usuário, hospedado na infraestrutura da empresa e adaptado à rotina real da Móveis Rufato.
+      </p>
+
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Área</th>
+              <th>Antes</th>
+              <th>Agora com o Nova OS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Chamados &amp; Paradas</strong></td>
+              <td style="color:var(--text-3)">Comunicação informal, sem histórico de tempo parado</td>
+              <td>Registro em segundos (QR/WhatsApp) com cronômetro real de parada e MTTR</td>
+            </tr>
+            <tr>
+              <td><strong>Frota &amp; Checklists</strong></td>
+              <td style="color:var(--text-3)">Fichas em papel e falta de evidência de avarias</td>
+              <td>Checklist em 1 toque no celular com fotos obrigatórias e OS automática</td>
+            </tr>
+            <tr>
+              <td><strong>Custos &amp; Documentos</strong></td>
+              <td style="color:var(--text-3)">Planilhas soltas e risco de multa por CNH/CRLV vencido</td>
+              <td>Custo por km, média km/L automática e alertas no WhatsApp antes de vencer</td>
+            </tr>
+            <tr>
+              <td><strong>Decisão da Diretoria</strong></td>
+              <td style="color:var(--text-3)">Falta de números mensais separados entre fábrica e frota</td>
+              <td>Painéis executivos isolados por mês, com tendências de 6 meses e gargalos</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid-3">
+        <div class="card" style="border-color:rgba(249,115,22,0.4)">
+          <h3>🌐 Acesso Imediato</h3>
+          <p><code>https://os.moveisrufato.com.br</code><br/>Computador, Android e iPhone.</p>
+        </div>
+        <div class="card" style="border-color:rgba(16,185,129,0.4)">
+          <h3>🛡️ Segurança &amp; Auditoria</h3>
+          <p>Permissões por perfil, histórico imutável de ações e backup automático.</p>
+        </div>
+        <div class="card" style="border-color:rgba(14,165,233,0.4)">
+          <h3>📈 Evolução Contínua</h3>
+          <p>Plataforma interna pronta para receber novos relatórios e integrações.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bottombar">
+    <button class="btn" id="btnPrev">&larr; Anterior</button>
+    <div class="dots" id="dotsWrap"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="slideCounter" style="font-size:12.5px;color:var(--text-3);font-weight:600">1 / 6</span>
+      <button class="btn primary" id="btnNext">Próximo &rarr;</button>
+    </div>
+  </footer>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const dotsWrap = document.getElementById('dotsWrap');
+    const counter = document.getElementById('slideCounter');
+    const progress = document.getElementById('progressBar');
+    let current = 0;
+
+    slides.forEach((s, idx) => {
+      const b = document.createElement('button');
+      b.className = 'dot-nav' + (idx === 0 ? ' active' : '');
+      b.title = s.dataset.title || `Slide ${idx + 1}`;
+      b.onclick = () => goTo(idx);
+      dotsWrap.appendChild(b);
+    });
+
+    function goTo(idx) {
+      current = Math.max(0, Math.min(slides.length - 1, idx));
+      slides.forEach((s, i) => s.classList.toggle('active', i === current));
+      Array.from(dotsWrap.children).forEach((d, i) => d.classList.toggle('active', i === current));
+      counter.textContent = `${current + 1} / ${slides.length}`;
+      progress.style.width = `${((current + 1) / slides.length) * 100}%`;
+    }
+
+    document.getElementById('btnPrev').onclick = () => goTo(current - 1);
+    document.getElementById('btnNext').onclick = () => goTo(current + 1);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') goTo(current + 1);
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') goTo(current - 1);
+      else if (e.key.toLowerCase() === 'f') toggleFullscreen();
+    });
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+  </script>
+</body>
+</html>

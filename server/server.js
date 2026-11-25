@@ -1026,6 +1026,10 @@ app.get('/checklist-frota', (req, res) => {
   res.sendFile(path.join(ROOT, 'public', 'checklist-frota.html'));
 });
 
+app.get('/apresentacao', (req, res) => {
+  res.sendFile(path.join(ROOT, 'public', 'apresentacao.html'));
+});
+
 // ---------- APIs Exclusivas da Central WhatsApp da Frota ----------
 app.get('/api/whatsapp-frota/status', (req, res) => {
   const fb = getFleetBaileysStatus();
